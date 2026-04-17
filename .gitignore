@@ -1,0 +1,44 @@
+# 빌드/설치
+build/
+dist/
+installer/
+*.spec
+
+# 캐시
+__pycache__/
+*.pyc
+
+# 크롬 프로필
+chrome_profile/
+chrome_profile_debug/
+chrome_profile_test/
+
+# 데이터 (계정별)
+generated_posts*.json
+deleted_keys*.json
+search_history*.xlsx
+translation_cache.json
+saved_images/
+logs/
+
+# 인증/비밀
+firebase_credentials.json
+client_secret.json
+drive_token.json
+config.json
+users.json
+login_cache.json
+
+# 디버그
+poster_debug.log
+last_prompt.txt
+last_response.txt
+error.log
+debug_*.html
+debug_*.py
+category_dialog.html
+
+# 기타
+*.exe
+*.zip
+_down_arrow.png
