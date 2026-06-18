@@ -37,6 +37,14 @@ error.log
 debug_*.html
 debug_*.py
 category_dialog.html
+_settings_diag*.log
+*.log
+update_check.log
+
+# 대화/작업 내역
+대화내용*.txt
+대화내용*.jsonl
+작업내역*.txt
 
 # 기타
 *.exe

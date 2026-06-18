@@ -8,6 +8,8 @@ from prompts import get_prompt_for_keyword
 def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
     """GPT로 블로그 글 생성"""
     client = openai.OpenAI(api_key=api_key)
+    # 지역 확장 크롤링: 이 업체가 수집된 실제 검색 키워드(예: "강남구 파스타") 우선
+    keyword = place.get("search_keyword") or keyword
     prompt_data = get_prompt_for_keyword(keyword)
     prompt = _fill_prompt(prompt_data.get("blog", ""), place, keyword)
 
@@ -23,15 +25,20 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
     if not prompt or len(prompt.strip()) < 50:
         raise ValueError(f"프롬프트가 너무 짧음 ({len(prompt or '')}자) - 생성 중단")
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.8,
-        max_tokens=4000,
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.8,
+            max_tokens=4000,
+        )
+    except Exception as e:
+        raise RuntimeError(f"GPT API 호출 실패: {e}") from e
 
+    if not response.choices:
+        raise RuntimeError("GPT 응답 없음 (choices 비어있음)")
     raw_text = response.choices[0].message.content
     # 디버그: 응답도 저장
     try:
@@ -45,21 +52,29 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
     return parse_blog_content(raw_text, title)
 
 
-def _gemini_request(client, prompt, retries=3):
-    """Gemini API 요청 + 429 자동 재시도"""
+def _gemini_request(client, prompt, retries=5):
+    """Gemini API 요청 + 429/503 자동 재시도 + 폴백 모델.
+    gemini-2.5-flash가 503이면 gemini-2.5-flash-lite로 폴백. 성공 응답에만 과금."""
     import time as _time
-    for attempt in range(retries):
-        try:
-            resp = client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt
-            )
-            return resp
-        except Exception as e:
-            if "429" in str(e) and attempt < retries - 1:
-                _time.sleep(5)
-                continue
-            raise
+    models_chain = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    last_err = None
+    for model in models_chain:
+        for attempt in range(retries):
+            try:
+                return client.models.generate_content(model=model, contents=prompt)
+            except Exception as e:
+                last_err = e
+                msg = str(e)
+                transient = ("429" in msg) or ("503" in msg) or ("UNAVAILABLE" in msg)
+                if transient and attempt < retries - 1:
+                    _time.sleep(min(30, 3 * (2 ** attempt)))
+                    continue
+                # 503 계속 나면 다음 모델로 폴백
+                if "503" in msg or "UNAVAILABLE" in msg:
+                    break
+                raise
+    if last_err:
+        raise last_err
 
 
 def generate_with_gemini(api_key: str, place: dict, keyword: str) -> dict:
@@ -69,6 +84,8 @@ def generate_with_gemini(api_key: str, place: dict, keyword: str) -> dict:
 
     client = genai.Client(api_key=api_key)
 
+    # 지역 확장 크롤링: 이 업체가 수집된 실제 검색 키워드 우선
+    keyword = place.get("search_keyword") or keyword
     prompt_data = get_prompt_for_keyword(keyword)
     prompt = _fill_prompt(prompt_data.get("blog", ""), place, keyword)
 
@@ -92,10 +109,12 @@ def generate_with_gemini(api_key: str, place: dict, keyword: str) -> dict:
 
 
 def _extract_biz_type(place: dict, keyword: str) -> str:
-    biz_type = place.get("category", "")
+    # 수집할 때 쓴 search_keyword 우선, 없으면 인자 keyword. 카테고리는 사용 안 함.
+    src_kw = (place.get("search_keyword") or keyword or "").strip()
+    parts = src_kw.split()
+    biz_type = parts[-1] if parts else src_kw
     if not biz_type:
-        parts = keyword.strip().split()
-        biz_type = parts[-1] if parts else keyword
+        biz_type = place.get("category", "") or ""
     import re as _re
     m = _re.search(r"(헬스장|요양원|요양센터|요양병원|미용실|카페|음식점|학원|치과|병원|약국|피트니스|요양|네일|빵집|베이커리|[가-힣]{2,3}점)$", biz_type)
     if m:
@@ -112,7 +131,7 @@ def _title_blacklist(place: dict, keyword: str) -> list:
     gu_match = _re.search(r"([가-힣]+구)", addr)
     gu = gu_match.group(1) if gu_match else ""
     name = place.get("name", "")
-    station = place.get("nearby_station", "")
+    station = (place.get("nearby_station", "") or "").replace("역", "").strip()
     items = set()
     for v in [biz, dong, gu, name, station, keyword]:
         if v:
@@ -121,12 +140,26 @@ def _title_blacklist(place: dict, keyword: str) -> list:
     if keyword:
         for tok in keyword.split():
             items.add(tok)
+        # 붙어있는 키워드에서 동/구/역 패턴 추출 (예: "역삼동헬스장" → "역삼동")
+        for tok in keyword.split():
+            for m in _re.findall(r"[가-힣]+동|[가-힣]+구|[가-힣]+역", tok):
+                items.add(m)
+    # 주소에서 동 추출 (dong 필드 없을 때 보완)
+    if not dong:
+        dong_m = _re.search(r"([가-힣]+동)", addr)
+        if dong_m:
+            items.add(dong_m.group(1))
     # 업종 변형 (요양원/요양센터/요양 등 부분 문자열도 차단)
     if biz:
         if "요양" in biz:
             items.update(["요양", "요양원", "요양센터", "요양병원"])
         if "헬스" in biz or biz == "피트니스":
             items.update(["헬스", "헬스장", "피트니스", "gym"])
+        if "네일" in biz:
+            items.update(["네일", "네일샵", "네일아트"])
+    # 항상 차단할 문구
+    _BLOCKED_PHRASES = ["내돈내산", "솔직후기", "솔직 후기", "직접 방문", "방문 후기"]
+    items.update(_BLOCKED_PHRASES)
     return [x for x in items if x and len(x) >= 2]
 
 
@@ -152,17 +185,25 @@ def _clean_suffix(suffix: str, blacklist: list) -> str:
 
 
 def _get_title_prefix_type(biz_type: str) -> str:
-    """업종별 제목 키워드 형식 — prompts.json의 title_prefix 설정 읽기 (dong/station/gu)"""
+    """업종별 제목 키워드 형식 — prompts.json의 title_prefix 설정 읽기 (dong/station/gu).
+    get_prompt_for_keyword와 동일한 fuzzy 매칭을 사용해 사용자 선택이 무시되지 않도록 함."""
     try:
-        import json as _json
-        import os as _os
-        pp = _os.path.join(_os.path.dirname(__file__), "prompts.json")
-        with open(pp, "r", encoding="utf-8") as f:
-            prompts = _json.load(f)
-        entry = prompts.get(biz_type, {}) or {}
-        return (entry.get("title_prefix") or "dong").strip().lower()
+        from prompts import load_prompts
+        prompts = load_prompts()
     except Exception:
         return "dong"
+    entry = prompts.get(biz_type)
+    if not entry and biz_type:
+        for key, v in prompts.items():
+            if key == "기본":
+                continue
+            if key in biz_type or biz_type in key:
+                entry = v
+                break
+    if not entry:
+        entry = prompts.get("기본", {})
+    entry = entry or {}
+    return (entry.get("title_prefix") or "dong").strip().lower()
 
 
 def _build_full_title(place: dict, keyword: str, suffix: str) -> str:
@@ -171,18 +212,106 @@ def _build_full_title(place: dict, keyword: str, suffix: str) -> str:
     biz_type = _extract_biz_type(place, keyword)
     dong = place.get("dong", "")
     name = place.get("name", "")
-    station = (place.get("nearby_station") or "").replace("역", "").strip()
+    # nearby_station 정리: 노선 prefix 제거 + 끝의 "역" 한 글자만 제거
+    _raw_station = (place.get("nearby_station") or "").strip()
+    # 노선 이름 제거 — 한자형(선릉역의 "선"과 충돌 방지로 "선" 미포함) + 호선형 + GTX
+    _raw_station = _re.sub(
+        r"^(?:수인분당|신분당|공항철도|경춘|경의중앙|경강|김포골드|우이신설|신림|GTX-?[A-Z]+|(?:인천)?\d+호선)\s*",
+        "",
+        _raw_station,
+    ).strip()
+    # 끝의 "역" 한 글자만 제거 (역삼역 → 역삼, 학동역 → 학동)
+    if _raw_station.endswith("역"):
+        station = _raw_station[:-1]
+    else:
+        station = _raw_station
     addr = (place.get("address", "") or "") + " " + (place.get("jibun_address", "") or "")
     gu_match = _re.search(r"([가-힣]+구)", addr)
     gu = gu_match.group(1) if gu_match else ""
 
-    ptype = _get_title_prefix_type(biz_type)
-    if ptype == "station" and station:
-        prefix = f"{station}역{biz_type}"
-    elif ptype == "gu" and gu:
-        prefix = f"{gu}{biz_type}"
+    # dong 추출: place 필드 → 주소 → 검색 키워드(예: "역삼동헬스장" → "역삼동") → 업체명
+    if not dong:
+        for src in (addr, keyword, name):
+            m = _re.search(r"([가-힣]{1,4}동)(?:\s|$|[^가-힣])", src + " ")
+            if m:
+                dong = m.group(1)
+                break
+
+    # 시골 단위 추출 (읍/면/리) — 동의 폴백
+    eup = ""; myeon = ""; ri = ""
+    for src in (addr, keyword):
+        if not eup:
+            m = _re.search(r"([가-힣]{1,4}읍)(?:\s|$|[^가-힣])", src + " ")
+            if m: eup = m.group(1)
+        if not myeon:
+            m = _re.search(r"([가-힣]{1,4}면)(?:\s|$|[^가-힣])", src + " ")
+            if m: myeon = m.group(1)
+        if not ri:
+            m = _re.search(r"([가-힣]{1,4}리)(?:\s|$|[^가-힣])", src + " ")
+            if m: ri = m.group(1)
+
+    # 시·군 추출 (구 폴백) — 광역시·특별시 제외
+    _METROS = {"서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
+               "대전광역시", "울산광역시", "세종특별자치시"}
+    si = ""
+    for s in _re.findall(r"([가-힣]+시)", addr):
+        if s not in _METROS:
+            si = s
+            break
+    gun_match = _re.search(r"([가-힣]+군)", addr)
+    gun = gun_match.group(1) if gun_match else ""
+
+    # station 추출 보완
+    if not station:
+        m = _re.search(r"([가-힣A-Za-z0-9]{1,8})역", keyword + " " + name)
+        if m:
+            station = m.group(1)
+
+    # gu 보완
+    if not gu:
+        m = _re.search(r"([가-힣]{1,4}구)", keyword)
+        if m:
+            gu = m.group(1)
+
+    # 폴백 헬퍼
+    def _pick_dong_level():
+        # 동 → 읍 → 면 → 리
+        return dong or eup or myeon or ri
+    def _pick_gu_level():
+        # 구 → 시 → 군
+        return gu or si or gun
+
+    # 포스트 생성 다이얼로그에서 형식 지정 (dong/station/gu/free:...) — 미지정시 dong 기본
+    forced = (place.get("_override_title_prefix") or "").strip()
+    forced_lower = forced.lower()
+    is_free = forced_lower.startswith("free:")
+    is_forced = forced_lower in ("dong", "station", "gu") or is_free
+    ptype = forced_lower if not is_free else "free"
+
+    if is_free:
+        free_text = forced[5:].strip()
+        prefix = free_text if free_text else biz_type
+    elif ptype == "dong":
+        loc = _pick_dong_level()
+        prefix = f"{loc} {biz_type}" if loc else biz_type
+    elif ptype == "station":
+        prefix = f"{station}역 {biz_type}" if station else biz_type
+    elif ptype == "gu":
+        loc = _pick_gu_level()
+        prefix = f"{loc} {biz_type}" if loc else biz_type
     else:
-        prefix = f"{dong}{biz_type}" if dong else biz_type
+        prefix = biz_type
+
+    # 강제 형식이 아닐 때만 다른 형식으로 폴백 (자동 모드)
+    if not is_forced and prefix == biz_type:
+        loc_d = _pick_dong_level()
+        loc_g = _pick_gu_level()
+        if loc_d:
+            prefix = f"{loc_d} {biz_type}"
+        elif station:
+            prefix = f"{station}역 {biz_type}"
+        elif loc_g:
+            prefix = f"{loc_g} {biz_type}"
 
     if suffix:
         blacklist = _title_blacklist(place, keyword)
@@ -238,19 +367,65 @@ def _fill_prompt(template: str, place: dict, keyword: str) -> str:
     return result
 
 
+def _strip_markdown(text: str) -> str:
+    """마크다운 기호 제거 (**bold**, *italic*, #, 등)"""
+    import re as _re
+    text = _re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", text)  # **bold**, *italic*
+    text = _re.sub(r"#{1,6}\s*", "", text)
+    text = _re.sub(r"`([^`]+)`", r"\1", text)
+    return text.strip()
+
+
+_META_PHRASES = (
+    "키워드", "만들어", "만들겠", "생성", "결과물", "마무리 문구",
+    "다음과 같이", "다음과같이", "리스트", "제공", "참고하여",
+    "바탕으로", "추천 문구", "여기 있습니다", "준비했습니다",
+    "다음과 같은", "출력합니다", "응답", "예시는",
+)
+
+
+def _is_meta_response(text: str) -> bool:
+    """GPT가 인사/설명을 첫 줄에 출력한 메타 응답인지 판별"""
+    if not text:
+        return True
+    if len(text) > 25:  # 마무리 문구는 짧음, 25자 넘으면 메타 의심
+        return True
+    for ph in _META_PHRASES:
+        if ph in text:
+            return True
+    return False
+
+
 def _pick_clean_title(candidates: list, place: dict, keyword: str) -> str:
-    """10개 후보 중 블랙리스트 단어가 없는 첫 번째 후보 선택. 없으면 가장 덜 오염된 것을 정제."""
+    """10개 후보 중 블랙리스트 단어가 없는 후보를 랜덤 선택. 없으면 가장 덜 오염된 것을 정제."""
+    import random as _random
     blacklist = _title_blacklist(place, keyword)
-    # 1) 블랙리스트 단어가 하나도 없는 깨끗한 후보
-    for c in candidates:
-        if _is_suffix_clean(c, blacklist) and 3 <= len(c) <= 30:
-            return c
-    # 2) 정제해서 최소 3자 이상 남는 첫 후보
-    for c in candidates:
+    # 마크다운 제거 + 20자 이내로 자르기
+    def _prep(c):
+        c = _strip_markdown(c)
+        import re as _re
+        c = _re.split(r"[.。!！?？\n]", c)[0].strip()
+        return c[:20].strip()
+
+    # 메타 응답 후보 제외 (원본 텍스트로 판별 후 정제)
+    filtered = [c for c in candidates if not _is_meta_response(c)]
+    if not filtered:
+        filtered = candidates
+    cleaned_candidates = [_prep(c) for c in filtered]
+
+    # 1) 블랙리스트 단어가 없는 깨끗한 후보 중 랜덤 선택 (3~20자)
+    ok = [c for c in cleaned_candidates if _is_suffix_clean(c, blacklist) and 3 <= len(c) <= 20]
+    if ok:
+        return _random.choice(ok)
+    # 2) 정제 후 최소 3자 이상 남는 후보 중 랜덤 선택
+    ok2 = []
+    for c in cleaned_candidates:
         cleaned = _clean_suffix(c, blacklist)
-        if cleaned and len(cleaned) >= 3:
-            return cleaned
-    return candidates[0] if candidates else ""
+        if cleaned and 3 <= len(cleaned) <= 20:
+            ok2.append(cleaned)
+    if ok2:
+        return _random.choice(ok2)
+    return cleaned_candidates[0] if cleaned_candidates else ""
 
 
 def _generate_title(client, keyword, place, prompt_data, provider="gpt"):
@@ -277,7 +452,8 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
         title_match = re.search(r"\[제목\]\s*(.+?)(?:\n|$)", raw_text)
         title = title_match.group(1).strip() if title_match else "제목 없음"
 
-    # 제목에서 특수문자 제거 (짝대기, 콜론 등)
+    # 제목에서 마크다운 및 특수문자 제거
+    title = _strip_markdown(title)
     title = title.replace(" - ", " ").replace("-", " ").replace(":", " ").replace("|", " ").strip()
 
     tag_match = re.search(r"\[태그\]\s*(.+?)(?:\n|$)", raw_text)
@@ -307,14 +483,17 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
     }
 
 
-def generate_content(provider: str, api_key: str, place: dict, keyword: str) -> dict:
-    """통합 생성 함수"""
-    if provider == "GPT":
-        result = generate_with_gpt(api_key, place, keyword)
-    elif provider == "Gemini":
-        result = generate_with_gemini(api_key, place, keyword)
-    else:
-        raise ValueError(f"지원하지 않는 AI 제공자: {provider}")
+def generate_content(provider: str, api_key: str, place: dict, keyword: str, prompt_override: str = None, title_prefix: str = None) -> dict:
+    """통합 생성 함수 — GPT 전용 (Gemini는 안정성/가격 이슈로 비활성화).
+    provider 인자는 하위호환을 위해 남겨두나 무시됨.
+    title_prefix: "dong"/"station"/"gu"로 제목 prefix 형식 강제, None이면 prompts.json 기본값."""
+    if prompt_override or title_prefix:
+        place = dict(place)
+        if prompt_override:
+            place["category"] = prompt_override
+        if title_prefix:
+            place["_override_title_prefix"] = title_prefix
+    result = generate_with_gpt(api_key, place, keyword)
 
     # 태그가 비어있으면 place 데이터에서 자동 생성 (지역+업종 조합만 사용, 동/역 단독 제외)
     if not result.get("tags"):

@@ -1,0 +1,50 @@
+[
+  {
+    "offset": 1,
+    "expected": "2026. 05. 03",
+    "actual": "2026. 05. 03",
+    "nav_count": 0,
+    "click": "clicked:td button:3",
+    "ok": true
+  },
+  {
+    "offset": 7,
+    "expected": "2026. 05. 09",
+    "actual": "2026. 05. 09",
+    "nav_count": 0,
+    "click": "clicked:td button:9",
+    "ok": true
+  },
+  {
+    "offset": 15,
+    "expected": "2026. 05. 17",
+    "actual": "2026. 05. 17",
+    "nav_count": 0,
+    "click": "clicked:td button:17",
+    "ok": true
+  },
+  {
+    "offset": 30,
+    "expected": "2026. 06. 01",
+    "actual": "2026. 06. 01",
+    "nav_count": 1,
+    "click": "clicked:td button:1",
+    "ok": true
+  },
+  {
+    "offset": 35,
+    "expected": "2026. 06. 06",
+    "actual": "2026. 06. 06",
+    "nav_count": 0,
+    "click": "clicked:td button:6",
+    "ok": true
+  },
+  {
+    "offset": 60,
+    "expected": "2026. 07. 01",
+    "actual": "2026. 07. 01",
+    "nav_count": 1,
+    "click": "clicked:td button:1",
+    "ok": true
+  }
+]
