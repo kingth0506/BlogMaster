@@ -33,7 +33,7 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
                 {"role": "user", "content": prompt},
             ],
             temperature=0.8,
-            max_tokens=4000,
+            max_tokens=4096,
         )
     except Exception as e:
         raise RuntimeError(f"GPT API 호출 실패: {e}") from e
@@ -160,7 +160,7 @@ def _title_blacklist(place: dict, keyword: str) -> list:
             items.update(["네일", "네일샵", "네일아트"])
     # 항상 차단할 문구 (가격 관련 단어 포함)
     _BLOCKED_PHRASES = [
-        "내돈내산", "솔직후기", "솔직 후기", "직접 방문", "방문 후기",
+        # 가격/홍보성 단어만 차단 — 후기/방문/내돈내산 류는 새 제목 룰에서 '허용'(권장)이라 제외
         "이용권", "가격", "요금", "만원", "천원", "원권", "월정액", "회원권", "할인", "쿠폰",
         "일일", "1일", "무료체험",
     ]
@@ -337,10 +337,8 @@ def _fill_prompt(template: str, place: dict, keyword: str) -> str:
 
     addr = place.get("address", "")
     jibun = place.get("jibun_address", "")
-    if jibun:
-        full_addr = f"{addr} {jibun}" if addr else jibun
-    else:
-        full_addr = addr
+    # jibun_address는 이미 행정동(address)+지번을 합친 완전 주소 → addr 재결합 시 중복됨
+    full_addr = (jibun or addr).strip()
 
     # 검색 키워드의 지역명을 실제 주소의 구로 교체 (검색 = 은평구, 실제 = 강서구인 경우)
     import re as _re
@@ -353,16 +351,43 @@ def _fill_prompt(template: str, place: dict, keyword: str) -> str:
             if kg != actual_gu:
                 effective_keyword = effective_keyword.replace(kg, actual_gu)
 
+    # 지역 단위(시/구/동) 보강: place 필드 우선, 없으면 실제 주소에서 추출
+    # (크롤러가 dong/시/구를 채우지 못한 경우의 폴백 — 프롬프트에 지역 키워드가 비지 않도록)
+    dong = (place.get("dong", "") or "").strip()
+    gu = (place.get("구", "") or "").strip()
+    si = (place.get("시", "") or "").strip()
+    if not dong:
+        _m = _re.search(r"([가-힣]{1,4}동)(?:\s|$|[^가-힣])", (full_addr or "") + " ")
+        if _m:
+            dong = _m.group(1)
+    if not gu:
+        _m = _re.search(r"([가-힣]{1,4}구)", full_addr or "")
+        if _m:
+            gu = _m.group(1)
+    if not si:
+        _m = _re.search(r"([가-힣]+시)", full_addr or "")
+        if _m:
+            si = _m.group(1)
+
+    # 근처역 상세(역명 + 거리, 예: "역삼역 약 350m") — 없으면 역명만
+    station_detail = (place.get("nearby_station_text", "") or "").strip() \
+        or (place.get("nearby_station", "") or "").strip() \
+        or "대중교통·자차 모두 접근 편한 위치"
+
     replacements = {
         "{업체명}": place.get("name", ""),
         "{주소}": full_addr,
         "{근처역}": place.get("nearby_station", ""),
+        "{근처역상세}": station_detail,
+        "{시}": si,
+        "{구}": gu,
+        "{동}": dong,
         "{카테고리}": place.get("category", ""),
         "{앞키워드}": place.get("front_keywords", ""),
         "{태그}": place.get("tags", ""),
         "{업종}": biz_type,
         "{키워드}": effective_keyword,
-        "{근처역/교통}": place.get("nearby_station", ""),
+        "{근처역/교통}": station_detail,
         "{기타 설명}": place.get("category", ""),
     }
 
@@ -393,7 +418,7 @@ def _is_meta_response(text: str) -> bool:
     """GPT가 인사/설명을 첫 줄에 출력한 메타 응답인지 판별"""
     if not text:
         return True
-    if len(text) > 25:  # 마무리 문구는 짧음, 25자 넘으면 메타 의심
+    if len(text) > 55:  # 마무리 문구 상한(50자)보다 길면 메타/설명 의심
         return True
     for ph in _META_PHRASES:
         if ph in text:
@@ -405,12 +430,15 @@ def _pick_clean_title(candidates: list, place: dict, keyword: str) -> str:
     """10개 후보 중 블랙리스트 단어가 없는 후보를 랜덤 선택. 없으면 가장 덜 오염된 것을 정제."""
     import random as _random
     blacklist = _title_blacklist(place, keyword)
-    # 마크다운 제거 + 20자 이내로 자르기
+    # 마크다운 제거 + 마무리 문구 상한(50자, 네이버 제목 100자 내 여유) — 자를 땐 단어 경계에서
+    _MAX = 50
     def _prep(c):
         c = _strip_markdown(c)
         import re as _re
         c = _re.split(r"[.。!！?？\n]", c)[0].strip()
-        return c[:20].strip()
+        if len(c) > _MAX:
+            c = c[:_MAX].rsplit(" ", 1)[0].strip() or c[:_MAX].strip()
+        return c.strip()
 
     # 메타 응답 후보 제외 (원본 텍스트로 판별 후 정제)
     filtered = [c for c in candidates if not _is_meta_response(c)]
@@ -418,15 +446,15 @@ def _pick_clean_title(candidates: list, place: dict, keyword: str) -> str:
         filtered = candidates
     cleaned_candidates = [_prep(c) for c in filtered]
 
-    # 1) 블랙리스트 단어가 없는 깨끗한 후보 중 랜덤 선택 (3~20자)
-    ok = [c for c in cleaned_candidates if _is_suffix_clean(c, blacklist) and 3 <= len(c) <= 20]
+    # 1) 블랙리스트 단어가 없는 깨끗한 후보 중 랜덤 선택 (3~50자)
+    ok = [c for c in cleaned_candidates if _is_suffix_clean(c, blacklist) and 3 <= len(c) <= _MAX]
     if ok:
         return _random.choice(ok)
     # 2) 정제 후 최소 3자 이상 남는 후보 중 랜덤 선택
     ok2 = []
     for c in cleaned_candidates:
         cleaned = _clean_suffix(c, blacklist)
-        if cleaned and 3 <= len(cleaned) <= 20:
+        if cleaned and 3 <= len(cleaned) <= _MAX:
             ok2.append(cleaned)
     if ok2:
         return _random.choice(ok2)
@@ -468,10 +496,11 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
         tags = [t.strip().lstrip("#") for t in re.split(r"[,\s#]+", tag_text) if t.strip()]
 
     # 태그가 비어있으면 본문에서 #태그 패턴 추출
+    # (# 뒤 첫 글자가 한글/영숫자인 것만 — 마크다운 ##/### 헤더가 태그로 잡히는 것 방지)
     if not tags:
-        hash_tags = re.findall(r"#(\S+)", raw_text)
+        hash_tags = re.findall(r"#([가-힣A-Za-z0-9][^\s#]*)", raw_text)
         if hash_tags:
-            tags = [t.strip() for t in hash_tags]
+            tags = [t.strip() for t in hash_tags if t.strip()]
 
     image_count = raw_text.count("[이미지]")
 
@@ -488,6 +517,47 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
     }
 
 
+def _build_hashtags(place: dict, keyword: str) -> list:
+    """지역+업종 기반 네이버 블로그 검색용 해시태그 (구/동/역/시 + 업체명).
+    GPT 출력과 무관하게 코드로 생성 — 감성/페르소나(효자효녀 등) 태그 원천 차단."""
+    biz = _extract_biz_type(place, keyword)
+    if not biz:
+        return []
+    addr = (place.get("address", "") or "") + " " + (place.get("jibun_address", "") or "")
+    dong = (place.get("dong", "") or "").strip()
+    if not dong:
+        m = re.search(r"([가-힣]{1,4}동)(?:\s|$|[^가-힣])", addr + " ")
+        dong = m.group(1) if m else ""
+    gu = (place.get("구", "") or "").strip()
+    if not gu:
+        m = re.search(r"([가-힣]{1,4}구)", addr)
+        gu = m.group(1) if m else ""
+    metro = ""
+    for stem in ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+                 "경기", "강원", "충청", "충북", "충남", "전라", "전북", "전남",
+                 "경상", "경북", "경남", "제주"]:
+        if stem in addr:
+            metro = stem
+            break
+    station = (place.get("nearby_station", "") or "").strip()
+    station = re.sub(r"^(?:수인분당|신분당|공항철도|경춘|경의중앙|경강|김포골드|우이신설|신림|GTX-?[A-Z]+|(?:인천)?\d+호선)\s*", "", station)
+    if station.endswith("역"):
+        station = station[:-1]
+    name = (place.get("name", "") or "").strip().replace(" ", "")
+    out = []
+    def _add(t):
+        t = (t or "").strip()
+        if t and t not in out:
+            out.append(t)
+    if gu: _add(f"{gu}{biz}")
+    if dong: _add(f"{dong}{biz}")
+    if station: _add(f"{station}역{biz}")
+    if metro: _add(f"{metro}{biz}")
+    _add(f"{biz}추천")          # 업종(키워드)+추천 — 전 업종 공통
+    if name: _add(name)
+    return out[:7]
+
+
 def generate_content(provider: str, api_key: str, place: dict, keyword: str, prompt_override: str = None, title_prefix: str = None) -> dict:
     """통합 생성 함수 — GPT 전용 (Gemini는 안정성/가격 이슈로 비활성화).
     provider 인자는 하위호환을 위해 남겨두나 무시됨.
@@ -500,23 +570,17 @@ def generate_content(provider: str, api_key: str, place: dict, keyword: str, pro
             place["_override_title_prefix"] = title_prefix
     result = generate_with_gpt(api_key, place, keyword)
 
-    # 태그가 비어있으면 place 데이터에서 자동 생성 (지역+업종 조합만 사용, 동/역 단독 제외)
-    if not result.get("tags"):
-        biz_type = place.get("category", "") or place.get("biz_type", "")
-        auto_tags = []
-        for field in ["tags", "pixabay_keywords"]:
-            val = place.get(field, "")
-            if val:
-                auto_tags.extend([t.strip() for t in val.split(",") if t.strip()])
-        # 업종명이 포함된 조합 태그만 유지 (동/역 단독 제외)
-        filtered = [t for t in auto_tags if not biz_type or biz_type in t]
-        if not filtered:
-            filtered = auto_tags
-        # 중복 제거
-        seen = []
-        for t in filtered:
-            if t not in seen:
-                seen.append(t)
-        result["tags"] = seen[:10]
+    # 해시태그: GPT 출력(페르소나/감성 섞임)을 무시하고 코드로 '지역+업종' 검색태그만 생성.
+    # 본문 끝의 GPT 해시태그/[태그] 줄은 제거하고 코드 태그로 깔끔히 교체.
+    htags = _build_hashtags(place, keyword)
+    if htags:
+        body = result.get("body", "") or ""
+        body = re.sub(r'(?m)^\s*\[태그\].*$', '', body)   # [태그] 줄 제거
+        # 해시태그(#단어)가 2개 이상 들어간 줄은 GPT가 만든 태그 줄 → 통째 제거
+        # (첫 단어에 #이 없어도, 줄 어디에 있어도 잡음)
+        body = "\n".join(ln for ln in body.split("\n")
+                         if len(re.findall(r'#[^\s#]+', ln)) < 2)
+        result["body"] = body.rstrip() + "\n\n" + " ".join("#" + t for t in htags)
+        result["tags"] = htags
 
     return result

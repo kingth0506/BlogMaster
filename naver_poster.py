@@ -172,10 +172,24 @@ class NaverBlogPoster:
         try:
             self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
                 "source": """
+                    window.__naverFileInput = null;
                     const origClick = HTMLInputElement.prototype.click;
                     HTMLInputElement.prototype.click = function() {
                         if (this.type === 'file' && !this.hasAttribute('__allow_click')) {
-                            return;
+                            // 네이버는 file input을 DOM에 안 붙인 채(detached) click만 호출함.
+                            // → DOM에 강제로 붙여 Selenium이 찾을 수 있게 하고 캡처한다.
+                            try {
+                                if (!this.isConnected) {
+                                    this.setAttribute('data-auto-captured', '1');
+                                    this.style.position = 'fixed';
+                                    this.style.left = '-99999px';
+                                    this.style.width = '1px';
+                                    this.style.height = '1px';
+                                    (document.body || document.documentElement).appendChild(this);
+                                }
+                            } catch (e) {}
+                            window.__naverFileInput = this;
+                            return;  // OS 다이얼로그는 열지 않음 (send_keys로 직접 주입)
                         }
                         return origClick.call(this);
                     };
@@ -594,6 +608,48 @@ class NaverBlogPoster:
 
         _dlog(f"⚠️ 제목 입력 최종 실패 (3회 재시도): {last_err}")
 
+    def _normalize_image_markers(self, body: str, n: int) -> str:
+        """본문의 모든 이미지 마커([이미지] / [사진N])를 일관 처리.
+        이미 적정 수가 상단~하단에 퍼져 있으면 형식만 [이미지]로 통일해 유지,
+        아니면 둘 다 전부 제거 후 문단 사이에 n개를 균등 재배치한다.
+        (형식 혼재로 마커가 중복돼 사진이 두 번씩 들어가던 버그 방지)"""
+        import re as _re
+        MARK = r'(?:\[이미지\]|\[사진\s*\d+\])'
+        if n <= 0:
+            return _re.sub(r'[ \t]*' + MARK + r'[ \t]*\n?', '', body).strip()
+        positions = [m.start() for m in _re.finditer(MARK, body)]
+        L = max(1, len(body))
+        # 마커 수 적정(n~n+2) + 상단~하단 분산 → 형식만 [이미지]로 통일해 유지
+        if (n <= len(positions) <= n + 2
+                and positions[0] < L * 0.45 and positions[-1] > L * 0.55):
+            return _re.sub(MARK, '[이미지]', body)
+        # 재배치: 기존 마커(둘 다) 제거 후 문단 사이 균등 삽입
+        body = _re.sub(r'[ \t]*' + MARK + r'[ \t]*', '', body)
+        lines = body.split('\n')
+        para = [i for i, l in enumerate(lines)
+                if l.strip() and not l.strip().startswith('#') and '[지도]' not in l]
+        if len(para) < 2:
+            for _ in range(n):
+                lines.append('[이미지]')
+            return _re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
+        inner = para[1:] if len(para) > n + 1 else para   # 서론 첫 문단 다음부터
+        cnt = min(n, len(inner))
+        picks = []
+        seen = set()
+        for k in range(cnt):
+            j = int(round((k + 1) * len(inner) / (cnt + 1))) - 1
+            j = max(0, min(len(inner) - 1, j))
+            while inner[j] in seen and j < len(inner) - 1:
+                j += 1
+            if inner[j] in seen:
+                continue
+            seen.add(inner[j])
+            picks.append(inner[j])
+        for pos in sorted(picks, reverse=True):
+            lines.insert(pos + 1, '[이미지]')
+        _dlog(f"[이미지] 마커 재배치: 마커 {len(positions)}개 → {len(picks)}개 균등 분산 (이미지 {n}장)")
+        return _re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
+
     def _input_body(self, body: str, image_paths: list[str] = None):
         """본문 입력 — 클릭으로 포커스 후 ActionChains로 키 전송"""
         body_area = WebDriverWait(self.driver, 10).until(
@@ -637,6 +693,9 @@ class NaverBlogPoster:
 
         # [지도] 마커는 별도 단계에서 처리 — 본문 입력 시 제거
         body = body.replace('[지도]', '')
+
+        # 이미지가 본문 중간에 고르게 들어가도록 [이미지] 마커 보정 (위 뭉침/누락 방지)
+        body = self._normalize_image_markers(body, len(image_paths or []))
 
         # 하위 호환: 구형 [이미지] 마커 → [사진N] 순서대로 변환
         _old_idx = [0]
@@ -787,45 +846,190 @@ class NaverBlogPoster:
         except Exception as e:
             _dlog(f"장소 삽입 실패: {e}")
 
-    def _insert_image(self, image_path: str):
-        """이미지 삽입 — 사진 버튼 클릭으로 input 생성 후 send_keys (OS 다이얼로그는 JS 차단됨)"""
+    def _enter_main_frame(self):
+        """최상위로 나갔다가 #mainFrame 에디터 프레임으로 복귀."""
         try:
-            abs_path = os.path.abspath(image_path)
-            _dlog(f"이미지 삽입 시도: {abs_path}")
+            self.driver.switch_to.default_content()
+            mf = self.driver.find_elements(By.CSS_SELECTOR, "iframe#mainFrame, iframe[name='mainFrame']")
+            if mf:
+                self.driver.switch_to.frame(mf[0])
+        except Exception:
+            pass
 
-            # 사진 버튼 클릭 (OS 다이얼로그는 주입된 스크립트로 차단되지만 input 생성은 됨)
-            try:
-                img_btn = self.driver.find_element(
-                    By.CSS_SELECTOR, ".se-image-toolbar-button, button[class*='image-toolbar-button']"
-                )
-                self.driver.execute_script("arguments[0].click();", img_btn)
-                _dlog("사진 버튼 클릭")
-            except Exception as e:
-                _dlog(f"사진 버튼 클릭 실패: {e}")
-            self._sleep(0.25)
+    def _try_send_file(self, abs_path: str) -> bool:
+        """최상위 문서부터 모든 중첩 iframe까지 DFS로 뒤져 input[type=file]에 send_keys.
+        (네이버 SmartEditor는 업로드 input을 mainFrame 내부의 중첩 iframe에 둔다)
+        성공/실패와 무관하게 mainFrame으로 복귀한다."""
+        try:
+            self.driver.switch_to.default_content()
+            found = self._dfs_send_file(abs_path, 0)
+        except Exception as e:
+            _dlog(f"프레임 탐색 오류: {e}")
+            found = False
+        self._enter_main_frame()
+        return found
 
-            # 파일 input 찾아서 경로 전송
-            file_inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
-            _dlog(f"file input 개수: {len(file_inputs)}")
-            sent = False
-            for fi in file_inputs:
+    def _dfs_send_file(self, abs_path: str, depth: int) -> bool:
+        """현재 프레임의 file input 시도 후, 자식 iframe들로 재귀 하강."""
+        # 0) 주입 스크립트가 캡처한 (detached였던) input 참조 우선 시도
+        try:
+            el = self.driver.execute_script("return window.__naverFileInput || null;")
+            if el is not None:
+                try:
+                    el.send_keys(abs_path)
+                    self.driver.execute_script("try{window.__naverFileInput=null;}catch(e){}")
+                    _dlog(f"파일 경로 전송 성공 (캡처 input, depth {depth})")
+                    return True
+                except Exception as e:
+                    _dlog(f"캡처 input send_keys 실패: {e}")
+        except Exception:
+            pass
+        try:
+            inputs = self.driver.find_elements(By.CSS_SELECTOR, "input[type='file']")
+            if inputs:
+                _dlog(f"file input {len(inputs)}개 발견 (frame depth {depth})")
+            for fi in inputs:
                 try:
                     fi.send_keys(abs_path)
-                    sent = True
-                    _dlog(f"파일 경로 전송 성공")
-                    break
+                    _dlog(f"파일 경로 전송 성공 (frame depth {depth})")
+                    return True
                 except Exception:
                     continue
-            if not sent:
-                raise Exception("file input에 경로 전송 실패")
-            self._sleep(0.35)
+        except Exception:
+            pass
+        if depth >= 4:
+            return False
+        try:
+            n = len(self.driver.find_elements(By.CSS_SELECTOR, "iframe"))
+        except Exception:
+            n = 0
+        for i in range(n):
+            try:
+                frames = self.driver.find_elements(By.CSS_SELECTOR, "iframe")
+                if i >= len(frames):
+                    break
+                self.driver.switch_to.frame(frames[i])
+            except Exception:
+                continue
+            try:
+                if self._dfs_send_file(abs_path, depth + 1):
+                    return True
+            finally:
+                try:
+                    self.driver.switch_to.parent_frame()
+                except Exception:
+                    pass
+        return False
 
-            # 업로드 완료 대기
-            WebDriverWait(self.driver, 30).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".se-image-resource, .se-module-image, .se-component.se-image"))
-            )
-            _dlog("이미지 업로드 완료")
-            self._sleep(0.25)
+    def _dump_image_dom_debug(self):
+        """이미지 삽입 실패 시 최상위~모든 중첩 iframe의 file input/이미지버튼을 재귀로 로그."""
+        try:
+            self.driver.switch_to.default_content()
+            self._dump_frames_recursive(0, "top")
+        except Exception as e:
+            _dlog(f"[진단] 덤프 실패: {e}")
+        finally:
+            self._enter_main_frame()
+
+    def _dump_frames_recursive(self, depth: int, label: str):
+        try:
+            info = self.driver.execute_script("""
+                const r = {fileInputs: document.querySelectorAll("input[type=file]").length,
+                           iframes: document.querySelectorAll('iframe').length, imgBtns: []};
+                document.querySelectorAll('button, a').forEach(b => {
+                    const c=((b.className||'')+''),
+                          d=(b.getAttribute('data-name')||b.getAttribute('aria-label')||''),
+                          t=(b.textContent||'').trim().slice(0,10);
+                    if(/image|photo|사진|img/i.test(c+' '+d+' '+t))
+                        r.imgBtns.push(c.slice(0,45)+'|'+d+'|'+t);
+                });
+                return r;
+            """)
+            _dlog(f"[진단] {label} (depth {depth}): {info}")
+        except Exception as e:
+            _dlog(f"[진단] {label} 평가 실패: {e}")
+            return
+        if depth >= 4:
+            return
+        try:
+            n = len(self.driver.find_elements(By.CSS_SELECTOR, "iframe"))
+        except Exception:
+            n = 0
+        for i in range(n):
+            try:
+                frames = self.driver.find_elements(By.CSS_SELECTOR, "iframe")
+                if i >= len(frames):
+                    break
+                self.driver.switch_to.frame(frames[i])
+            except Exception:
+                continue
+            try:
+                self._dump_frames_recursive(depth + 1, f"{label}>if[{i}]")
+            finally:
+                try:
+                    self.driver.switch_to.parent_frame()
+                except Exception:
+                    pass
+
+    def _insert_image(self, image_path: str):
+        """이미지 삽입 — 사진 버튼(실제 클릭) 후 생성되는 input[type=file]에 경로 전송.
+        파일 input을 mainFrame/최상위 양쪽에서 찾고, 실패하면 DOM 진단을 남긴다."""
+        try:
+            abs_path = os.path.abspath(image_path)
+            if not os.path.exists(abs_path):
+                _dlog(f"이미지 파일 없음 — 스킵: {abs_path}")
+                return
+            _dlog(f"이미지 삽입 시도: {abs_path}")
+
+            _img_btn_selectors = [
+                "button[data-name='image']",
+                "button.se-toolbar-item-image", ".se-toolbar-item-image button",
+                "button[data-log*='photo']", "button[data-log*='image']",
+                "button[aria-label*='사진']", "button[title*='사진']",
+                ".se-image-toolbar-button", "button[class*='image-toolbar-button']",
+                ".se-document-toolbar button[class*='image']",
+                "button[class*='image'][class*='toolbar']",
+            ]
+            sent = False
+            for attempt in range(3):
+                # 1) 사진 버튼 — 실제 클릭(ActionChains) 우선, 실패 시 JS 클릭
+                clicked_sel = None
+                for sel in _img_btn_selectors:
+                    try:
+                        btn = self.driver.find_element(By.CSS_SELECTOR, sel)
+                        try:
+                            ActionChains(self.driver).move_to_element(btn).pause(0.1).click().perform()
+                        except Exception:
+                            self.driver.execute_script("arguments[0].click();", btn)
+                        clicked_sel = sel
+                        break
+                    except Exception:
+                        continue
+                _dlog(f"사진 버튼 클릭: {clicked_sel or '못 찾음'} (시도 {attempt+1})")
+                self._sleep(0.6)
+
+                # 2) file input 탐색 + 경로 전송 (mainFrame → 최상위)
+                if self._try_send_file(abs_path):
+                    sent = True
+                    break
+                self._sleep(0.6)
+
+            if not sent:
+                self._dump_image_dom_debug()
+                raise Exception("file input에 경로 전송 실패")
+            self._sleep(0.5)
+
+            # 업로드 완료 대기 — 이미지가 중첩 프레임에 삽입될 수 있어 비치명적 + 짧게(8s)
+            # (못 찾을 때 30초씩 행 걸려 발행이 느려지던 문제 → 8초로 단축)
+            try:
+                WebDriverWait(self.driver, 8).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, ".se-image-resource, .se-module-image, .se-component.se-image"))
+                )
+                _dlog("이미지 업로드 완료")
+            except Exception:
+                _dlog("이미지 업로드 확인 요소 못 찾음 — 전송은 성공, 업로드 시간 확보 후 계속")
+                self._sleep(1.0)
+            self._sleep(0.2)
 
         except Exception as e:
             _dlog(f"이미지 삽입 실패: {e}")

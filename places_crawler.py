@@ -308,11 +308,6 @@ def crawl_places_parallel(keywords: list, count_per: int, on_progress=None,
             f"⚙️ [자동 봇조절] 구 {len(keywords)}개 ≥ {THROTTLE_DISTRICT_THRESHOLD}개 "
             f"→ throttle 회피 위해 {_requested_workers}봇 → {max_workers}봇으로 자동 하향"
         )
-    elif auto_throttle:
-        emit_log(
-            f"⚙️ [자동 봇조절] 구 {len(keywords)}개 < {THROTTLE_DISTRICT_THRESHOLD}개 "
-            f"→ 설정대로 {max_workers}봇 유지 (속도 우선)"
-        )
 
     max_workers = max(1, min(max_workers, len(keywords)))
 
