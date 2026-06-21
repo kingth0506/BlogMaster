@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "1.7.8"
+APP_VERSION = "1.8.2"
 
 import os
 import sys
@@ -624,6 +624,19 @@ class MainWindow(QMainWindow):
         self._load_keyword_history()
         left_layout.addWidget(self.keyword_input)
 
+        # 픽사베이 검색어 (2칸, 비우면 자동)
+        pix_lbl = QLabel("픽사베이 검색어 (비우면 자동)")
+        pix_lbl.setObjectName("sectionLabel")
+        left_layout.addWidget(pix_lbl)
+        pix_row = QHBoxLayout()
+        self.pix_kw1 = QLineEdit()
+        self.pix_kw1.setPlaceholderText("검색어 1 (한글 가능)")
+        self.pix_kw2 = QLineEdit()
+        self.pix_kw2.setPlaceholderText("검색어 2 (한글 가능)")
+        pix_row.addWidget(self.pix_kw1)
+        pix_row.addWidget(self.pix_kw2)
+        left_layout.addLayout(pix_row)
+
         # 지역설정 버튼 (드롭다운 트리 다이얼로그)
         self._selected_regions = list(self.cfg.get("selected_regions", []) or [])
         self.btn_regions = QPushButton()
@@ -902,16 +915,16 @@ class MainWindow(QMainWindow):
         lbl.setObjectName("logHeader")
         log_hdr_layout.addWidget(lbl)
 
-        # 봇 개수 선택 (1/2/3) — 크롤링 동시 워커 수. 기본 3
+        # 봇 개수 선택 (1/2) — 크롤링 동시 워커 수. 기본 2 (throttle 안전값, 최대 2봇)
         bot_lbl = QLabel("  |  봇")
         bot_lbl.setStyleSheet("color: #64748b; font-size: 12px; margin-left: 8px;")
         log_hdr_layout.addWidget(bot_lbl)
 
         self.bot_count_group = QButtonGroup(self)
-        saved_bots = int(self.cfg.get("bot_count", 3) or 3)
-        if saved_bots not in (1, 2, 3):
-            saved_bots = 3
-        for n in (1, 2, 3):
+        saved_bots = int(self.cfg.get("bot_count", 2) or 2)
+        if saved_bots not in (1, 2):
+            saved_bots = 2
+        for n in (1, 2):
             rb = QRadioButton(str(n))
             rb.setStyleSheet("font-size: 12px; color: #334155; padding: 0 2px;")
             rb.setCursor(Qt.PointingHandCursor)
@@ -960,13 +973,13 @@ class MainWindow(QMainWindow):
         self.crawl_status_label.setStyleSheet("font-weight: bold; font-size: 12px; color: #6366f1; letter-spacing: 0.3px;")
         crawl_lay.addWidget(self.crawl_status_label)
 
-        # 워커별 로그 3개 (병렬 크롤 시각화)
+        # 워커별 로그 2개 (병렬 크롤 시각화 — 최대 2봇)
         from PySide6.QtWidgets import QSplitter as _QS
         _worker_split = _QS(Qt.Horizontal)
         _worker_split.setChildrenCollapsible(False)
         self.crawl_worker_logs = []
         self.crawl_worker_region_labels = []
-        for i in range(3):
+        for i in range(2):
             col = QFrame()
             col.setStyleSheet("background: white; border: 1px solid #e2e8f0; border-radius: 8px;")
             col.setMinimumWidth(120)
@@ -991,7 +1004,7 @@ class MainWindow(QMainWindow):
             _worker_split.addWidget(col)
             self.crawl_worker_logs.append(te)
             self.crawl_worker_region_labels.append(region_lbl)
-        _worker_split.setSizes([300, 300, 300])
+        _worker_split.setSizes([300, 300])
         crawl_lay.addWidget(_worker_split, 1)
 
         # 공용 로그 — 숨겨진 백업 (레이아웃 차지 안 함)
@@ -1388,19 +1401,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        # kidth1 로그인 시 Drive에서 logs 자동 다운로드 (백그라운드)
-        if user.get("username", "") == "kidth1":
-            import threading as _th
-            def _drive_download():
-                try:
-                    from drive_upload import list_drive_log_folders, download_logs_for_account
-                    base = os.path.join(os.path.dirname(__file__), "logs")
-                    for acc_name in list_drive_log_folders("kidth1"):
-                        local_dir = os.path.join(base, acc_name)
-                        download_logs_for_account(acc_name, local_dir)
-                except Exception:
-                    pass
-            _th.Thread(target=_drive_download, daemon=True).start()
+        pass
 
     def _normalize_post_images(self, pix_key: str):
         """각 포스트의 실제 저장 이미지 갯수를 image_count에 맞춰 평준화
@@ -1438,7 +1439,7 @@ class MainWindow(QMainWindow):
                 continue
             # 부족 → 추가 다운로드
             need = target - cur
-            biz = (place.get("category") or "").strip() or "place"
+            biz = self._best_biz_term(place, "")
             # 업종별 Pixabay 검색어 후보
             _plist = []
             try:
@@ -2093,32 +2094,45 @@ class MainWindow(QMainWindow):
             _days_left(_user.get("expires_2", "")),
             _days_left(_user.get("expires_3", "")),
         ]
+        _ad = [
+            _days_left(_user.get("api_expires", "")),
+            _days_left(_user.get("api_expires_2", "")),
+            _days_left(_user.get("api_expires_3", "")),
+        ]
 
         def _status_txt(idx):
             days = _d[idx]
             if days is None:   return "♾️ 무제한"
             elif days > 0:     return f"✅ {days}일 남음"
-            elif idx == 0:     return "🆓 30일 무료 체험 가능"
+            elif idx == 0:     return "🆓 무료체험 가능"
+            else:              return "❌ 미구독"
+
+        def _api_status_txt(idx):
+            days = _ad[idx]
+            if days is None:   return "♾️ 무제한"
+            elif days > 0:     return f"✅ {days}일 남음"
             else:              return "❌ 미구독"
 
         BASE_PRICES = [9900, 14900, 19900]
-        FIELDS = ["expires", "expires_2", "expires_3"]
+        API_PRICES  = [5500, 9900, 9900]
+        FIELDS      = ["expires",    "expires_2",    "expires_3"]
+        API_FIELDS  = ["api_expires","api_expires_2","api_expires_3"]
 
         dlg = QDialog(self)
         dlg.setWindowTitle("구독 연장")
-        dlg.setMinimumWidth(500)
+        dlg.setMinimumWidth(520)
         layout = QVBoxLayout(dlg)
         layout.setSpacing(12)
         layout.setContentsMargins(22, 18, 22, 18)
 
         # ── 명의 선택 ──
-        layout.addWidget(QLabel("<b>명의 선택</b>  (1명의 = 아이디 3개)"))
+        layout.addWidget(QLabel("<b>명의 선택</b>  (1명의 = 네이버 아이디 3개)"))
         myeong_bg = QButtonGroup(dlg)
         myeong_row = QHBoxLayout()
         myeong_row.setSpacing(8)
         _rm = []
         for _i, (_p, _s) in enumerate(zip(BASE_PRICES, ["1명의", "2명의", "3명의"])):
-            _r = QRadioButton(f"{_s}  {_p:,}원\n{_status_txt(_i)}")
+            _r = QRadioButton(f"{_s}  {_p:,}원\n기본: {_status_txt(_i)}")
             _r.setStyleSheet("padding: 4px;")
             myeong_bg.addButton(_r)
             myeong_row.addWidget(_r)
@@ -2126,19 +2140,28 @@ class MainWindow(QMainWindow):
         _rm[0].setChecked(True)
         layout.addLayout(myeong_row)
 
-        # ── API키 추가 ──
-        chk_api = QCheckBox("🔑 API키 추가  (+5,500원 / 2·3명의 +9,900원)")
+        # ── API 구독 추가 ──
+        chk_api = QCheckBox()
+        chk_api.setStyleSheet("padding: 2px;")
         layout.addWidget(chk_api)
+
+        def _update_api_chk():
+            _idx = next((i for i, r in enumerate(_rm) if r.isChecked()), 0)
+            _ap = API_PRICES[_idx]
+            _ast = _api_status_txt(_idx)
+            chk_api.setText(f"🔑 GPT글쓰기 API 구독  +{_ap:,}원/월  (현재 {_ast})")
+
+        _update_api_chk()
 
         # ── 기간 선택 ──
         layout.addWidget(QLabel("<b>기간 선택</b>"))
         period_bg = QButtonGroup(dlg)
         period_row = QHBoxLayout()
         period_row.setSpacing(4)
-        rp1  = QRadioButton("1개월")
-        rp3  = QRadioButton("3개월 -5%")
-        rp6  = QRadioButton("6개월 -10%")
-        rpInf = QRadioButton("무제한 770,000원\nAPI키 별도 구매 가능")
+        rp1   = QRadioButton("1개월")
+        rp3   = QRadioButton("3개월 -5%")
+        rp6   = QRadioButton("6개월 -10%")
+        rpInf = QRadioButton("무제한 770,000원\nAPI별도 가능")
         rp1.setChecked(True)
         for _r in (rp1, rp3, rp6, rpInf):
             period_bg.addButton(_r)
@@ -2154,12 +2177,11 @@ class MainWindow(QMainWindow):
         def _calc():
             _idx = next((i for i, r in enumerate(_rm) if r.isChecked()), 0)
             _base = BASE_PRICES[_idx]
-            _api_add = 5500 if _idx == 0 else 9900
+            _api_add = API_PRICES[_idx]
             if rpInf.isChecked():
-                # 무제한: API키는 월정액 별도
                 if chk_api.isChecked():
                     price_lbl.setText(
-                        f"무제한  770,000원\n+ API키 별도  {_api_add:,}원/월"
+                        f"무제한  770,000원\n+ GPT API  {_api_add:,}원/월 별도"
                     )
                 else:
                     price_lbl.setText("무제한  770,000원")
@@ -2175,7 +2197,7 @@ class MainWindow(QMainWindow):
 
         _calc()
         for _r in (*_rm, rp1, rp3, rp6, rpInf):
-            _r.toggled.connect(lambda _: _calc())
+            _r.toggled.connect(lambda _: (_update_api_chk(), _calc()))
         chk_api.stateChanged.connect(lambda _: _calc())
 
         # ── 계좌 안내 ──
@@ -2202,13 +2224,13 @@ class MainWindow(QMainWindow):
             _plan_names = ["1명의", "2명의", "3명의"]
             _plan = _plan_names[_idx]
             _field = FIELDS[_idx]
+            _api_field = API_FIELDS[_idx]
             _base = BASE_PRICES[_idx]
-            _api_add = 5500 if _idx == 0 else 9900
+            _api_add = API_PRICES[_idx]
             _with_api = chk_api.isChecked()
             _unlimited = rpInf.isChecked()
             if _unlimited:
                 _months = 1
-                # 무제한: API키는 월정액 별도 (1개월치만 청구)
                 _total = 770000 + (_api_add if _with_api else 0)
             else:
                 if rp3.isChecked():   _months, _dc = 3, 0.05
@@ -2224,6 +2246,7 @@ class MainWindow(QMainWindow):
                     "months": _months,
                     "amount": _total,
                     "field": _field,
+                    "api_field": _api_field if _with_api else "",
                     "unlimited": _unlimited,
                     "api": _with_api,
                 }).encode()
@@ -2281,21 +2304,19 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _ram_bot_cap(ram_gb: float) -> int:
-        """RAM 기반 봇 개수 상한: <4GB→1, 4~8GB→2, ≥8GB→3.
-        Chrome 인스턴스당 약 300~500MB 사용 추정."""
+        """RAM 기반 봇 개수 상한: <4GB→1, 그 외→2 (최대 2봇 정책).
+        throttle 회피를 위해 최대 봇 수를 2로 고정한다."""
         if ram_gb < 0:  # psutil 실패 → 보수적으로 2
             return 2
         if ram_gb < 4.0:
             return 1
-        if ram_gb < 8.0:
-            return 2
-        return 3
+        return 2
 
     def _save_bot_count(self):
         try:
-            n = int(self.bot_count_group.checkedId() or 3)
-            if n not in (1, 2, 3):
-                n = 3
+            n = int(self.bot_count_group.checkedId() or 2)
+            if n not in (1, 2):
+                n = 2
             cfg = load_config()
             cfg["bot_count"] = n
             save_config(cfg)
@@ -2307,11 +2328,11 @@ class MainWindow(QMainWindow):
     def _get_bot_count(self) -> int:
         """사용자 설정 봇 개수, 단 RAM 기반 자동 상한 적용 (저사양 PC 보호)."""
         try:
-            user_n = int(self.bot_count_group.checkedId() or 3)
-            if user_n not in (1, 2, 3):
-                user_n = 3
+            user_n = int(self.bot_count_group.checkedId() or 2)
+            if user_n not in (1, 2):
+                user_n = 2
         except Exception:
-            user_n = 3
+            user_n = 2
         ram = self._get_system_ram_gb()
         cap = self._ram_bot_cap(ram)
         if user_n > cap:
@@ -2325,20 +2346,19 @@ class MainWindow(QMainWindow):
         우선순위: search_keyword 마지막 토큰 > category 마지막 토큰 > fallback_keyword > category 풀스트링.
         예: search_keyword='강남구 치과' → '치과', category='의원 > 치과의원' → '치과의원'."""
         from image_handler import _tokenize_biz, BIZ_TO_EN
-        for src in (place.get("search_keyword"), place.get("category"), fallback_keyword):
+        # category_2 (더 구체적) → search_keyword → category_1 → fallback 순
+        for src in (place.get("category_2"), place.get("search_keyword"), place.get("category"), fallback_keyword):
             toks = _tokenize_biz(src or "")
-            # 마지막 토큰부터 BIZ_TO_EN 키와 매칭되는 것 우선 반환
             for tok in reversed(toks):
                 tl = tok.lower()
                 for ko in sorted(BIZ_TO_EN.keys(), key=len, reverse=True):
                     if ko in tl:
                         return tok
-        # 매핑되는 토큰이 없으면 가장 구체적인 마지막 토큰 사용 (translator로 영역 검색)
-        for src in (place.get("search_keyword"), place.get("category"), fallback_keyword):
+        for src in (place.get("category_2"), place.get("search_keyword"), place.get("category"), fallback_keyword):
             toks = _tokenize_biz(src or "")
             if toks:
                 return toks[-1]
-        return (place.get("category") or fallback_keyword or "").strip()
+        return (place.get("category_2") or place.get("category") or fallback_keyword or "").strip()
 
     # ── 한영 번역 캐시 (Pixabay 검색어용) ──
     def _get_translation_cache_file(self):
@@ -2429,35 +2449,26 @@ class MainWindow(QMainWindow):
         if not api_keys:
             return
         base = prompts.get("기본", {"blog": "", "title": ""})
+        base_blog = base.get("blog", "")
+        base_title = base.get("title", "")
         meta_prompt = (
-            f"'{biz_type}' 업종에 맞는 블로그 본문 프롬프트와 제목 프롬프트를 생성해라.\n\n"
-            f"절대 규칙:\n"
-            f"1. '{{업종}}', '{{업체명}}', '{{주소}}', '{{근처역}}', '{{카테고리}}', '{{앞키워드}}', '{{태그}}', '{{키워드}}' 같은 플레이스홀더는 그대로 유지\n"
-            f"2. 그 시설을 검색해서 방문할 만한 사람의 관점으로 후기 쓰도록 구성\n"
-            f"3. 사실 기반 / 지어내기 금지 / 이모티콘 금지\n"
-            f"4. 공백 포함 1500자 안팎, 1400자 미만 금지, 최소 40문장\n\n"
-            f"[제목 작성 규칙]\n"
-            f"- 정보탐색형(\"OO 후기\")보다 구매결정형 키워드 우선\n"
-            f"- {{업종}}에 맞는 \"가격\", \"비용\", \"예약 방법\", \"이용 후기 비교\", \"주차/영업시간\" 등 결정 직전 단계 키워드를 제목에 1개 이상 포함\n\n"
-            f"[본문 구조 규칙 - 문단 페이싱]\n"
-            f"- 한 문단은 3~4문장 이내로 끝내고, 다음 문단에서는 반드시 새로운 소주제로 전환 (같은 주제로 문단 두 개 이어쓰지 말 것)\n"
-            f"- 전체 8~10개 문단으로 분할\n"
-            f"- 도입부는 매번 다른 패턴 사용: a) 방문 계기 먼저, b) 검색 과정 먼저, c) 결론(만족도) 먼저\n"
-            f"- 정보는 한번에 다 주지 말고 분산: 가격은 중반부, 이용방법은 후반부, 위치/접근성은 마지막 등\n"
-            f"- 문장 길이는 짧은 문장/긴 문장 섞기, 같은 어미(\"~했어요\" 등) 3회 이상 연속 금지\n"
-            f"- 마무리는 \"이런 분께 추천\" 형태로 종료\n\n"
-            f"[정보성 디테일]\n"
-            f"- 가격대, 영업시간/예약방법, 주차 여부, 인근 랜드마크 중 최소 3가지 구체적으로 포함 (검증 가능한 사실만, 모르면 {{정보}} 플레이스홀더 유지)\n\n"
-            f"[이미지 삽입 규칙]\n"
-            f"- 본문에 [사진1], [사진2], [사진3] 마커를 문단 사이에 삽입 (문단 내부 X)\n"
-            f"- 사진1: 도입 문단 종료 직후\n"
-            f"- 사진2: 가격/이용방법 등 핵심 정보 문단 시작 직전\n"
-            f"- 사진3: 위치/접근성 문단 부근\n"
-            f"- 사진을 2장만 쓸 경우: 사진1(도입 끝), 사진2(핵심 정보 직전)만 사용\n\n"
-            f"[지도 삽입 규칙]\n"
-            f"- 마지막 문단(추천 대상) 바로 다음에 [지도] 마커 삽입\n"
-            f"- 마커 앞 문장은 \"위치 정보는 아래 지도를 참고하세요\" 류로 자연스럽게 연결\n\n"
-            f"출력 형식: ===BLOG=== / ===TITLE=== 구분자로 분리해서 출력\n"
+            f"아래는 블로그 자동 포스팅에 사용하는 '기본' 시스템 프롬프트다.\n\n"
+            f"[기본 블로그 본문 프롬프트]\n{base_blog}\n\n"
+            f"[기본 제목 프롬프트]\n{base_title}\n\n"
+            f"---\n\n"
+            f"위 기본 프롬프트를 '{biz_type}' 업종 전용으로 변환해라.\n\n"
+            f"[절대 규칙 — 반드시 지켜라]\n"
+            f"- 기본 프롬프트의 모든 섹션(역할, 입력 데이터, 작업 지시, 필수 포함, 이미지 배치, 금지 사항)을 그대로 유지해라.\n"
+            f"- 글자 수 조건(1500자 이상, 1700~2000자), 문장 수(40문장 이상), 서론/본론/결론 구조, [이미지] 마커 규칙, 주소 필수 포함 — 모두 그대로 유지해라.\n"
+            f"- 플레이스홀더 유지 필수: {{업체명}}, {{주소}}, {{근처역}}, {{카테고리}}, {{앞키워드}}, {{태그}}, {{키워드}}\n"
+            f"- 오직 '역할' 섹션의 업종 설명과 본론 항목만 '{biz_type}' 업종에 맞게 수정해라.\n"
+            f"- 실제 블로그 글을 쓰지 말 것. 지시문(시스템 프롬프트)만 출력해라.\n"
+            f"- 이모티콘 금지, 광고성 표현 금지.\n\n"
+            f"[출력 형식 — 반드시 아래 구분자 그대로 단독 줄에 출력]\n"
+            f"===BLOG===\n"
+            f"('{biz_type}' 업종용 블로그 본문 시스템 프롬프트)\n"
+            f"===TITLE===\n"
+            f"('{biz_type}' 업종용 제목 시스템 프롬프트)\n"
         )
 
         def _worker():
@@ -2476,7 +2487,7 @@ class MainWindow(QMainWindow):
                 blog_p = (m_blog.group(1).strip() if m_blog else "")
                 title_p = (m_title.group(1).strip() if m_title else "")
                 if not blog_p or not title_p:
-                    self._emit_log(f"  [경고] '{biz_type}' 프롬프트 응답 파싱 실패 — skip")
+                    self._emit_log(f"  [경고] '{biz_type}' 프롬프트 파싱 실패 — GPT 응답: {text[:200]!r}")
                     return
                 try:
                     with open(prompts_path, "r", encoding="utf-8") as _f:
@@ -2493,7 +2504,18 @@ class MainWindow(QMainWindow):
                 }
                 with open(prompts_path, "w", encoding="utf-8") as _f:
                     json.dump(cur, _f, ensure_ascii=False, indent=2)
-                self._emit_log(f"  '{biz_type}' 프롬프트 자동 생성 완료 (prompts.json 저장)")
+                # Firebase에 유저별 프롬프트 누적 저장
+                try:
+                    from users import update_user as _upd_fb, load_users as _lu_fb
+                    from config import get_current_user as _gcu_fb
+                    _uname = _gcu_fb()
+                    if _uname:
+                        _fb_cur = (_lu_fb().get(_uname) or {}).get("prompts") or {}
+                        _fb_cur[biz_type] = cur[biz_type]
+                        _upd_fb(_uname, prompts=_fb_cur)
+                except Exception:
+                    pass
+                self._emit_log(f"  '{biz_type}' 프롬프트 자동 생성 완료 (저장 완료)")
             except Exception as _e:
                 self._emit_log(f"  '{biz_type}' 프롬프트 자동 생성 실패: {_e}")
 
@@ -2503,28 +2525,35 @@ class MainWindow(QMainWindow):
     def _open_prompt_editor(self):
         from app_paths import ensure_from_bundle as _efb
         prompts_path = _efb("prompts.json")
-        # Firebase에서 유저별 프롬프트 우선 로드
+        is_admin = (getattr(self, "current_user", {}) or {}).get("role") == "admin"
+
         prompts = {}
-        try:
-            from users import load_users as _lu_p
-            from config import get_current_user as _gcu
-            _fb_prompts = _lu_p().get(_gcu(), {}).get("prompts", {}) or {}
-            if _fb_prompts:
-                prompts = _fb_prompts
-        except Exception:
-            pass
-        if not prompts:
+        if is_admin:
+            # 관리자: 로컬 전체 로드
             try:
                 with open(prompts_path, "r", encoding="utf-8") as f:
                     prompts = json.load(f)
             except Exception:
                 prompts = {}
+        else:
+            # 일반 유저: 기본(공유) + Firebase 개인 프롬프트만
+            try:
+                with open(prompts_path, "r", encoding="utf-8") as f:
+                    _local = json.load(f)
+                if "기본" in _local:
+                    prompts["기본"] = _local["기본"]
+            except Exception:
+                pass
+            try:
+                from users import load_users as _lu_p
+                from config import get_current_user as _gcu
+                _fb_prompts = _lu_p().get(_gcu(), {}).get("prompts", {}) or {}
+                for _k, _v in _fb_prompts.items():
+                    prompts[_k] = _v
+            except Exception:
+                pass
         if not prompts:
             prompts = {"기본": {"blog": "", "title": ""}}
-
-        is_admin = (getattr(self, "current_user", {}) or {}).get("role") == "admin"
-        if not is_admin:
-            prompts = {"기본": prompts.get("기본", {"blog": "", "title": "", "pixabay_list": ["", "", ""]})}
 
         dlg = QDialog(self)
         dlg.setWindowTitle("프롬프트 편집")
@@ -2742,35 +2771,24 @@ class MainWindow(QMainWindow):
 
 핵심 키워드: {키워드}
 """
+            base_blog = base.get("blog", "")
+            base_title = base.get("title", "")
             meta_prompt = (
-                f"'{key}' 업종에 맞는 블로그 본문 프롬프트와 제목 프롬프트를 생성해라.\n\n"
-                f"절대 규칙:\n"
-                f"1. '{{업종}}', '{{업체명}}', '{{주소}}', '{{근처역}}', '{{카테고리}}', '{{앞키워드}}', '{{태그}}', '{{키워드}}' 같은 플레이스홀더는 그대로 유지\n"
-                f"2. 그 시설을 검색해서 방문할 만한 사람의 관점으로 후기 쓰도록 구성\n"
-                f"3. 사실 기반 / 지어내기 금지 / 이모티콘 금지\n"
-                f"4. 공백 포함 1500자 안팎, 1400자 미만 금지, 최소 40문장\n\n"
-                f"[제목 작성 규칙]\n"
-                f"- 정보탐색형(\"OO 후기\")보다 구매결정형 키워드 우선\n"
-                f"- {{업종}}에 맞는 \"가격\", \"비용\", \"예약 방법\", \"이용 후기 비교\", \"주차/영업시간\" 등 결정 직전 단계 키워드를 제목에 1개 이상 포함\n\n"
-                f"[본문 구조 규칙 - 문단 페이싱]\n"
-                f"- 한 문단은 3~4문장 이내로 끝내고, 다음 문단에서는 반드시 새로운 소주제로 전환 (같은 주제로 문단 두 개 이어쓰지 말 것)\n"
-                f"- 전체 8~10개 문단으로 분할\n"
-                f"- 도입부는 매번 다른 패턴 사용: a) 방문 계기 먼저, b) 검색 과정 먼저, c) 결론(만족도) 먼저\n"
-                f"- 정보는 한번에 다 주지 말고 분산: 가격은 중반부, 이용방법은 후반부, 위치/접근성은 마지막 등\n"
-                f"- 문장 길이는 짧은 문장/긴 문장 섞기, 같은 어미(\"~했어요\" 등) 3회 이상 연속 금지\n"
-                f"- 마무리는 \"이런 분께 추천\" 형태로 종료\n\n"
-                f"[정보성 디테일]\n"
-                f"- 가격대, 영업시간/예약방법, 주차 여부, 인근 랜드마크 중 최소 3가지 구체적으로 포함 (검증 가능한 사실만, 모르면 {{정보}} 플레이스홀더 유지)\n\n"
-                f"[이미지 삽입 규칙]\n"
-                f"- 본문에 [사진1], [사진2], [사진3] 마커를 문단 사이에 삽입 (문단 내부 X)\n"
-                f"- 사진1: 도입 문단 종료 직후\n"
-                f"- 사진2: 가격/이용방법 등 핵심 정보 문단 시작 직전\n"
-                f"- 사진3: 위치/접근성 문단 부근\n"
-                f"- 사진을 2장만 쓸 경우: 사진1(도입 끝), 사진2(핵심 정보 직전)만 사용\n\n"
-                f"[지도 삽입 규칙]\n"
-                f"- 마지막 문단(추천 대상) 바로 다음에 [지도] 마커 삽입\n"
-                f"- 마커 앞 문장은 \"위치 정보는 아래 지도를 참고하세요\" 류로 자연스럽게 연결\n\n"
-                f"출력 형식: ===BLOG=== / ===TITLE=== 구분자로 분리해서 출력\n"
+                f"아래는 블로그 자동 포스팅에 사용하는 '기본' 시스템 프롬프트 예시다.\n\n"
+                f"[기본 블로그 본문 프롬프트 예시]\n{base_blog}\n\n"
+                f"[기본 제목 프롬프트 예시]\n{base_title}\n\n"
+                f"---\n\n"
+                f"위 예시를 참고해서 '{key}' 업종에 특화된 시스템 프롬프트를 새로 작성해라.\n\n"
+                f"[반드시 지킬 규칙]\n"
+                f"- 실제 블로그 글을 쓰지 말 것. GPT에게 블로그를 쓰도록 지시하는 '시스템 프롬프트(지시문)'를 작성해야 한다.\n"
+                f"- 플레이스홀더 유지 필수: {{업체명}}, {{주소}}, {{근처역}}, {{카테고리}}, {{앞키워드}}, {{태그}}, {{키워드}}\n"
+                f"- '{key}' 업종을 방문하는 사람의 관점과 관심사에 맞게 역할·지시 내용을 조정\n"
+                f"- 이모티콘 금지, 광고성 표현 금지\n\n"
+                f"[출력 형식 — 반드시 아래 구분자 그대로 단독 줄에 출력]\n"
+                f"===BLOG===\n"
+                f"('{key}' 업종용 블로그 본문 시스템 프롬프트)\n"
+                f"===TITLE===\n"
+                f"('{key}' 업종용 제목 시스템 프롬프트)\n"
             )
 
             btn_auto.setEnabled(False)
@@ -2936,24 +2954,9 @@ class MainWindow(QMainWindow):
                             _crawl_start_times[kw] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         with open(_fp, "w", encoding="utf-8") as _f:
                             json.dump({"keyword": kw, "crawled_at": _crawl_start_times[kw], "crawl_mode": getattr(self, "_current_crawl_mode", ""), "items": list(items_so_far)}, _f, ensure_ascii=False, indent=2)
-                        if self._account_key() == "kidth1":
-                            import threading as _dth
-                            _fp2, _dn2 = _fp, os.path.basename(_dir)
-                            _dth.Thread(target=lambda p=_fp2, d=_dn2: __import__("drive_upload").upload_log_file(p, d), daemon=True).start()
+                        pass
                     except Exception as _e:
                         self._emit_log(f"업체별 저장 실패: {_e}")
-
-                def _crawl_profile_dir():
-                    """크롤링용 로그인 프로필 경로 — 첫 번째 유효한 계정 프로필 반환."""
-                    _base = os.path.dirname(__file__)
-                    for _acc in (self.cfg.get("accounts", []) or []):
-                        _bid = (_acc.get("blog_id") or "").strip()
-                        if not _bid:
-                            continue
-                        _p = os.path.join(_base, "chrome_profile", _bid)
-                        if os.path.isdir(_p):
-                            return _p
-                    return None
 
                 def _crawl_with_retry(kw, target_count, existing, excludes, max_retries=3, d_url=None, no_filter=False):
                     """timeout/webdriver 예외 발생 시 드라이버 재시작 + resume."""
@@ -2969,7 +2972,6 @@ class MainWindow(QMainWindow):
                                 direct_url=d_url,
                                 no_filter=no_filter,
                                 stop_flag=lambda: self.stop_flag,
-                                profile_dir=_crawl_profile_dir(),
                                 emit_log=self._emit_log,
                             )
                         except InterruptedError:
@@ -3048,7 +3050,7 @@ class MainWindow(QMainWindow):
                     # 병렬 크롤 — 사용자가 설정한 봇 개수(1/2/3)와 키워드 개수 중 작은 값
                     _user_bots = self._get_bot_count()
                     _workers = min(_user_bots, max(1, len(expanded)))
-                    self._emit_log(f"지역 {len(expanded)}개 × '{_biz}' 병렬 크롤 ({_workers}개 봇, 설정={_user_bots})")
+                    self._emit_log(f"지역 {len(expanded)}개 × '{_biz}' 병렬 크롤 (설정 {_user_bots}봇 — 구 10개↑면 throttle 회피로 2봇 자동 하향)")
                     _per = count  # 지역별 목표 개수 = 사용자 설정값
                     _existing_by_kw = {}
 
@@ -3071,8 +3073,7 @@ class MainWindow(QMainWindow):
                         emit_log=self._emit_log,
                         save_batch=_on_batch,
                         on_item=_on_item,
-                        no_filter=True,
-                        profile_dir=_crawl_profile_dir(),
+                        no_filter=False,  # 지역(구) 필터 적용 — 검색한 구만 수집(인접구 제거). 업종필터는 이미 없음
                     )
                     latest_results[0] = results
                     try:
@@ -3081,7 +3082,7 @@ class MainWindow(QMainWindow):
                     except Exception:
                         pass
                 else:
-                    results = _crawl_with_retry(keyword, count, existing_for_resume, _excludes, no_filter=True)
+                    results = _crawl_with_retry(expanded[0], count, existing_for_resume, _excludes, no_filter=False)
                     for _p in results:
                         _p.setdefault("search_keyword", keyword)
                 latest_results[0] = results
@@ -3243,7 +3244,13 @@ class MainWindow(QMainWindow):
                     p.get("tags", ""),
                     p.get("pixabay_keywords", ""),
                 ])
-                # 자식은 기본 글씨
+                # 2차카테고리 — 있으면 접힌 상태로 하위 항목 추가
+                cat2 = (p.get("category_2") or "").strip()
+                if cat2:
+                    sub = QTreeWidgetItem(child, ["", "", f"└ {cat2}", "", "", "", ""])
+                    from PySide6.QtGui import QColor as _QC
+                    sub.setForeground(2, _QC("#6b7280"))
+                # child는 접힌 상태 유지 (setExpanded 호출 안 함)
             root.setExpanded(True)
 
         btn_expand.clicked.connect(lambda: tree.expandAll())
@@ -3814,10 +3821,7 @@ class MainWindow(QMainWindow):
                     try:
                         os.remove(fp)
                         self._del_log(f"  {fname}: items {len(items)}개 모두 삭제 → 파일 삭제")
-                        if self._account_key() == "kidth1":
-                            import threading as _dth
-                            _fn2, _ldn2 = fname, os.path.basename(log_dir)
-                            _dth.Thread(target=lambda fn=_fn2, ld=_ldn2: __import__("drive_upload").delete_log_file(fn, ld), daemon=True).start()
+                        pass
                     except Exception as e:
                         self._del_log(f"  {fname}: 파일 삭제 실패: {e}")
                 else:
@@ -3825,10 +3829,7 @@ class MainWindow(QMainWindow):
                     with open(fp, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
                     self._del_log(f"  {fname}: items {len(items)}→{len(kept)} 재기록")
-                    if self._account_key() == "kidth1":
-                        import threading as _dth
-                        _fp2, _ldn2 = fp, os.path.basename(log_dir)
-                        _dth.Thread(target=lambda p=_fp2, ld=_ldn2: __import__("drive_upload").upload_log_file(p, ld), daemon=True).start()
+                    pass
             except Exception as e:
                 self._del_log(f"  {fname}: 예외 {type(e).__name__}: {e}")
                 continue
@@ -4135,7 +4136,7 @@ class MainWindow(QMainWindow):
                 self._emit_status("중단완료", "#ef4444")
             else:
                 self._emit_status("생성 완료", "#22c55e")
-                self._emit_post_log(f"포스트 생성 완료: {len(self._generated_posts)}/{total}개")
+                self._emit_post_log(f"포스트 생성 완료: {len(new_posts)}/{total}개")
             # 이미지 갯수 평준화 비활성화 (사용자 요청)
             self._save_generated_posts()
 
@@ -4463,16 +4464,38 @@ class MainWindow(QMainWindow):
                         _pl(f"저장된 이미지 {len(img_paths)}장 사용")
                     elif pix_keys:
                         try:
-                            # 업종 우선순위: search_keyword 마지막 토큰 > 카테고리 마지막 토큰 > 검색어
-                            biz = self._best_biz_term(place, keyword)
-                            _pl(f"이미지 재검색 업종: '{biz}' (저장본 없음)")
-                            img_paths = download_images(
-                                pix_keys[0], biz,
-                                content.get("image_count", 3),
-                                watermark_text=name,
-                                translator=self._translate_ko_to_en,
-                            )
-                            _pl(f"이미지 {len(img_paths)}장 다운로드")
+                            pix_kw1 = self.pix_kw1.text().strip()
+                            pix_kw2 = self.pix_kw2.text().strip()
+                            if pix_kw1 or pix_kw2:
+                                pix_queries = [k for k in [pix_kw1, pix_kw2] if k]
+                                from image_handler import _fetch_hits as _fh2
+                                import random as _r2, requests as _req2, tempfile as _tmp2
+                                _pool2 = []
+                                for _q2 in pix_queries:
+                                    _pool2.extend(_fh2(pix_keys[0], _q2, page=1, per_page=40))
+                                if _pool2:
+                                    _count2 = content.get("image_count", 3)
+                                    _sel2 = _r2.sample(_pool2, min(_count2, len(_pool2)))
+                                    _td2 = _tmp2.mkdtemp(prefix="naver_blog_")
+                                    for _ji2, _h2 in enumerate(_sel2):
+                                        try:
+                                            _resp2 = _req2.get(_h2.get("largeImageURL",""), timeout=30)
+                                            _resp2.raise_for_status()
+                                            _fp2 = os.path.join(_td2, f"image_{_ji2+1}.jpg")
+                                            with open(_fp2, "wb") as _f2: _f2.write(_resp2.content)
+                                            img_paths.append(_fp2)
+                                        except Exception: pass
+                                _pl(f"이미지 {len(img_paths)}장 다운로드 (직접 검색어)")
+                            else:
+                                biz = self._best_biz_term(place, keyword)
+                                _pl(f"이미지 재검색 업종: '{biz}' (저장본 없음)")
+                                img_paths = download_images(
+                                    pix_keys[0], biz,
+                                    content.get("image_count", 3),
+                                    watermark_text=name,
+                                    translator=self._translate_ko_to_en,
+                                )
+                                _pl(f"이미지 {len(img_paths)}장 다운로드")
                         except Exception as e:
                             _pl(f"이미지 다운로드 실패: {e}")
                     else:
@@ -5396,13 +5419,31 @@ class MainWindow(QMainWindow):
         if self.is_posting:
             return
 
+        # API 구독 만료 체크 (명의 슬롯별)
+        acc_idx = cfg.get("active_account", 0) + 1
+        try:
+            from users import is_api_expired as _is_api_exp, load_users as _lu_api
+            from config import get_current_user as _gcu_api
+            _api_user = _lu_api().get(_gcu_api() or "", {})
+            if _is_api_exp(_api_user, slot=acc_idx):
+                _reply = QMessageBox.question(
+                    self, "API 구독 필요",
+                    f"[{acc_idx}명의] GPT 글쓰기 API 구독이 만료되었거나 없습니다.\n"
+                    "구독 후 이용 가능합니다.\n\n구독 결제 창을 여시겠습니까?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if _reply == QMessageBox.Yes:
+                    self._open_payment_dialog()
+                return
+        except Exception:
+            pass
+
         total = len(selected)
         interval_sec = self._get_interval_seconds()
         h = int(self.interval_hour.currentText())
         m = int(self.interval_min.currentText())
         rand_suffix = " (±10분 랜덤)" if (getattr(self, "interval_random", None) and self.interval_random.isChecked()) else ""
         interval_label = f"{h}시간 {m}분{rand_suffix}"
-        acc_idx = cfg.get("active_account", 0) + 1
 
         reply = QMessageBox.question(self, "포스팅 확인",
             f"[아이디 {acc_idx}] {account['naver_id']}\n선택된 {total}개 업체 포스팅\n간격: {interval_label}\n\n시작할까요?")
@@ -5469,12 +5510,38 @@ class MainWindow(QMainWindow):
                     img_paths = []
                     pix_keys = [k for k in cfg.get("pixabay_key_list", []) if k]
                     if pix_keys:
-                        biz = (place.get("category") or "").strip() or keyword
-                        img_paths = download_images(
-                            pix_keys[0], biz,
-                            content.get("image_count", 3),
-                            watermark_text=name,
-                        )
+                        pix_kw1 = self.pix_kw1.text().strip()
+                        pix_kw2 = self.pix_kw2.text().strip()
+                        if pix_kw1 or pix_kw2:
+                            pix_queries = [k for k in [pix_kw1, pix_kw2] if k]
+                            from image_handler import search_images as _si, _USED_IMAGE_IDS
+                            import random as _r
+                            _pool = []
+                            for _q in pix_queries:
+                                from image_handler import _fetch_hits as _fh
+                                _hits = _fh(pix_keys[0], _q, page=1, per_page=40)
+                                _pool.extend(_hits)
+                            if _pool:
+                                _count = content.get("image_count", 3)
+                                _sel = _r.sample(_pool, min(_count, len(_pool)))
+                                import requests as _req, tempfile as _tmp, os as _os
+                                _td = _tmp.mkdtemp(prefix="naver_blog_")
+                                for _ji, _h in enumerate(_sel):
+                                    try:
+                                        _resp = _req.get(_h.get("largeImageURL",""), timeout=30)
+                                        _resp.raise_for_status()
+                                        _fp = _os.path.join(_td, f"image_{_ji+1}.jpg")
+                                        with open(_fp, "wb") as _f: _f.write(_resp.content)
+                                        img_paths.append(_fp)
+                                    except Exception: pass
+                        else:
+                            biz = self._best_biz_term(place, keyword)
+                            img_paths = download_images(
+                                pix_keys[0], biz,
+                                content.get("image_count", 3),
+                                watermark_text=name,
+                                translator=self._translate_ko_to_en,
+                            )
 
                     self._emit_post_log(f"[{i}/{total}] '{name}' 포스팅 중...")
 
@@ -6284,8 +6351,11 @@ class AdminDialog(QDialog):
             role_combo.setStyleSheet("padding: 2px 6px;")
             self.table.setCellWidget(row, 1, role_combo)
 
-            # 명의별 만료일 (compact 탭 위젯)
-            exp_widget = MyeongExpWidget(u.get("expires", ""), u.get("expires_2"), u.get("expires_3"))
+            # 명의별 만료일 (compact 탭 위젯) — 어드민은 전 명의 무제한
+            if u.get("role") == "admin":
+                exp_widget = MyeongExpWidget("", "", "")
+            else:
+                exp_widget = MyeongExpWidget(u.get("expires", ""), u.get("expires_2"), u.get("expires_3"))
             self.table.setCellWidget(row, 2, exp_widget)
 
             # API키 부여 라디오 (예/아니오)

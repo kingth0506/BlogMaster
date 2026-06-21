@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""네이버 지도 크롤링 모듈 (Selenium Chrome — API키 불필요)"""
+"""네이버 지도 크롤링 모듈 — 모바일 검색(requests) 엔진 + 레거시 Selenium 유틸"""
 import os
 import time
 import json
@@ -12,6 +12,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import threading as _threading
+import random as _random
 
 # ChromeDriver 경로를 한 번만 설치 후 재사용 (멀티스레드 충돌 방지)
 _driver_path_lock = _threading.Lock()
@@ -256,6 +257,17 @@ _UA_POOL = [
 ]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Throttle(차단) 우회 정책 — 기획서 반영
+#   대책1) 구 개수가 많을수록 동시 봇을 낮춰 차단을 회피한다.
+#   대책2) 후반부에 '딱 N개'에서 잘린 구(차단 의심)만 마지막에 순차 재시도한다.
+# ──────────────────────────────────────────────────────────────────────────
+THROTTLE_DISTRICT_THRESHOLD = 10   # 구가 이 개수 이상이면 봇을 안전값으로 자동 하향
+THROTTLE_SAFE_WORKERS = 2          # 자동 하향 시 적용할 안전 봇 수 (서울 25구 무손실 검증값)
+STRAGGLER_TRIP_COUNT = 5           # 구별 수집이 '딱 이 개수'에서 멈추면 차단 의심으로 판정
+STRAGGLER_RETRY_DELAY = (2.0, 4.0) # 스트래글러 순차 재시도 사이 텀(초) — 차단 풀릴 시간 확보
+
+
 def crawl_places_parallel(keywords: list, count_per: int, on_progress=None,
                            existing_places: list = None,
                            existing_by_keyword: dict = None,
@@ -266,17 +278,41 @@ def crawl_places_parallel(keywords: list, count_per: int, on_progress=None,
                            save_batch=lambda items: None,
                            on_item=None,
                            no_filter: bool = False,
-                           profile_dir: str = None):
-    """여러 지역 키워드를 N개 단위 배치로 병렬 크롤.
-    - 1배치 = N개 키워드를 N개 독립 드라이버로 동시 처리
-    - 배치 완료 → 결과 누적·save_batch 콜백 호출 → 드라이버 전부 종료 → 다음 배치
-    - 각 배치마다 새 드라이버 (세션·UA 재분리해 감지 회피)"""
+                           profile_dir: str = None,
+                           auto_throttle: bool = True,
+                           straggler_retry: bool = True):
+    """여러 지역 키워드를 N개 단위 배치로 병렬 크롤 (requests 기반).
+
+    Throttle(차단) 우회 — 기획서 반영:
+      auto_throttle=True   : 구가 THROTTLE_DISTRICT_THRESHOLD개 이상이면
+                             max_workers를 THROTTLE_SAFE_WORKERS(2봇)로 자동 하향.
+      straggler_retry=True : 메인 크롤 종료 후 '딱 STRAGGLER_TRIP_COUNT개'에서
+                             멈춘 차단 의심 구만 순차로 1회 더 재시도(복구).
+    """
     import threading as _th
     from concurrent.futures import ThreadPoolExecutor, as_completed
+    from collections import Counter as _Counter
 
     keywords = list(keywords or [])
     if not keywords:
         return list(existing_places or [])
+
+    # ── 대책1: 자동 봇 조절 ──────────────────────────────────────────────
+    # 구(키워드)가 많을수록 누적 요청률이 높아져 후반부 throttle이 터진다.
+    # 임계치 이상이면 설정값과 무관하게 안전 봇 수로 강제 하향한다.
+    _requested_workers = max_workers
+    if auto_throttle and len(keywords) >= THROTTLE_DISTRICT_THRESHOLD \
+            and max_workers > THROTTLE_SAFE_WORKERS:
+        max_workers = THROTTLE_SAFE_WORKERS
+        emit_log(
+            f"⚙️ [자동 봇조절] 구 {len(keywords)}개 ≥ {THROTTLE_DISTRICT_THRESHOLD}개 "
+            f"→ throttle 회피 위해 {_requested_workers}봇 → {max_workers}봇으로 자동 하향"
+        )
+    elif auto_throttle:
+        emit_log(
+            f"⚙️ [자동 봇조절] 구 {len(keywords)}개 < {THROTTLE_DISTRICT_THRESHOLD}개 "
+            f"→ 설정대로 {max_workers}봇 유지 (속도 우선)"
+        )
 
     max_workers = max(1, min(max_workers, len(keywords)))
 
@@ -284,80 +320,129 @@ def crawl_places_parallel(keywords: list, count_per: int, on_progress=None,
     merged = list(existing_places or [])
     collected_names = set((p.get("name") or "").strip() for p in merged if p.get("name"))
 
-    # 공유 큐 방식 — 워커가 끝나면 다음 키워드 바로 pull, 드라이버는 워커 수명 내내 재사용
     import queue as _q
     kq = _q.Queue()
     for kw in keywords:
         kq.put(kw)
 
     def _worker_loop(worker_idx):
-        import time as _t, shutil as _sh
-        drv = None
-        # 봇별 시작 시간 엇갈리기 — 동시 접속 시 네이버 차단 방지 (봇1 기준 15초 간격)
+        import time as _t
         if worker_idx > 0:
-            _stagger = worker_idx * 15
-            emit_log(f"  [봇{worker_idx+1}] {_stagger}초 후 시작 (동시 접속 차단 방지)")
+            _stagger = worker_idx * 2
+            emit_log(f"  [봇{worker_idx+1}] {_stagger}초 후 시작 (동시 요청 분산)")
             _end = _t.time() + _stagger
             while _t.time() < _end:
-                if stop_flag(): return
-                _t.sleep(0.2)
-        # 워커별 프로필 복사 (로그인 세션 격리)
-        _worker_profile = None
-        if profile_dir:
-            try:
-                _worker_profile = _clone_profile_for_crawl(profile_dir, worker_idx)
-            except Exception as _pe:
-                emit_log(f"  [봇{worker_idx+1}] 프로필 복사 실패 ({str(_pe)[:50]}) — 비로그인 모드")
-        # 드라이버 생성 재시도 (Windows 병렬 Chrome 시작 race 대응)
-        for _attempt in range(3):
-            try:
-                drv = _make_driver(browser="chrome", profile_dir=_worker_profile)
-                break
-            except Exception as e:
-                if _attempt < 2:
-                    emit_log(f"  [봇{worker_idx+1}] 드라이버 생성 재시도 {_attempt+2}/3 ({str(e)[:50]})")
-                    _t.sleep(3 + worker_idx * 2)
-                else:
-                    emit_log(f"  [봇{worker_idx+1}] 드라이버 생성 실패: {e}")
+                if stop_flag():
                     return
-        if drv is None:
-            return
-        try:
-            while True:
-                if stop_flag(): break
+                _t.sleep(0.2)
+
+        while True:
+            if stop_flag():
+                break
+            try:
+                kw = kq.get_nowait()
+            except _q.Empty:
+                break
+            try:
+                def _tagged_progress(cur, scanned, name, results_ref=None, _w=worker_idx):
+                    if on_progress:
+                        on_progress(cur, scanned, f"[봇{_w+1}] {name}", results_ref)
+
+                emit_log(f"  [봇{worker_idx+1}] {kw} 크롤 시작")
+                _kw_existing = list((existing_by_keyword or {}).get(kw, []))
+                r = crawl_places(
+                    kw,
+                    count_per,
+                    _tagged_progress,
+                    existing_places=_kw_existing,
+                    exclude_keywords=exclude_keywords,
+                    no_filter=no_filter,
+                    on_item=on_item,
+                    stop_flag=stop_flag,
+                    emit_log=emit_log,
+                )
+                new_items = []
+                with lock:
+                    for p in r:
+                        n = (p.get("name") or "").strip()
+                        if n and n not in collected_names:
+                            collected_names.add(n)
+                            p["search_keyword"] = kw
+                            merged.append(p)
+                            new_items.append(p)
+                emit_log(f"  [봇{worker_idx+1}] {kw} 완료 (수집 {len(r)}개, 신규 +{len(new_items)}개)")
                 try:
-                    kw = kq.get_nowait()
-                except _q.Empty:
+                    with lock:
+                        snapshot = list(merged)
+                    try:
+                        save_batch(snapshot, kw, list(r))
+                    except TypeError:
+                        save_batch(snapshot)
+                except Exception as e:
+                    emit_log(f"저장 실패: {e}")
+            except Exception as e:
+                emit_log(f"  [봇{worker_idx+1}] {kw} 실패 ({str(e)[:60]})")
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = [ex.submit(_worker_loop, i) for i in range(max_workers)]
+        for f in as_completed(futures):
+            try:
+                f.result()
+            except Exception as e:
+                emit_log(f"봇 예외: {e}")
+
+    # ── 대책2: 스트래글러(차단 의심 구) 순차 재시도 ──────────────────────
+    # 메인 병렬 크롤이 끝난 뒤, 후반 throttle로 '딱 STRAGGLER_TRIP_COUNT개'에서
+    # 잘려 멈춘 구들만 골라 단일 스레드로 텀을 두고 1회 더 복구 시도한다.
+    if straggler_retry and not stop_flag():
+        _by_kw = _Counter()
+        for _p in merged:
+            _k = (_p.get("search_keyword") or "").strip()
+            if _k:
+                _by_kw[_k] += 1
+
+        # '딱 N개'에서 멈춘 구만 차단 의심으로 본다.
+        # (목표치 자체가 N 이하면 정상 수집이므로 제외한다.)
+        suspects = [
+            kw for kw in keywords
+            if _by_kw.get(kw, 0) == STRAGGLER_TRIP_COUNT and count_per > STRAGGLER_TRIP_COUNT
+        ]
+
+        if suspects:
+            emit_log(
+                f"🔁 [스트래글러 복구] 차단 의심 구 {len(suspects)}개 "
+                f"(딱 {STRAGGLER_TRIP_COUNT}개에서 멈춤) 순차 재시도: {', '.join(suspects)}"
+            )
+            for kw in suspects:
+                if stop_flag():
                     break
+                # 차단이 풀릴 시간을 벌기 위해 재시도 사이에 텀을 둔다.
+                _delay_end = time.time() + _random.uniform(*STRAGGLER_RETRY_DELAY)
+                while time.time() < _delay_end:
+                    if stop_flag():
+                        break
+                    time.sleep(0.2)
+                if stop_flag():
+                    break
+
+                _before = _by_kw.get(kw, 0)
+                # 이미 잡힌 N개는 existing으로 넘겨 이어서 더 긁는다(중복 방지).
+                with lock:
+                    _kw_existing = [p for p in merged if (p.get("search_keyword") or "").strip() == kw]
                 try:
-                    # on_progress에 봇 번호 태그 추가
-                    def _tagged_progress(cur, scanned, name, results_ref=None, _w=worker_idx):
-                        if on_progress:
-                            on_progress(cur, scanned, f"[봇{_w+1}] {name}", results_ref)
-                    emit_log(f"  [봇{worker_idx+1}] {kw} 크롤 시작")
-                    # 키워드 간 프레임 초기화 + 네이버 홈 경유 (쿠키 유지 — 로그인 세션 보존)
-                    try: drv.switch_to.default_content()
-                    except Exception: pass
-                    try: drv.get("https://www.naver.com")
-                    except Exception: pass
-                    import time as _t
-                    # 1.5초 대기 — 중단 즉시 반응 (0.2초 단위)
-                    _wait_end = _t.time() + 1.5
-                    while _t.time() < _wait_end:
-                        if stop_flag(): break
-                        _t.sleep(0.2)
-                    if stop_flag(): break
-                    # 키워드별 독립 크롤 — 이전 저장 데이터 이어서 수집
-                    _kw_existing = list((existing_by_keyword or {}).get(kw, []))
-                    r = crawl_places(kw, count_per, _tagged_progress,
-                                     existing_places=_kw_existing,
-                                     exclude_keywords=exclude_keywords,
-                                     no_filter=no_filter,
-                                     driver=drv,
-                                     on_item=on_item,
-                                     stop_flag=stop_flag,
-                                     emit_log=emit_log)
-                    new_items = []
+                    emit_log(f"  [복구] {kw} 재시도 (현재 {_before}개)")
+                    r = crawl_places(
+                        kw,
+                        count_per,
+                        on_progress,
+                        existing_places=list(_kw_existing),
+                        exclude_keywords=exclude_keywords,
+                        no_filter=no_filter,
+                        on_item=on_item,
+                        stop_flag=stop_flag,
+                        emit_log=emit_log,
+                    )
+                    recovered = 0
                     with lock:
                         for p in r:
                             n = (p.get("name") or "").strip()
@@ -365,12 +450,15 @@ def crawl_places_parallel(keywords: list, count_per: int, on_progress=None,
                                 collected_names.add(n)
                                 p["search_keyword"] = kw
                                 merged.append(p)
-                                new_items.append(p)
-                    emit_log(f"  [봇{worker_idx+1}] {kw} 완료 (수집 {len(r)}개, 신규 +{len(new_items)}개)")
+                                recovered += 1
+                    _by_kw[kw] = _before + recovered
+                    emit_log(
+                        f"  [복구] {kw}: {_before}개 → {_before + recovered}개 "
+                        f"(복구 +{recovered}{' ⚠️여전히 차단 의심' if recovered == 0 else ' ✅'})"
+                    )
                     try:
                         with lock:
                             snapshot = list(merged)
-                        # save_batch(snapshot, keyword, raw_items_for_this_keyword)
                         try:
                             save_batch(snapshot, kw, list(r))
                         except TypeError:
@@ -378,38 +466,10 @@ def crawl_places_parallel(keywords: list, count_per: int, on_progress=None,
                     except Exception as e:
                         emit_log(f"저장 실패: {e}")
                 except Exception as e:
-                    is_conn_err = any(x in str(e) for x in ("10061", "10054", "Connection refused", "Connection aborted", "ConnectionReset", "WinError", "disconnected"))
-                    if is_conn_err:
-                        emit_log(f"  [봇{worker_idx+1}] 연결 거부 — {kw} 재수집 대기열에 추가")
-                        kq.put(kw)  # 실패 키워드 다시 큐에
-                    else:
-                        emit_log(f"  [봇{worker_idx+1}] {kw} 실패 ({str(e)[:60]})")
-                    try: drv.quit()
-                    except Exception: pass
-                    drv = None
-                    # 드라이버 재생성 (실패 시 워커 종료 → 나머지 봇들이 큐 처리)
-                    for _ra in range(3):
-                        try:
-                            drv = _make_driver(browser="chrome", profile_dir=_worker_profile)
-                            break
-                        except Exception:
-                            if _ra < 2: _t.sleep(3)
-                            else:
-                                emit_log(f"  [봇{worker_idx+1}] 드라이버 재생성 실패 — 봇 종료")
-                                return
-        finally:
-            try:
-                if drv: drv.quit()
-            except Exception: pass
-            if _worker_profile:
-                try: _sh.rmtree(_worker_profile, ignore_errors=True)
-                except Exception: pass
+                    emit_log(f"  [복구] {kw} 재시도 실패 ({str(e)[:60]})")
+        else:
+            emit_log(f"🔁 [스트래글러 복구] 차단 의심 구 없음 — 전 구 정상 수집 ✅")
 
-    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-        futures = [ex.submit(_worker_loop, i) for i in range(max_workers)]
-        for f in as_completed(futures):
-            try: f.result()
-            except Exception as e: emit_log(f"봇 예외: {e}")
     return merged
 
 
@@ -425,50 +485,186 @@ def _clone_profile_for_crawl(base_profile_dir: str, worker_idx: int) -> str:
     if os.path.isdir(src_default):
         _SKIP = {"Cache", "GPUCache", "DawnCache", "ShaderCache",
                  "Code Cache", "VideoDecodeStats", "CacheStorage",
-                 "Service Worker", "IndexedDB", "databases"}
-        _sh.copytree(src_default, dst_default,
-                     ignore=_sh.ignore_patterns(*_SKIP),
-                     copy_function=_sh.copy2)
+                 "Service Worker", "IndexedDB", "databases",
+                 "Crashpad", "BrowserMetrics", "BrowserMetrics-spare.pma",
+                 "LOCK", "*.log", "*.ldb", "*.sst"}
+        def _safe_copy(src, dst):
+            try:
+                _sh.copy2(src, dst)
+            except (PermissionError, OSError):
+                pass  # 잠긴 파일 무시
+        try:
+            _sh.copytree(src_default, dst_default,
+                         ignore=_sh.ignore_patterns(*_SKIP),
+                         copy_function=_safe_copy)
+        except _sh.Error:
+            pass  # 일부 파일 복사 실패해도 계속 (부분 복사 상태로 사용)
+        except Exception:
+            pass
+        os.makedirs(dst_default, exist_ok=True)
     else:
         os.makedirs(dst_default, exist_ok=True)
     return dst
 
 
+def login_for_crawl(naver_id: str, naver_pw: str, profile_dir: str, emit_log=None) -> bool:
+    """naver_id/pw로 로그인 후 profile_dir에 세션 저장. 성공 True, 실패 False."""
+    from selenium.webdriver.common.by import By as _By
+    from selenium.webdriver.support.ui import WebDriverWait as _WDW
+    from selenium.webdriver.support import expected_conditions as _EC
+    import time as _t
+
+    os.makedirs(profile_dir, exist_ok=True)
+    driver = None
+    try:
+        for _lk in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+            _lp = os.path.join(profile_dir, _lk)
+            if os.path.exists(_lp):
+                try: os.remove(_lp)
+                except: pass
+        _o = Options()
+        _o.add_argument(f"--user-data-dir={profile_dir}")
+        _o.add_argument("--window-size=1920,1080")
+        _o.add_argument("--no-sandbox")
+        _o.add_argument("--disable-gpu")
+        _o.add_argument("--disable-dev-shm-usage")
+        _o.add_argument("--disable-blink-features=AutomationControlled")
+        _o.add_experimental_option("excludeSwitches", ["enable-automation"])
+        service = Service(_get_driver_path())
+        driver = webdriver.Chrome(service=service, options=_o)
+        driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+        })
+
+        # 기존 세션 확인
+        driver.get("https://www.naver.com")
+        _t.sleep(2)
+        try:
+            driver.find_element(_By.CSS_SELECTOR, "a[href*='logout']")
+            if emit_log: emit_log(f"[{naver_id}] 기존 로그인 세션 확인")
+            return True
+        except Exception:
+            pass
+
+        # 로그인 진행
+        driver.get("https://nid.naver.com/nidlogin.login")
+        _WDW(driver, 10).until(_EC.presence_of_element_located((_By.ID, "id")))
+        _t.sleep(0.5)
+        driver.execute_script(
+            "const i=document.getElementById('id'),p=document.getElementById('pw'),"
+            "s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
+            "s.call(i,arguments[0]);i.dispatchEvent(new Event('input',{bubbles:true}));"
+            "s.call(p,arguments[1]);p.dispatchEvent(new Event('input',{bubbles:true}));",
+            naver_id, naver_pw
+        )
+        _t.sleep(0.3)
+        _WDW(driver, 5).until(_EC.presence_of_element_located((_By.ID, "log.login"))).click()
+        _t.sleep(2)
+
+        # 새 기기 등록 처리
+        try:
+            btn = driver.find_element(_By.CSS_SELECTOR, "button.btn_cancel, button[class*='confirm'], a[class*='btn_confirm']")
+            if btn.is_displayed():
+                btn.click()
+                _t.sleep(1)
+        except Exception:
+            pass
+
+        # 로그인 확인 (최대 60초 — 캡챠 수동 처리 포함)
+        try:
+            _WDW(driver, 60).until(lambda d: "nid.naver.com" not in d.current_url)
+            if emit_log: emit_log(f"[{naver_id}] 로그인 성공")
+            _t.sleep(1)
+            return True
+        except Exception:
+            if emit_log: emit_log(f"[{naver_id}] 로그인 실패 (시간 초과)")
+            return False
+
+    except Exception as e:
+        if emit_log: emit_log(f"[{naver_id}] 로그인 오류: {e}")
+        return False
+    finally:
+        try:
+            if driver: driver.quit()
+        except Exception:
+            pass
+
+
 def _make_driver(user_agent: str = None, browser: str = "chrome", profile_dir: str = None, headless: bool = True):
     """새 드라이버 생성 (병렬 워커용). browser='chrome' | 'edge'
-    profile_dir 있으면 undetected_chromedriver + 로그인 세션 사용."""
+    profile_dir 있으면 undetected_chromedriver + 로그인 세션 사용.
+    profile_dir 없으면 undetected_chromedriver + selenium-stealth 적용."""
     import random as _rnd
     import os as _os
 
-    # 로그인 프로필 모드 — undetected_chromedriver 사용
+    _visible = _os.environ.get("CRAWL_VISIBLE") or not headless
+
+    # 로그인 프로필 모드 — 일반 Selenium + profile_dir (uc 버전 충돌 우회)
     if profile_dir:
+        for _lk in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+            _lp = os.path.join(profile_dir, _lk)
+            if os.path.exists(_lp):
+                try: os.remove(_lp)
+                except: pass
         try:
-            import undetected_chromedriver as _uc
-            for _lk in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
-                _lp = os.path.join(profile_dir, _lk)
-                if os.path.exists(_lp):
-                    try: os.remove(_lp)
-                    except: pass
-            try:
-                _lp = os.path.join(profile_dir, "Default", "LOCK")
-                if os.path.exists(_lp): os.remove(_lp)
-            except: pass
-            _o = _uc.ChromeOptions()
+            _lp = os.path.join(profile_dir, "Default", "LOCK")
+            if os.path.exists(_lp): os.remove(_lp)
+        except: pass
+        try:
+            _o = Options()
             _o.add_argument(f"--user-data-dir={profile_dir}")
             _o.add_argument("--window-size=1920,1080")
-            _o.add_argument("--disable-gpu")
             _o.add_argument("--no-sandbox")
+            _o.add_argument("--disable-gpu")
             _o.add_argument("--disable-dev-shm-usage")
             _o.add_argument("--disable-extensions")
             _o.add_argument("--mute-audio")
             _o.add_argument("--disable-background-networking")
             _o.add_argument("--disable-default-apps")
             _o.add_argument("--disable-sync")
+            _o.add_argument("--disable-blink-features=AutomationControlled")
             _o.add_argument("--disable-features=AudioServiceOutOfProcess,TranslateUI")
-            with _uc_create_lock:  # 동시 생성 시 chromedriver 패치 race 방지
-                return _uc.Chrome(options=_o, headless=headless)
+            if not _visible:
+                _o.add_argument("--headless")
+            _o.add_experimental_option("excludeSwitches", ["enable-automation"])
+            _svc = Service(_get_driver_path())
+            _d = webdriver.Chrome(service=_svc, options=_o)
+            _d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            })
+            return _d
         except Exception:
-            pass  # undetected_chromedriver 없거나 실패 → 일반 드라이버로 fallback
+            pass
+
+    # 비로그인 모드 — undetected_chromedriver + selenium-stealth
+    try:
+        import undetected_chromedriver as _uc
+        from selenium_stealth import stealth
+        _o = _uc.ChromeOptions()
+        _o.add_argument("--window-size=1920,1080")
+        _o.add_argument("--disable-gpu")
+        _o.add_argument("--no-sandbox")
+        _o.add_argument("--disable-dev-shm-usage")
+        _o.add_argument("--disable-extensions")
+        _o.add_argument("--mute-audio")
+        _o.add_argument("--disable-background-networking")
+        _o.add_argument("--disable-default-apps")
+        _o.add_argument("--disable-sync")
+        _o.add_argument("--disable-features=AudioServiceOutOfProcess,TranslateUI")
+        ua = user_agent or _rnd.choice(_UA_POOL)
+        _o.add_argument(f"user-agent={ua}")
+        with _uc_create_lock:
+            d = _uc.Chrome(options=_o, headless=False if _visible else headless)
+        stealth(d,
+            languages=["ko-KR", "ko"],
+            vendor="Google Inc.",
+            platform="Win32",
+            webgl_vendor="Intel Inc.",
+            renderer="Intel Iris OpenGL Engine",
+            fix_hairline=True)
+        return d
+    except Exception:
+        pass  # selenium-stealth 또는 uc 실패 → 일반 드라이버로 fallback
 
     def _build_options(headless_flag=None):
         if browser == "edge":
@@ -484,8 +680,6 @@ def _make_driver(user_agent: str = None, browser: str = "chrome", profile_dir: s
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--disable-extensions")
         opts.add_argument("--window-size=1920,1080")
-        # 저사양 PC 메모리 절약 옵션 — 네이버 지도는 이미지/JS 기반 UI라 이미지 비활성화 금지
-        # (imagesEnabled=false 시 목록 로딩 자체가 깨짐 — 0개 수집됨)
         opts.add_argument("--disable-features=AudioServiceOutOfProcess,TranslateUI")
         opts.add_argument("--mute-audio")
         opts.add_argument("--disable-background-networking")
@@ -507,7 +701,7 @@ def _make_driver(user_agent: str = None, browser: str = "chrome", profile_dir: s
         })
         return d
 
-    if _os.environ.get("CRAWL_VISIBLE") or not headless:
+    if _visible:
         return _create(_build_options())
 
     return _create(_build_options("--headless"))
@@ -523,12 +717,17 @@ def crawl_places(keyword: str, count: int = 100, on_progress=None,
                  stop_flag=lambda: False,
                  profile_dir: str = None,
                  emit_log=None,
-                 force_visible: bool = False) -> list[dict]:
-    """네이버 지도에서 키워드로 업체 크롤링 (Chrome).
+                 force_visible: bool = False,
+                 with_station: bool = True,
+                 station_delay: float = 0.8) -> list[dict]:
+    """네이버 모바일 검색에서 키워드로 업체 크롤링 (requests + BeautifulSoup).
+
     existing_places가 주어지면 그 업체들은 스킵하고 이어서 크롤 (재개 모드).
     exclude_keywords 중 하나라도 업체명/카테고리/주소에 포함되면 제외.
-    driver 제공 시 재사용 (종료 안 함). None이면 새로 생성 + 종료.
+    driver/profile_dir/force_visible 인자는 하위 호환용으로 남겨 두며 사용하지 않는다.
     no_filter=True 시 업종/지역 필터 미적용 (키워드 기반 전체 수집)."""
+    from naver_crawler import fetch_all_places, fetch_nearby_station, resolve_nearby_station
+
     exclude_keywords = [k.strip() for k in (exclude_keywords or []) if k and k.strip()]
 
     _url_mode = bool(direct_url) or no_filter
@@ -545,11 +744,6 @@ def crawl_places(keyword: str, count: int = 100, on_progress=None,
             biz_type = parts[-1]
         area_filter = parts[-2] if len(parts) >= 3 else (parts[0] if len(parts) >= 2 else "")
 
-    # driver 재사용 지원
-    _own_driver = driver is None
-    if _own_driver:
-        driver = _make_driver(profile_dir=profile_dir, headless=not force_visible)
-
     results = list(existing_places or [])
     collected_names = set()
     for _p in results:
@@ -557,339 +751,115 @@ def crawl_places(keyword: str, count: int = 100, on_progress=None,
         if _n:
             collected_names.add(_n)
     scanned = 0
-    # 재개 시 인덱스 정합성 유지
     for _i, _p in enumerate(results, start=1):
         _p["index"] = _i
 
-    # 중단 가능한 짧은 sleep (0.2초마다 체크)
-    def _sleep_or_stop(secs):
-        end = time.time() + float(secs)
-        while time.time() < end:
-            if stop_flag():
-                raise InterruptedError("중단됨")
-            time.sleep(min(0.2, end - time.time()))
+    remaining = max(0, count - len(results))
+    if remaining <= 0:
+        return results
 
     try:
-        if stop_flag(): raise InterruptedError("중단됨")
-        if direct_url:
-            driver.get(direct_url)
-        else:
-            from urllib.parse import quote as _quote
-            driver.get(f"https://map.naver.com/p/search/{_quote(keyword)}?searchType=place")
-        _sleep_or_stop(4)
+        if stop_flag():
+            raise InterruptedError("중단됨")
+        if emit_log:
+            emit_log(f"모바일 검색 크롤: {keyword} (목표 {remaining}개 추가)")
 
-        WebDriverWait(driver, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "iframe#searchIframe"))
+        # 필터로 걸러질 수 있으므로 여유 있게 더 요청
+        fetch_target = remaining + (remaining // 2) + 10
+        raw_items = fetch_all_places(
+            keyword,
+            count=fetch_target,
+            stop_flag=stop_flag,
+            emit_log=emit_log,
         )
-        driver.switch_to.frame("searchIframe")
-        _sleep_or_stop(2)
 
-        # 네이버 차단 감지 + 25초 대기 재시도 (최대 1회)
-        try:
-            if "서비스 이용에 제한" in driver.find_element(By.TAG_NAME, "body").text:
-                _bmsg = f"<span style='color:#ef4444'>⛔ [봇] {keyword} — 네이버 차단 감지, 25초 대기 후 재시도...</span>"
-                if emit_log: emit_log(_bmsg)
-                driver.switch_to.default_content()
-                _sleep_or_stop(25)
-                from urllib.parse import quote as _quote
-                driver.get(f"https://map.naver.com/p/search/{_quote(keyword)}?searchType=place")
-                _sleep_or_stop(4)
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "iframe#searchIframe"))
-                )
-                driver.switch_to.frame("searchIframe")
-                _sleep_or_stop(2)
-                if "서비스 이용에 제한" in driver.find_element(By.TAG_NAME, "body").text:
-                    _fmsg = f"<span style='color:#ef4444'>⛔ [봇] {keyword} — 차단 지속, 수집 불가</span>"
-                    if emit_log: emit_log(_fmsg)
-        except InterruptedError:
-            raise
-        except Exception:
-            pass
+        if not raw_items and emit_log:
+            emit_log("<span style='color:#f59e0b'>⚠️ 수집결과 0개 — 모바일 검색 응답 없음 또는 차단</span>")
 
-        # 업체 아이템 셀렉터 (Naver 2026-06 업데이트 — 신/구 UI 동시 지원)
-        # 신 UI: li.naf7A.sv5z6 (2026-06 정찰 확인). 클래스명은 자주 바뀌므로 fallback 다수
-        ITEM_SEL = ("li.Fh8nG, li.UEzoS, li.VLTHu, li[class*='UEzoS'], li.DWs4Q, "
-                    "li.naf7A, li[class*='naf7A'], li.sv5z6, "
-                    "#_pcmap_list_scroll_container ul > li[class]")
+        for raw in raw_items:
+            if stop_flag():
+                raise InterruptedError("중단됨")
+            if len(results) >= count:
+                break
 
-        # iframe JS 렌더링 완료 대기 — 고정 sleep 대신 실제 아이템 출현까지 대기
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ITEM_SEL))
-            )
-        except Exception:
-            pass
-        NAME_SEL = ("span.moQ_p, span.TYaxT, a.place_bluelink, span.YwYLL, span.q2LdB, "
-                    "span.O_Uah, a span.O_Uah, "
-                    ".pui__ek7lQY span, [class*='place_bluelink'] span, "
-                    "div.H0S1k span, div.KgfA6 span, "
-                    "a[role='button'] > span:first-child")
-        CAT_SEL = ("span.ulItq, span.dThr8, span.KCMnt, span.YzBgS, span.lHBM6, "
-                    "span.D_oCM, span.RGyAk")
+            name = (raw.get("name") or "").strip()
+            if not name or name in collected_names:
+                continue
 
-        def _extract_name_cat_fallback(it):
-            """신 UI에서 셀렉터 매칭 실패 시 li 텍스트 줄 분석으로 추출.
-            li.text 형태: '업체명\\n카테고리\\n영업상태\\n...주소...'.
-            첫 줄=이름, 둘째 줄=카테고리 가정."""
-            try:
-                full = (it.text or "").strip()
-            except Exception:
-                return "", ""
-            if not full:
-                return "", ""
-            lines = [l.strip() for l in full.split("\n") if l.strip()]
-            if not lines:
-                return "", ""
-            n = lines[0]
-            c = lines[1] if len(lines) > 1 else ""
-            # 카테고리 라인이 시간/주소처럼 보이면 비움
-            if any(p in c for p in ("현재 위치에서", "km", "진료", "영업", "정보 더보기", "더보기", ":", "분 ")):
-                c = ""
-            # 이름이 너무 길면 (다른 정보가 섞임) 첫 10단어로 자르기
-            if len(n) > 60:
-                n = n.split()[0:6]
-                n = " ".join(n)
-            return n, c
+            category = (raw.get("category") or "").strip()
+            short_addr = (raw.get("address") or "").strip()
+            jibun_addr = (raw.get("jibun_address") or "").strip()
+            dong = (raw.get("동") or raw.get("dong") or "").strip() or _extract_dong(jibun_addr or short_addr)
+            si = (raw.get("시") or "").strip()
+            gu = (raw.get("구") or "").strip()
+            nearby_station = (raw.get("nearby_station") or "").strip()
+            place_id = (raw.get("place_id") or "").strip()
+            px, py = raw.get("x"), raw.get("y")
 
-        no_new_pages = 0  # 연속으로 새 결과 0개인 페이지 수
-        while len(results) < count:
-            if stop_flag(): raise InterruptedError("중단됨")
+            scanned += 1
+
+            if exclude_keywords and any(ex in f"{name} {category}" for ex in exclude_keywords):
+                collected_names.add(name)
+                continue
+
+            haystack = f"{name} {category} {short_addr} {jibun_addr}"
+            if not _url_mode and area_filter and area_filter not in haystack:
+                collected_names.add(name)
+                continue
+
+            # 업종(카테고리) 자동 탈락은 하지 않는다.
+            # 정책: 검색 지역에서 나온 업체는 '다 수집'하고, 불필요한 건 2차(제외 키워드)로만 삭제.
+            # (예: 헬스장 검색 시 '스포츠시설'로 분류된 PT/짐도 대부분 헬스장이므로 버리지 않음)
+
+            if exclude_keywords and any(ex in haystack for ex in exclude_keywords):
+                collected_names.add(name)
+                continue
+
+            # 근처 역 — 이름추출 + 좌표 최단거리 하이브리드 (요청 0, 즉시)
+            station_info = {}
+            if with_station:
+                station_info = resolve_nearby_station(name, px, py)
+                if station_info.get("station"):
+                    nearby_station = station_info["station"]
+
+            _st_dist = station_info.get("distance_m")
+            _st_text = ""
+            if station_info.get("station"):
+                _st_text = nearby_station + (f" 약 {_st_dist}m" if _st_dist else "")
+
+            place = {
+                "index": len(results) + 1,
+                "name": name,
+                "address": short_addr,
+                "jibun_address": jibun_addr,
+                "category": category,
+                "category_2": "",
+                "nearby_station": nearby_station,
+                "nearby_station_distance": _st_dist if _st_dist else "",
+                "nearby_station_text": _st_text,
+                "nearby_station_source": station_info.get("source", ""),
+                "front_keywords": _generate_front_keywords(area_filter, biz_type, dong),
+                "tags": _generate_tags(dong, biz_type, area_filter, nearby_station),
+                "pixabay_keywords": _generate_pixabay_keywords(area_filter, biz_type, dong),
+                "dong": dong,
+                "시": si,
+                "구": gu,
+                "place_id": place_id,
+            }
+            collected_names.add(name)
+            results.append(place)
+
+            if on_item:
+                try:
+                    on_item(place, results, keyword)
+                except Exception:
+                    pass
+
             if on_progress:
                 try:
-                    on_progress(len(results), scanned, "목록 수집 중...", results)
+                    on_progress(len(results), scanned, name, results)
                 except InterruptedError:
                     raise
-
-            items = driver.find_elements(By.CSS_SELECTOR, ITEM_SEL)
-            results_before_page = len(results)
-
-            for idx in range(len(items)):
-                if stop_flag(): raise InterruptedError("중단됨")
-                if len(results) >= count:
-                    break
-                try:
-                    items = driver.find_elements(By.CSS_SELECTOR, ITEM_SEL)
-                    if idx >= len(items):
-                        break
-                    item = items[idx]
-
-                    # 이름 — 셀렉터 매칭 안 되면 li 텍스트 줄 fallback
-                    name = ""
-                    try:
-                        name = item.find_element(By.CSS_SELECTOR, NAME_SEL).text.strip()
-                    except Exception:
-                        pass
-                    if not name:
-                        name, _cat_fb = _extract_name_cat_fallback(item)
-                    if not name or name in collected_names:
-                        continue
-
-                    # 카테고리
-                    category = ""
-                    try:
-                        category = item.find_element(By.CSS_SELECTOR, CAT_SEL).text.strip()
-                    except Exception:
-                        pass
-                    if not category:
-                        _name_fb, _cat_fb2 = _extract_name_cat_fallback(item)
-                        category = _cat_fb2
-
-                    scanned += 1
-
-                    # 제외 키워드 1차 (이름+카테고리)
-                    if exclude_keywords and any(ex in f"{name} {category}" for ex in exclude_keywords):
-                        collected_names.add(name)
-                        continue
-
-                    # 검색 목록 카드의 텍스트에서 미리 동 추출 (예: "27km · 서울 강남구 논현동")
-                    list_card_text = ""
-                    try:
-                        list_card_text = item.text or ""
-                    except Exception:
-                        pass
-
-                    # 업체 상세 열기 (entryIframe에서 주소/지번/근처역 추출)
-                    short_addr, jibun_addr, nearby_station = "", "", ""
-                    place_id = ""
-                    try:
-                        # 셀렉터 매칭 안 되면 li 자체를 클릭 (신 UI에선 li 클릭으로도 상세 열림)
-                        try:
-                            name_el = item.find_element(By.CSS_SELECTOR, NAME_SEL)
-                        except Exception:
-                            name_el = item
-                        driver.execute_script("arguments[0].click();", name_el)
-                        _sleep_or_stop(1.0)
-
-                        driver.switch_to.default_content()
-                        WebDriverWait(driver, 5).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "iframe#entryIframe"))
-                        )
-                        # place_id: 현재 URL 또는 entryIframe src에서 추출
-                        try:
-                            ifr = driver.find_element(By.CSS_SELECTOR, "iframe#entryIframe")
-                            src = ifr.get_attribute("src") or ""
-                            mpid = re.search(r"/place/(\d+)", src) or re.search(r"/place/(\d+)", driver.current_url)
-                            if mpid:
-                                place_id = mpid.group(1)
-                        except Exception:
-                            pass
-                        driver.switch_to.frame("entryIframe")
-                        _sleep_or_stop(0.8)
-
-                        body_text = driver.find_element(By.TAG_NAME, "body").text
-
-                        # 주소: 서울 XX구 XX동 (도로명 또는 지번 첫 줄)
-                        addr_match = re.search(
-                            r"((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)\s+\S+[시군구]\s+\S+(?:로|길|동|리|가)[^\n]*)",
-                            body_text,
-                        )
-                        if addr_match:
-                            short_addr = addr_match.group(1).strip()
-                        else:
-                            m2 = re.search(r"(\S+[구군]\s+\S+(?:동|리))", body_text)
-                            if m2:
-                                short_addr = m2.group(1).strip()
-
-                        # 지번: 우선 검색 목록 카드 텍스트에서 동 추출 (가장 확실)
-                        # 예: "27km · 서울 강남구 논현동" 또는 "강남구 논현동"
-                        if list_card_text:
-                            m = re.search(
-                                r"((?:서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충남|전북|전남|경북|경남|제주)?\s*\S+[시군구]\s+\S+(?:동|리))(?:\s|$|[·•\-])",
-                                list_card_text + " ",
-                            )
-                            if m:
-                                jibun_addr = m.group(1).strip()
-
-                        # 폴백: entryIframe body_text에서 추출 시도
-                        if not jibun_addr:
-                            jibun_match = re.search(
-                                r"지번\s*[:\n]?\s*((?:\S+[구군]\s+)?\S+(?:동|리)(?:\s+[\d\-]+)?[^\n]*)",
-                                body_text,
-                            )
-                            if jibun_match:
-                                jibun_addr = jibun_match.group(1).strip()
-
-                        # 근처역
-                        station_match = re.search(r"(\S+역)\s*\d+번\s*출구", body_text)
-                        if station_match:
-                            raw_station = station_match.group(1)
-                            cleaned = re.sub(r"^[\d호선GTX\-A-Za-z]+", "", raw_station)
-                            nearby_station = cleaned if cleaned.endswith("역") else raw_station
-
-                        driver.switch_to.default_content()
-                        driver.switch_to.frame("searchIframe")
-                    except Exception:
-                        try:
-                            driver.switch_to.default_content()
-                            driver.switch_to.frame("searchIframe")
-                        except Exception:
-                            pass
-                        continue
-
-                    # 지역 필터 — URL 모드는 스킵
-                    if not _url_mode and area_filter and area_filter not in short_addr:
-                        collected_names.add(name)
-                        continue
-
-                    # 제외 키워드 2차 (주소 포함)
-                    if exclude_keywords:
-                        _haystack = f"{name} {category} {short_addr}"
-                        if any(ex in _haystack for ex in exclude_keywords):
-                            collected_names.add(name)
-                            continue
-
-                    dong = _extract_dong(short_addr)
-                    place = {
-                        "index": len(results) + 1,
-                        "name": name,
-                        "address": short_addr,
-                        "jibun_address": jibun_addr,
-                        "category": category,
-                        "nearby_station": nearby_station,
-                        "front_keywords": _generate_front_keywords(area_filter, biz_type, dong),
-                        "tags": _generate_tags(dong, biz_type, area_filter, nearby_station),
-                        "pixabay_keywords": _generate_pixabay_keywords(area_filter, biz_type, dong),
-                        "dong": dong,
-                        "place_id": place_id,
-                    }
-                    collected_names.add(name)
-                    results.append(place)
-
-                    if on_item:
-                        try:
-                            on_item(place, results, keyword)
-                        except Exception:
-                            pass
-
-                    if on_progress:
-                        try:
-                            on_progress(len(results), scanned, name, results)
-                        except InterruptedError:
-                            raise
-
-                except InterruptedError:
-                    raise
-                except Exception:
-                    continue
-
-            # 이 페이지에서 새 결과 없으면 종료
-            if len(results) == results_before_page:
-                no_new_pages += 1
-                if no_new_pages >= 2:
-                    break
-            else:
-                no_new_pages = 0
-
-            # 스크롤
-            prev_item_count = len(driver.find_elements(By.CSS_SELECTOR, ITEM_SEL))
-            scroll_tries = 0
-            while scroll_tries < 5:
-                if stop_flag(): raise InterruptedError("중단됨")
-                driver.execute_script(
-                    "let el = document.querySelector('#_pcmap_list_scroll_container') || "
-                    "document.querySelector('.Ryr1F') || document.querySelector('[class*=scroll]');"
-                    "if(el) el.scrollTop += 1000; else window.scrollBy(0, 1000);"
-                )
-                _sleep_or_stop(1.5)
-                new_item_count = len(driver.find_elements(By.CSS_SELECTOR, ITEM_SEL))
-                if new_item_count > prev_item_count:
-                    prev_item_count = new_item_count
-                    break
-                scroll_tries += 1
-
-            # 스크롤 후에도 새 항목 없으면 다음 페이지로 이동
-            items_after = driver.find_elements(By.CSS_SELECTOR, ITEM_SEL)
-            if len(items_after) <= len(items):
-                if stop_flag(): raise InterruptedError("중단됨")
-                if on_progress:
-                    try:
-                        on_progress(len(results), scanned, "다음 페이지 이동 중...", results)
-                    except InterruptedError:
-                        raise
-                # 스크롤을 맨 아래로 내려서 페이지 버튼 보이게
-                driver.execute_script(
-                    "let el = document.querySelector('.Ryr1F') || document.querySelector('[class*=scroll]');"
-                    "if(el) el.scrollTop = el.scrollHeight; else window.scrollTo(0, document.body.scrollHeight);"
-                )
-                _sleep_or_stop(1)
-                if not _click_next_page(driver, stop_flag=stop_flag):
-                    # 다음 페이지 없음 — 수집 종료
-                    break
-                # 페이지 로딩 대기 (stop_flag 체크)
-                _sleep_or_stop(3)
-                # 새 페이지 로딩 후 업체 항목 대기 — 0.5초씩 폴링하며 stop_flag 체크
-                for _ in range(20):
-                    if stop_flag():
-                        raise InterruptedError("중단됨")
-                    if driver.find_elements(By.CSS_SELECTOR, ITEM_SEL):
-                        break
-                    time.sleep(0.5)
-                _sleep_or_stop(1)
-            else:
-                # 스크롤로 새 항목 로드됐지만 목표치 이미 달성했으면 다음 페이지 불필요
-                if len(results) >= count:
-                    break
 
     except InterruptedError:
         raise
@@ -899,53 +869,8 @@ def crawl_places(keyword: str, count: int = 100, on_progress=None,
                 on_progress(len(results), scanned, f"오류: {e}", results)
             except Exception:
                 pass
-    finally:
-        # 0개 '새로' 수집 시 디버그 덤프 (기존 existing_places 제외)
-        _base_count = len(list(existing_places or []))
-        if len(results) <= _base_count:
-            try:
-                import tempfile, datetime as _dt
-                _dir = os.path.join(tempfile.gettempdir(), "crawl_debug")
-                os.makedirs(_dir, exist_ok=True)
-                _ts = _dt.datetime.now().strftime("%H%M%S")
-                _safe_kw = re.sub(r"[^가-힣A-Za-z0-9_]", "_", keyword)[:30]
-                _base = os.path.join(_dir, f"{_ts}_{_safe_kw}")
-                try: driver.switch_to.default_content()
-                except Exception: pass
-                try:
-                    with open(_base + ".html", "w", encoding="utf-8") as f:
-                        f.write(driver.page_source)
-                except Exception: pass
-                try: driver.save_screenshot(_base + ".png")
-                except Exception: pass
-                try:
-                    driver.switch_to.frame("searchIframe")
-                    with open(_base + "_iframe.html", "w", encoding="utf-8") as f:
-                        f.write(driver.page_source)
-                    driver.switch_to.default_content()
-                except Exception: pass
-                print(f"[DEBUG DUMP] {_base}", flush=True)
-            except Exception:
-                pass
-        if _own_driver:
-            try: driver.quit()
-            except Exception: pass
-
-    # 헤드리스 모드에서 0개 수집 → 봇 감지 의심, 크롬창 띄워서 재시도
-    if not results and _own_driver and not force_visible:
         if emit_log:
-            emit_log("<span style='color:#f59e0b'>⚠️ 수집결과 0개 — 네이버의 봇감지 차단으로 인해 크롬창 띄웁니다</span>")
-        return crawl_places(keyword, count, on_progress,
-                            existing_places=existing_places,
-                            exclude_keywords=exclude_keywords,
-                            driver=None,
-                            on_item=on_item,
-                            direct_url=direct_url,
-                            no_filter=no_filter,
-                            stop_flag=stop_flag,
-                            profile_dir=profile_dir,
-                            emit_log=emit_log,
-                            force_visible=True)
+            emit_log(f"크롤 오류: {e}")
 
     return results
 
@@ -964,51 +889,130 @@ def _get_stations() -> list:
     return _stations_cache
 
 
-def _click_next_page(driver, stop_flag=lambda: False) -> bool:
+def _click_next_page(driver, stop_flag=lambda: False, current_page: int = 0) -> bool:
+    """ActionChains 실제 마우스 클릭으로 다음 페이지 이동 (JS 직접 click 봇감지 회피)."""
+    from selenium.webdriver.common.action_chains import ActionChains
     try:
-        result = driver.execute_script("""
-            // 페이지 번호 버튼들 찾기
-            let pages = document.querySelectorAll('.zRM9F a, [class*="paginator"] a');
-            let currentNum = 0;
+        next_num = str(current_page + 1) if current_page > 0 else None
+        SEL = "a, button, span[role], li[role], div[role='button'], span[role='button']"
+        candidates = driver.find_elements(By.CSS_SELECTOR, SEL)
 
-            // 현재 페이지 번호 찾기
-            for(let p of pages) {
-                if(p.getAttribute('aria-current') === 'page' || p.classList.contains('OxGdy')) {
-                    currentNum = parseInt(p.textContent.trim());
-                    break;
-                }
-            }
+        def _ac_click(el):
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block:'nearest'});", el)
+                time.sleep(0.2)
+            except Exception:
+                pass
+            ActionChains(driver).move_to_element(el).pause(_random.uniform(0.1, 0.3)).click().perform()
 
-            // 다음 페이지 번호 클릭
-            if(currentNum > 0) {
-                for(let p of pages) {
-                    let num = parseInt(p.textContent.trim());
-                    if(num === currentNum + 1) {
-                        p.click();
-                        return true;
+        # 1) JS — 조상 5단계까지 올라가며 숫자 3개 이상인 컨테이너 찾아 페이지 번호 클릭
+        if next_num:
+            try:
+                result = driver.execute_script("""
+                    var nextTxt = arguments[0];
+                    var all = Array.from(document.querySelectorAll('a,button,span,li,div'))
+                        .filter(function(el) { return (el.textContent||'').trim() === nextTxt; });
+                    for (var i = 0; i < all.length; i++) {
+                        var el = all[i];
+                        var ancestor = el.parentNode;
+                        for (var d = 0; d < 5 && ancestor; d++) {
+                            var numDesc = Array.from(ancestor.querySelectorAll('*'))
+                                .filter(function(c) { return /^\\d+$/.test((c.textContent||'').trim()); });
+                            if (numDesc.length >= 3) {
+                                el.scrollIntoView({block:'nearest'});
+                                el.click();
+                                return 'pg:' + nextTxt;
+                            }
+                            ancestor = ancestor.parentNode;
+                        }
+                    }
+                    return null;
+                """, next_num)
+                if result:
+                    time.sleep(_random.uniform(0.4, 0.7))
+                    return result
+            except Exception:
+                pass
+
+        # 2) > 화살표 버튼 (페이지네이션 영역 내 화살표 문자 or aria-label)
+        try:
+            result = driver.execute_script("""
+                var arrows = ['>', '›', '▶', '»', '→'];
+                var all = Array.from(document.querySelectorAll('a,button,span,li,div'));
+                for (var i = 0; i < all.length; i++) {
+                    var el = all[i];
+                    var txt = (el.textContent || '').trim();
+                    var label = (el.getAttribute('aria-label') || '').trim();
+                    var disabled = el.getAttribute('aria-disabled') === 'true' || el.hasAttribute('disabled');
+                    if (disabled) continue;
+                    if (label === '다음' || label === '다음 페이지' || label === 'next') {
+                        el.scrollIntoView({block:'nearest'});
+                        el.click();
+                        return 'arrow:label';
+                    }
+                    if (arrows.indexOf(txt) !== -1) {
+                        var p = el.parentNode;
+                        for (var d = 0; d < 4 && p; d++) {
+                            var nums = Array.from(p.querySelectorAll('*'))
+                                .filter(function(c) { return /^\\d+$/.test((c.textContent||'').trim()); });
+                            if (nums.length >= 2) {
+                                el.scrollIntoView({block:'nearest'});
+                                el.click();
+                                return 'arrow:' + txt;
+                            }
+                            p = p.parentNode;
+                        }
                     }
                 }
-            }
+                return null;
+            """)
+            if result:
+                time.sleep(_random.uniform(0.4, 0.7))
+                return result
+        except Exception:
+            pass
 
-            // "다음" 버튼 클릭
-            for(let p of pages) {
-                let label = p.getAttribute('aria-label') || p.textContent || '';
-                if(label.includes('다음') && p.getAttribute('aria-disabled') !== 'true') {
-                    p.click();
-                    return true;
+        # 3) "다음" 텍스트 버튼
+        try:
+            result = driver.execute_script("""
+                var all = document.querySelectorAll('a,button,span,li,div');
+                for (var i = 0; i < all.length; i++) {
+                    var el = all[i];
+                    var txt = (el.textContent || '').trim();
+                    var label = (el.getAttribute('aria-label') || '').trim();
+                    var disabled = el.getAttribute('aria-disabled') === 'true' || el.hasAttribute('disabled');
+                    if (!disabled && (txt === '다음' || txt === '다음 페이지' || label === '다음' || label === '다음 페이지')) {
+                        el.scrollIntoView({block:'nearest'});
+                        el.click();
+                        return 'next-btn';
+                    }
                 }
-            }
+                return null;
+            """)
+            if result:
+                time.sleep(_random.uniform(0.4, 0.7))
+                return result
+        except Exception:
+            pass
 
-            return false;
-        """)
-        if result:
-            # stop_flag 체크하면서 3초 대기
-            end = time.time() + 3
-            while time.time() < end:
-                if stop_flag():
-                    raise InterruptedError("중단됨")
-                time.sleep(0.2)
-        return bool(result)
+        # 4) ActionChains fallback — 번호 버튼
+        if next_num:
+            SEL = "a, button, span[role], li[role], div[role='button'], span[role='button']"
+            candidates = driver.find_elements(By.CSS_SELECTOR, SEL)
+            for el in candidates:
+                try:
+                    txt = (el.text or "").strip()
+                    if txt == next_num:
+                        try: displayed = el.is_displayed()
+                        except: displayed = True
+                        if displayed:
+                            _ac_click(el)
+                            time.sleep(_random.uniform(0.3, 0.6))
+                            return f"num:{next_num}"
+                except Exception:
+                    continue
+
+        return False
     except InterruptedError:
         raise
     except Exception:
