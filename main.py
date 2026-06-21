@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "1.8.2"
+APP_VERSION = "1.8.6"
 
 import os
 import sys
@@ -91,9 +91,9 @@ class ImageReplaceWorker(QThread):
 
 
 STYLE = """
-QMainWindow { background: #f1f5f9; }
-QWidget { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; }
-QLabel { color: #1e293b; }
+QMainWindow, QDialog { background: #f8fafc; }
+QWidget { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; color: #475569; }
+QLabel { color: #1e293b; background: transparent; }
 
 /* ── 헤더 ── */
 #header {
@@ -109,41 +109,36 @@ QLabel { color: #1e293b; }
 
 /* ── 좌측 패널 ── */
 #leftPanel {
-    background: white;
-    border: none;
-    border-radius: 14px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
 }
 
 #sectionLabel { font-size: 12px; font-weight: bold; color: #6366f1; letter-spacing: 0.5px; }
 #subLabel { font-size: 11px; color: #94a3b8; }
 
 /* ── 입력 필드 ── */
-QLineEdit, QSpinBox {
-    background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px;
-    padding: 7px 11px; font-size: 13px; color: #1e293b;
+QLineEdit, QSpinBox, QComboBox {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 8px 12px; font-size: 13px; color: #1e293b;
+    selection-background-color: #4f46e5; selection-color: #ffffff;
 }
-QLineEdit:focus, QSpinBox:focus { border: 1.5px solid #6366f1; background: white; }
-
-QComboBox {
-    background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px;
-    padding: 6px 10px; font-size: 12px; color: #1e293b;
-}
-QComboBox:focus { border: 1.5px solid #6366f1; }
-QComboBox::drop-down { border: none; width: 20px; }
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: 1.5px solid #4f46e5; }
+QLineEdit:hover, QSpinBox:hover, QComboBox:hover { border-color: #cbd5e1; }
+QComboBox::drop-down { border: none; width: 22px; }
 QComboBox::down-arrow { width: 10px; height: 10px; }
+QComboBox QAbstractItemView {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px;
+    selection-background-color: #eef2ff; selection-color: #1e293b; outline: none;
+}
 
 /* ── 버튼 ── */
 #btnCrawl {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #6366f1, stop:1 #4f46e5);
-    color: white; border: none; border-radius: 9px;
-    font-size: 13px; font-weight: bold; padding: 4px 11px;
+    background: #4f46e5; color: white; border: none; border-radius: 9px;
+    font-size: 13px; font-weight: bold; padding: 9px 12px;
 }
-#btnCrawl:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #818cf8, stop:1 #6366f1);
-}
-#btnCrawl:pressed { background: #4338ca; }
+#btnCrawl:hover { background: #4338ca; }
+#btnCrawl:pressed { background: #3730a3; }
 
 #btnStop {
     background: #f1f5f9; color: #64748b; border: 1.5px solid #e2e8f0;
@@ -152,16 +147,11 @@ QComboBox::down-arrow { width: 10px; height: 10px; }
 #btnStop:hover { background: #e2e8f0; color: #475569; }
 
 #btnPost {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #a78bfa, stop:1 #8b5cf6);
-    color: white; border: none; border-radius: 9px;
-    font-size: 13px; font-weight: bold; padding: 4px 11px;
+    background: #4f46e5; color: white; border: none; border-radius: 9px;
+    font-size: 13px; font-weight: bold; padding: 9px 12px;
 }
-#btnPost:hover {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #c4b5fd, stop:1 #a78bfa);
-}
-#btnPost:pressed { background: #7c3aed; }
+#btnPost:hover { background: #4338ca; }
+#btnPost:pressed { background: #3730a3; }
 
 #btnResult {
     background: #f8fafc; color: #475569; border: 1.5px solid #e2e8f0;
@@ -171,7 +161,7 @@ QComboBox::down-arrow { width: 10px; height: 10px; }
 
 /* ── 우측 로그 패널 ── */
 #logPanel {
-    background: white; border: none; border-radius: 14px;
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
 }
 
 #logHeader { font-size: 13px; font-weight: bold; color: #1e293b; }
@@ -206,7 +196,62 @@ QCheckBox::indicator {
     width: 15px; height: 15px; border-radius: 4px;
     border: 1.5px solid #cbd5e1; background: white;
 }
-QCheckBox::indicator:checked { background: #6366f1; border-color: #6366f1; }
+QCheckBox::indicator:hover { border-color: #4f46e5; }
+QCheckBox::indicator:checked { background: #4f46e5; border-color: #4f46e5; }
+
+/* ── 라디오 ── */
+QRadioButton { font-size: 12px; color: #475569; spacing: 6px; }
+QRadioButton::indicator { width: 16px; height: 16px; border-radius: 8px; border: 1.5px solid #cbd5e1; background: white; }
+QRadioButton::indicator:hover { border-color: #4f46e5; }
+QRadioButton::indicator:checked { background: #4f46e5; border: 4px solid #4f46e5; }
+
+/* ── 테이블 / 트리 ── */
+QTableWidget, QTableView, QTreeWidget, QTreeView {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;
+    gridline-color: #f1f5f9; font-size: 12px; color: #475569;
+    alternate-background-color: #f8fafc; outline: none;
+}
+QTableWidget::item, QTreeWidget::item, QTableView::item, QTreeView::item { padding: 6px 8px; }
+QTableWidget::item:selected, QTreeWidget::item:selected,
+QTableView::item:selected, QTreeView::item:selected { background: #eef2ff; color: #1e293b; }
+QHeaderView::section {
+    background: #1e293b; color: #ffffff; padding: 9px 8px; border: none;
+    border-right: 1px solid #334155; font-size: 12px; font-weight: bold;
+}
+QHeaderView::section:last { border-right: none; }
+QTableCornerButton::section { background: #1e293b; border: none; }
+
+/* ── 탭 ── */
+QTabWidget::pane { border: 1px solid #e2e8f0; border-radius: 10px; top: -1px; background: #ffffff; }
+QTabBar::tab {
+    background: #f1f5f9; color: #64748b; padding: 8px 18px; margin-right: 4px;
+    border-top-left-radius: 8px; border-top-right-radius: 8px; font-size: 12px; font-weight: bold;
+}
+QTabBar::tab:selected { background: #4f46e5; color: #ffffff; }
+QTabBar::tab:hover:!selected { background: #e2e8f0; color: #334155; }
+
+/* ── 그룹박스 (카드) ── */
+QGroupBox {
+    background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+    margin-top: 14px; padding: 14px 12px 12px 12px; font-size: 13px; font-weight: bold; color: #1e293b;
+}
+QGroupBox::title { subcontrol-origin: margin; left: 14px; top: 2px; padding: 0 4px; color: #4f46e5; }
+
+/* ── 기본 버튼 (objectName 미지정) ── */
+QPushButton {
+    background: #ffffff; color: #334155; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 8px 14px; font-size: 12px;
+}
+QPushButton:hover { background: #f8fafc; border-color: #cbd5e1; }
+QPushButton:pressed { background: #f1f5f9; }
+QPushButton:disabled { background: #f1f5f9; color: #cbd5e1; border-color: #f1f5f9; }
+
+/* ── 프로그레스바 ── */
+QProgressBar { background: #f1f5f9; border: none; border-radius: 6px; text-align: center; color: #1e293b; font-size: 11px; }
+QProgressBar::chunk { background: #4f46e5; border-radius: 6px; }
+
+/* ── 툴팁 ── */
+QToolTip { background: #1e293b; color: #ffffff; border: none; padding: 6px 9px; border-radius: 6px; font-size: 12px; }
 """
 
 
@@ -624,18 +669,8 @@ class MainWindow(QMainWindow):
         self._load_keyword_history()
         left_layout.addWidget(self.keyword_input)
 
-        # 픽사베이 검색어 (2칸, 비우면 자동)
-        pix_lbl = QLabel("픽사베이 검색어 (비우면 자동)")
-        pix_lbl.setObjectName("sectionLabel")
-        left_layout.addWidget(pix_lbl)
-        pix_row = QHBoxLayout()
-        self.pix_kw1 = QLineEdit()
-        self.pix_kw1.setPlaceholderText("검색어 1 (한글 가능)")
-        self.pix_kw2 = QLineEdit()
-        self.pix_kw2.setPlaceholderText("검색어 2 (한글 가능)")
-        pix_row.addWidget(self.pix_kw1)
-        pix_row.addWidget(self.pix_kw2)
-        left_layout.addLayout(pix_row)
+        # 픽사베이 검색어: 입력칸 제거 — 메인 키워드 하나로 완전 자동 큐레이션
+        # (gpt-4o-mini 자동 추출 → 하드코딩 테이블 폴백). 수동 오버라이드 미사용.
 
         # 지역설정 버튼 (드롭다운 트리 다이얼로그)
         self._selected_regions = list(self.cfg.get("selected_regions", []) or [])
@@ -728,9 +763,9 @@ class MainWindow(QMainWindow):
         iv_layout.addWidget(QLabel("분"))
 
         # 발행간격 옆 랜덤 체크박스 — 체크 시 ±10분 랜덤
-        self.interval_random = QCheckBox("랜덤(±10분)")
+        self.interval_random = QCheckBox("랜덤(±20분)")
         self.interval_random.setStyleSheet("font-size: 12px; color: #334155;")
-        self.interval_random.setToolTip("체크 시 설정된 발행 간격에서 ±10분 랜덤")
+        self.interval_random.setToolTip("체크 시 설정 간격에서 10분 단위로 ±20분 랜덤 (5단계 — 네이버 예약 10분 단위 제약)")
         iv_layout.addWidget(self.interval_random)
         iv_layout.addStretch()
 
@@ -1161,7 +1196,9 @@ class MainWindow(QMainWindow):
         try:
             if getattr(self, "interval_random", None) and self.interval_random.isChecked():
                 import random as _r
-                return max(600, base + _r.randint(-600, 600))
+                # 네이버 예약은 10분 단위만 가능 → ±20분을 10분 단위 5슬롯에서 매번 독립 랜덤 선택
+                # (예: 2시간 기준 → 1:40 / 1:50 / 2:00 / 2:10 / 2:20)
+                return max(600, base + _r.choice([-1200, -600, 0, 600, 1200]))
         except Exception:
             pass
         return base
@@ -2345,17 +2382,20 @@ class MainWindow(QMainWindow):
         """Pixabay 검색에 가장 적합한 업종 문자열을 골라 반환.
         우선순위: search_keyword 마지막 토큰 > category 마지막 토큰 > fallback_keyword > category 풀스트링.
         예: search_keyword='강남구 치과' → '치과', category='의원 > 치과의원' → '치과의원'."""
-        from image_handler import _tokenize_biz, BIZ_TO_EN
+        from image_handler import _tokenize_biz, BIZ_TO_EN, _strip_region
         # category_2 (더 구체적) → search_keyword → category_1 → fallback 순
+        # 매핑 키(ko)를 직접 반환 → 지역명 없는 '순수 개념'이 보장됨
+        # (예: search_keyword='부산개인회생' → '개인회생', '강남구 치과' → '치과')
         for src in (place.get("category_2"), place.get("search_keyword"), place.get("category"), fallback_keyword):
             toks = _tokenize_biz(src or "")
             for tok in reversed(toks):
                 tl = tok.lower()
                 for ko in sorted(BIZ_TO_EN.keys(), key=len, reverse=True):
                     if ko in tl:
-                        return tok
+                        return ko
+        # 매핑 실패 시: 지역명을 발라낸 뒤 마지막 토큰(가장 구체적) 사용
         for src in (place.get("category_2"), place.get("search_keyword"), place.get("category"), fallback_keyword):
-            toks = _tokenize_biz(src or "")
+            toks = _tokenize_biz(_strip_region(src or ""))
             if toks:
                 return toks[-1]
         return (place.get("category_2") or place.get("category") or fallback_keyword or "").strip()
@@ -2425,7 +2465,9 @@ class MainWindow(QMainWindow):
     # ── 업종별 프롬프트 자동 생성 (크롤 완료 후 호출) ──
     def _auto_generate_prompt_for_biz(self, biz_type: str):
         """키워드의 업종이 prompts.json에 없으면 GPT로 블로그/제목 프롬프트 생성 후 저장.
-        백그라운드 스레드에서 실행, 이미 있으면 skip."""
+        백그라운드 스레드에서 실행, 이미 있으면 skip.
+        ※ 비활성화됨 — 모든 업종을 단일 '기본' 프롬프트로 처리(기본이 업종/톤 동적 분기)."""
+        return  # 업종별 자동생성 OFF — '기본' 프롬프트 하나로 통일
         biz_type = (biz_type or "").strip()
         if not biz_type or biz_type == "기본":
             return
@@ -2458,9 +2500,9 @@ class MainWindow(QMainWindow):
             f"---\n\n"
             f"위 기본 프롬프트를 '{biz_type}' 업종 전용으로 변환해라.\n\n"
             f"[절대 규칙 — 반드시 지켜라]\n"
-            f"- 기본 프롬프트의 모든 섹션(역할, 입력 데이터, 작업 지시, 필수 포함, 이미지 배치, 금지 사항)을 그대로 유지해라.\n"
-            f"- 글자 수 조건(1500자 이상, 1700~2000자), 문장 수(40문장 이상), 서론/본론/결론 구조, [이미지] 마커 규칙, 주소 필수 포함 — 모두 그대로 유지해라.\n"
-            f"- 플레이스홀더 유지 필수: {{업체명}}, {{주소}}, {{근처역}}, {{카테고리}}, {{앞키워드}}, {{태그}}, {{키워드}}\n"
+            f"- 기본 프롬프트의 모든 섹션(역할/동적 페르소나, 입력 데이터, 금지 단어, 수익형 3단 구조(서론/본론/결론), 네이버 최적화 태그 규칙)을 그대로 유지해라.\n"
+            f"- 글자 수 조건(1,600~2,000자), 문장 수(40문장 이상), 서론/본론/결론 구조, [이미지] 마커 3~5개 규칙, 해시태그 7~10개 규칙, 주소·지역 필수 포함 — 모두 그대로 유지해라.\n"
+            f"- 플레이스홀더 유지 필수: {{업체명}}, {{업종}}, {{키워드}}, {{시}}, {{구}}, {{동}}, {{주소}}, {{근처역}}, {{근처역상세}}\n"
             f"- 오직 '역할' 섹션의 업종 설명과 본론 항목만 '{biz_type}' 업종에 맞게 수정해라.\n"
             f"- 실제 블로그 글을 쓰지 말 것. 지시문(시스템 프롬프트)만 출력해라.\n"
             f"- 이모티콘 금지, 광고성 표현 금지.\n\n"
@@ -2781,7 +2823,7 @@ class MainWindow(QMainWindow):
                 f"위 예시를 참고해서 '{key}' 업종에 특화된 시스템 프롬프트를 새로 작성해라.\n\n"
                 f"[반드시 지킬 규칙]\n"
                 f"- 실제 블로그 글을 쓰지 말 것. GPT에게 블로그를 쓰도록 지시하는 '시스템 프롬프트(지시문)'를 작성해야 한다.\n"
-                f"- 플레이스홀더 유지 필수: {{업체명}}, {{주소}}, {{근처역}}, {{카테고리}}, {{앞키워드}}, {{태그}}, {{키워드}}\n"
+                f"- 플레이스홀더 유지 필수: {{업체명}}, {{업종}}, {{키워드}}, {{시}}, {{구}}, {{동}}, {{주소}}, {{근처역}}, {{근처역상세}}\n"
                 f"- '{key}' 업종을 방문하는 사람의 관점과 관심사에 맞게 역할·지시 내용을 조정\n"
                 f"- 이모티콘 금지, 광고성 표현 금지\n\n"
                 f"[출력 형식 — 반드시 아래 구분자 그대로 단독 줄에 출력]\n"
@@ -3050,7 +3092,7 @@ class MainWindow(QMainWindow):
                     # 병렬 크롤 — 사용자가 설정한 봇 개수(1/2/3)와 키워드 개수 중 작은 값
                     _user_bots = self._get_bot_count()
                     _workers = min(_user_bots, max(1, len(expanded)))
-                    self._emit_log(f"지역 {len(expanded)}개 × '{_biz}' 병렬 크롤 (설정 {_user_bots}봇 — 구 10개↑면 throttle 회피로 2봇 자동 하향)")
+                    self._emit_log(f"지역 {len(expanded)}개 × '{_biz}' 병렬 크롤 (봇 {_workers}개)")
                     _per = count  # 지역별 목표 개수 = 사용자 설정값
                     _existing_by_kw = {}
 
@@ -3234,7 +3276,7 @@ class MainWindow(QMainWindow):
             for p in items:
                 addr = p.get("address", "")
                 jibun = p.get("jibun_address", "")
-                full_addr = (f"{addr} {jibun}" if addr and jibun else (addr or jibun))
+                full_addr = (jibun or addr).strip()  # jibun이 행정동+지번 완전주소라 중복 방지
                 child = QTreeWidgetItem(root, [
                     p.get("name", ""),
                     full_addr,
@@ -3357,7 +3399,7 @@ class MainWindow(QMainWindow):
                 for num, p in enumerate(places, 1):
                     addr = p.get("address", "")
                     jibun = p.get("jibun_address", "")
-                    full_addr = f"{addr} {jibun}" if addr and jibun else (jibun or addr)
+                    full_addr = (jibun or addr).strip()  # jibun이 행정동+지번 완전주소라 중복 방지
 
                     key = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
                     generated_post = post_map.get(key)
@@ -3687,7 +3729,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(body_edit)
 
         meta = QLabel(
-            f"주소: {place.get('address','')} {place.get('jibun_address','')}  |  "
+            f"주소: {place.get('jibun_address','') or place.get('address','')}  |  "
             f"카테고리: {place.get('category','')}  |  "
             f"근처역: {place.get('nearby_station','')}  |  "
             f"태그: {','.join(content.get('tags', [])) if isinstance(content.get('tags'), list) else content.get('tags', '')}"
@@ -3952,6 +3994,12 @@ class MainWindow(QMainWindow):
             return
 
         api_key = api_keys[0]
+        # AI 검색어 추출기(gpt-4o-mini)에 키 주입 — 실패/타임아웃 시 하드코딩 폴백
+        try:
+            import image_handler as _ih
+            _ih.configure_ai_extractor(api_key, os.path.join(os.path.dirname(__file__), "pixabay_query_cache.json"))
+        except Exception:
+            pass
         _lkm = self.cfg.get("last_keyword_by_account", {}) or {}
         keyword = self.keyword_input.currentText().strip() or getattr(self, 'last_keyword', '') or _lkm.get(self._current_blog_id(), "") or self.cfg.get("last_keyword", "")
         # 크롤된 데이터에서 키워드 자동 복원 (앞키워드 첫 항목이 "{지역}{업종}" 형식)
@@ -4015,10 +4063,10 @@ class MainWindow(QMainWindow):
                                 try: os.remove(os.path.join(persist_dir, _f))
                                 except: pass
 
-                            # 1) 실사 1장 (place_id 있을 때만)
+                            # 1) 실사 수집 OFF — 글마다 크롬 띄우는 비용 제거(속도), Pixabay만 사용
                             real_paths = []
                             pid = (place.get("place_id") or "").strip()
-                            if pid:
+                            if False:  # 실사 수집 비활성화
                                 try:
                                     import real_photos as _rp
                                     from selenium import webdriver as _wd
@@ -4129,6 +4177,8 @@ class MainWindow(QMainWindow):
                     deduped.append(p)
             deduped.reverse()
             self._generated_posts = deduped
+            # 미리보기는 이번에 생성한 글만 표시 (디스크에는 기존+신규 누적 저장)
+            self._last_generated = [p for p in deduped if _k(p) in new_keys]
             self.is_generating = False
 
             if self.stop_flag:
@@ -4148,8 +4198,9 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _show_post_preview(self):
-        """생성된 포스트 미리보기"""
-        if not self._generated_posts:
+        """생성된 포스트 미리보기 — 이번에 생성한 글만 표시."""
+        posts = getattr(self, "_last_generated", None) or self._generated_posts
+        if not posts:
             QMessageBox.information(self, "결과", "생성된 포스트가 없습니다.")
             return
 
@@ -4164,7 +4215,7 @@ class MainWindow(QMainWindow):
         # 상단
         top = QHBoxLayout()
         select_all_cb = QCheckBox("전체 선택")
-        count_label = QLabel(f"0 / {len(self._generated_posts)}개 선택됨")
+        count_label = QLabel(f"0 / {len(posts)}개 선택됨")
         count_label.setStyleSheet("font-weight: bold; font-size: 13px;")
         top.addWidget(select_all_cb)
         top.addStretch()
@@ -4194,7 +4245,7 @@ class MainWindow(QMainWindow):
         post_editors = []
         title_editors = []
 
-        for idx, item in enumerate(self._generated_posts):
+        for idx, item in enumerate(posts):
             place = item["place"]
             content = item["content"]
 
@@ -4236,10 +4287,7 @@ class MainWindow(QMainWindow):
             # 수집 데이터 표시
             addr = place.get("address", "")
             jibun = place.get("jibun_address", "")
-            if jibun:
-                full_addr = f"{addr} {jibun}" if addr else jibun
-            else:
-                full_addr = addr
+            full_addr = (jibun or addr).strip()  # jibun이 행정동+지번 완전주소라 중복 방지
             info_text = f"주소: {full_addr}  |  카테고리: {place.get('category', '')}  |  근처역: {place.get('nearby_station', '')}  |  태그: {', '.join(content.get('tags', []))}"
             info_label = QLabel(info_text)
             info_label.setStyleSheet("color: #64748b; font-size: 10px; padding: 3px 0; background: #f8fafc; border-radius: 4px; padding: 5px;")
@@ -4249,8 +4297,8 @@ class MainWindow(QMainWindow):
             # 저장 버튼 기능
             def make_save(i, te, ed):
                 def save():
-                    self._generated_posts[i]["content"]["title"] = te.text()
-                    self._generated_posts[i]["content"]["body"] = ed.toPlainText()
+                    posts[i]["content"]["title"] = te.text()
+                    posts[i]["content"]["body"] = ed.toPlainText()
                     self._save_generated_posts()
                     QMessageBox.information(dlg, "저장", "저장되었습니다.")
                 return save
@@ -4266,7 +4314,7 @@ class MainWindow(QMainWindow):
         # 선택 카운트 업데이트
         def update_count():
             cnt = sum(1 for cb in post_checkboxes if cb.isChecked())
-            count_label.setText(f"{cnt} / {len(self._generated_posts)}개 선택됨")
+            count_label.setText(f"{cnt} / {len(posts)}개 선택됨")
 
         for cb in post_checkboxes:
             cb.stateChanged.connect(lambda: update_count())
@@ -4281,7 +4329,11 @@ class MainWindow(QMainWindow):
             cards = [scroll_layout.itemAt(i).widget() for i in range(scroll_layout.count()) if scroll_layout.itemAt(i).widget()]
             for i in range(len(post_checkboxes) - 1, -1, -1):
                 if post_checkboxes[i].isChecked():
-                    self._generated_posts.pop(i)
+                    _gp = posts.pop(i)
+                    try:
+                        self._generated_posts.remove(_gp)
+                    except ValueError:
+                        pass
                     post_checkboxes.pop(i)
                     post_editors.pop(i)
                     title_editors.pop(i)
@@ -4290,7 +4342,7 @@ class MainWindow(QMainWindow):
                     widget.deleteLater()
             self._save_generated_posts()
             update_count()
-            count_label.setText(f"0 / {len(self._generated_posts)}개 선택됨")
+            count_label.setText(f"0 / {len(posts)}개 선택됨")
 
         btn_delete.clicked.connect(delete_selected)
 
@@ -4307,9 +4359,9 @@ class MainWindow(QMainWindow):
             self.posting_targets = []
             for i, cb in enumerate(post_checkboxes):
                 if cb.isChecked():
-                    self._generated_posts[i]["content"]["title"] = title_editors[i].text()
-                    self._generated_posts[i]["content"]["body"] = post_editors[i].toPlainText()
-                    self.posting_targets.append(self._generated_posts[i])
+                    posts[i]["content"]["title"] = title_editors[i].text()
+                    posts[i]["content"]["body"] = post_editors[i].toPlainText()
+                    self.posting_targets.append(posts[i])
             if not self.posting_targets:
                 QMessageBox.warning(dlg, "경고", "선택된 포스트가 없습니다.")
                 return
@@ -4344,7 +4396,7 @@ class MainWindow(QMainWindow):
         interval_sec = self._get_interval_seconds()
         h = int(self.interval_hour.currentText())
         m = int(self.interval_min.currentText())
-        rand_suffix = " (±10분 랜덤)" if (getattr(self, "interval_random", None) and self.interval_random.isChecked()) else ""
+        rand_suffix = " (±20분 랜덤)" if (getattr(self, "interval_random", None) and self.interval_random.isChecked()) else ""
         interval_label = f"{h}시간 {m}분{rand_suffix}"
         acc_idx = cfg.get("active_account", 0) + 1
 
@@ -4434,16 +4486,13 @@ class MainWindow(QMainWindow):
                     else:
                         # 매 포스트마다 _get_interval_seconds() 호출 → 랜덤 모드면 매번 다른 간격
                         running_dt = running_dt + _dt.timedelta(seconds=self._get_interval_seconds())
+                        # 네이버 예약은 10분 단위만 허용 → 항상 10분 단위 정렬 (누적 드리프트/패턴 방지)
+                        minute = (running_dt.minute // 10) * 10
+                        running_dt = running_dt.replace(minute=minute, second=0, microsecond=0)
                         sched_dt = running_dt
-                        # 랜덤 모드가 아닐 때만 10분 단위 반올림
-                        _is_random = getattr(self, "interval_random", None) and self.interval_random.isChecked()
-                        if not _is_random:
-                            minute = (sched_dt.minute // 10) * 10
-                            sched_dt = sched_dt.replace(minute=minute, second=0, microsecond=0)
-                        else:
-                            sched_dt = sched_dt.replace(second=0, microsecond=0)
                         if sched_dt <= _dt.datetime.now():
                             sched_dt += _dt.timedelta(minutes=10)
+                            running_dt = sched_dt
                         schedule_time = sched_dt.strftime("%Y-%m-%d %H:%M")
                         _pl(f"[{i}/{total}] 예약 시간: {schedule_time}")
 
@@ -4464,38 +4513,16 @@ class MainWindow(QMainWindow):
                         _pl(f"저장된 이미지 {len(img_paths)}장 사용")
                     elif pix_keys:
                         try:
-                            pix_kw1 = self.pix_kw1.text().strip()
-                            pix_kw2 = self.pix_kw2.text().strip()
-                            if pix_kw1 or pix_kw2:
-                                pix_queries = [k for k in [pix_kw1, pix_kw2] if k]
-                                from image_handler import _fetch_hits as _fh2
-                                import random as _r2, requests as _req2, tempfile as _tmp2
-                                _pool2 = []
-                                for _q2 in pix_queries:
-                                    _pool2.extend(_fh2(pix_keys[0], _q2, page=1, per_page=40))
-                                if _pool2:
-                                    _count2 = content.get("image_count", 3)
-                                    _sel2 = _r2.sample(_pool2, min(_count2, len(_pool2)))
-                                    _td2 = _tmp2.mkdtemp(prefix="naver_blog_")
-                                    for _ji2, _h2 in enumerate(_sel2):
-                                        try:
-                                            _resp2 = _req2.get(_h2.get("largeImageURL",""), timeout=30)
-                                            _resp2.raise_for_status()
-                                            _fp2 = os.path.join(_td2, f"image_{_ji2+1}.jpg")
-                                            with open(_fp2, "wb") as _f2: _f2.write(_resp2.content)
-                                            img_paths.append(_fp2)
-                                        except Exception: pass
-                                _pl(f"이미지 {len(img_paths)}장 다운로드 (직접 검색어)")
-                            else:
-                                biz = self._best_biz_term(place, keyword)
-                                _pl(f"이미지 재검색 업종: '{biz}' (저장본 없음)")
-                                img_paths = download_images(
-                                    pix_keys[0], biz,
-                                    content.get("image_count", 3),
-                                    watermark_text=name,
-                                    translator=self._translate_ko_to_en,
-                                )
-                                _pl(f"이미지 {len(img_paths)}장 다운로드")
+                            # 완전 자동: download_images 내부 체인(AI→테이블→번역)
+                            biz = self._best_biz_term(place, keyword)
+                            _pl(f"이미지 재검색 (업종 '{biz}', 저장본 없음)")
+                            img_paths = download_images(
+                                pix_keys[0], biz,
+                                content.get("image_count", 3),
+                                watermark_text=name,
+                                translator=self._translate_ko_to_en,
+                            )
+                            _pl(f"이미지 {len(img_paths)}장 다운로드")
                         except Exception as e:
                             _pl(f"이미지 다운로드 실패: {e}")
                     else:
@@ -4834,7 +4861,7 @@ class MainWindow(QMainWindow):
                     for p in places:
                         addr = p.get("address", "")
                         jibun = p.get("jibun_address", "")
-                        full_addr = f"{addr} {jibun}".strip() if jibun else addr
+                        full_addr = (jibun or addr).strip()  # jibun이 행정동+지번 완전주소라 중복 방지
 
                         child = QTreeWidgetItem(parent)
                         child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
@@ -4914,8 +4941,22 @@ class MainWindow(QMainWindow):
                     item.child(i).setCheckState(0, state)
             update_count()
 
+        def _make_sort_handler(tw):
+            _st = {"col": -1, "order": Qt.AscendingOrder}
+            def _on_section(col):
+                if _st["col"] == col:
+                    _st["order"] = Qt.DescendingOrder if _st["order"] == Qt.AscendingOrder else Qt.AscendingOrder
+                else:
+                    _st["col"] = col
+                    _st["order"] = Qt.AscendingOrder
+                tw.sortItems(col, _st["order"])
+            return _on_section
+
         for tw in all_trees:
             tw.itemChanged.connect(on_item_changed)
+            # 컬럼 헤더(카테고리/업체명/주소 등) 클릭 시 정렬 — 클릭마다 오름/내림 토글
+            tw.header().setSectionsClickable(True)
+            tw.header().sectionClicked.connect(_make_sort_handler(tw))
 
         _tree_map = {id(container_r): tree_r, id(container_k): tree_k}
 
@@ -4957,9 +4998,12 @@ class MainWindow(QMainWindow):
         # ── 카테고리 2차 필터 다이얼로그 ──
         def open_category_filter():
             """현재 표시된 모든 업체의 카테고리 목록 → 체크박스 → 선택된 카테고리만 체크 유지."""
-            # 카테고리별 업체 매핑
+            # 카테고리별 업체 매핑 — 체크된(선택된) 업체만 대상 (예: 강북구만 체크 → 강북구 카테고리만).
+            # 아무것도 체크 안 됐으면 전체 대상.
             cat_map = {}  # cat_str -> [(item, place), ...]
-            for _item, _p in all_items:
+            _checked_src = [(it, p) for it, p in all_items if it.checkState(0) == Qt.Checked]
+            _src = _checked_src if _checked_src else all_items
+            for _item, _p in _src:
                 _c = (_p.get("category") or "").strip() or "(카테고리 없음)"
                 cat_map.setdefault(_c, []).append((_item, _p))
             if not cat_map:
@@ -5080,6 +5124,22 @@ class MainWindow(QMainWindow):
                         _tw.blockSignals(False)
                 for _tw in all_trees:
                     _sync_parents(_tw)
+                # 선택(체크)된 업체만 목록에 표시, 나머지 + 빈 그룹/날짜는 숨김
+                for _tw in all_trees:
+                    for i in range(_tw.topLevelItemCount()):
+                        date_item = _tw.topLevelItem(i)
+                        date_vis = False
+                        for j in range(date_item.childCount()):
+                            grp = date_item.child(j)
+                            grp_vis = False
+                            for k in range(grp.childCount()):
+                                leaf = grp.child(k)
+                                show = leaf.checkState(0) == Qt.Checked
+                                leaf.setHidden(not show)
+                                grp_vis = grp_vis or show
+                            grp.setHidden(not grp_vis)
+                            date_vis = date_vis or grp_vis
+                        date_item.setHidden(not date_vis)
                 update_count()
                 fdlg.accept()
             btn_apply.clicked.connect(_apply_filter)
@@ -5411,6 +5471,12 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "오류", "GPT API 키를 설정해주세요.")
             return
         api_key = api_keys[0]
+        # AI 검색어 추출기(gpt-4o-mini)에 키 주입 — 실패/타임아웃 시 하드코딩 폴백
+        try:
+            import image_handler as _ih
+            _ih.configure_ai_extractor(api_key, os.path.join(os.path.dirname(__file__), "pixabay_query_cache.json"))
+        except Exception:
+            pass
         from config import get_active_account
         account = get_active_account(cfg)
         if not account.get("naver_id") or not account.get("naver_pw"):
@@ -5442,7 +5508,7 @@ class MainWindow(QMainWindow):
         interval_sec = self._get_interval_seconds()
         h = int(self.interval_hour.currentText())
         m = int(self.interval_min.currentText())
-        rand_suffix = " (±10분 랜덤)" if (getattr(self, "interval_random", None) and self.interval_random.isChecked()) else ""
+        rand_suffix = " (±20분 랜덤)" if (getattr(self, "interval_random", None) and self.interval_random.isChecked()) else ""
         interval_label = f"{h}시간 {m}분{rand_suffix}"
 
         reply = QMessageBox.question(self, "포스팅 확인",
@@ -5510,38 +5576,14 @@ class MainWindow(QMainWindow):
                     img_paths = []
                     pix_keys = [k for k in cfg.get("pixabay_key_list", []) if k]
                     if pix_keys:
-                        pix_kw1 = self.pix_kw1.text().strip()
-                        pix_kw2 = self.pix_kw2.text().strip()
-                        if pix_kw1 or pix_kw2:
-                            pix_queries = [k for k in [pix_kw1, pix_kw2] if k]
-                            from image_handler import search_images as _si, _USED_IMAGE_IDS
-                            import random as _r
-                            _pool = []
-                            for _q in pix_queries:
-                                from image_handler import _fetch_hits as _fh
-                                _hits = _fh(pix_keys[0], _q, page=1, per_page=40)
-                                _pool.extend(_hits)
-                            if _pool:
-                                _count = content.get("image_count", 3)
-                                _sel = _r.sample(_pool, min(_count, len(_pool)))
-                                import requests as _req, tempfile as _tmp, os as _os
-                                _td = _tmp.mkdtemp(prefix="naver_blog_")
-                                for _ji, _h in enumerate(_sel):
-                                    try:
-                                        _resp = _req.get(_h.get("largeImageURL",""), timeout=30)
-                                        _resp.raise_for_status()
-                                        _fp = _os.path.join(_td, f"image_{_ji+1}.jpg")
-                                        with open(_fp, "wb") as _f: _f.write(_resp.content)
-                                        img_paths.append(_fp)
-                                    except Exception: pass
-                        else:
-                            biz = self._best_biz_term(place, keyword)
-                            img_paths = download_images(
-                                pix_keys[0], biz,
-                                content.get("image_count", 3),
-                                watermark_text=name,
-                                translator=self._translate_ko_to_en,
-                            )
+                        # 완전 자동: download_images 내부 체인(AI→테이블→번역)
+                        biz = self._best_biz_term(place, keyword)
+                        img_paths = download_images(
+                            pix_keys[0], biz,
+                            content.get("image_count", 3),
+                            watermark_text=name,
+                            translator=self._translate_ko_to_en,
+                        )
 
                     self._emit_post_log(f"[{i}/{total}] '{name}' 포스팅 중...")
 
@@ -6845,6 +6887,22 @@ if __name__ == "__main__":
         sys.exit(0)
 
     app = QApplication(sys.argv)
+    # 작업표시줄/시작메뉴 아이콘 — AppUserModelID(독립 그룹) + 앱 아이콘 지정
+    try:
+        import ctypes as _ct_icon
+        _ct_icon.windll.shell32.SetCurrentProcessExplicitAppUserModelID("BlogMaster.App.v1")
+    except Exception:
+        pass
+    try:
+        from PySide6.QtGui import QIcon as _QIcon_app
+        if getattr(sys, "frozen", False):
+            _app_icon_path = os.path.join(os.path.dirname(sys.executable), "icon.ico")
+        else:
+            _app_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
+        if os.path.exists(_app_icon_path):
+            app.setWindowIcon(_QIcon_app(_app_icon_path))
+    except Exception:
+        pass
     # Windows 다크모드 무시하고 전역 라이트 팔레트 강제
     try:
         from PySide6.QtGui import QPalette, QColor

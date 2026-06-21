@@ -1,5 +1,6 @@
 """Pixabay 이미지 검색 및 다운로드 모듈"""
 import os
+import re
 import requests
 import tempfile
 
@@ -181,6 +182,22 @@ BIZ_TO_EN = {
     "도배": ["wallpaper installation wall interior", "interior wall covering decoration", "wallpaper hanging home renovation"],
     "세차장": ["car wash automatic", "automatic car wash", "car wash drive through"],
     "무인카페": ["unmanned cafe kiosk", "self service cafe", "automated coffee kiosk"],
+    # 법률/금융/전문직 — 한국형 복합 키워드(예: '부산개인회생')도 1단계 부분매칭으로
+    # 지역 접두를 무시하고 개념만 잡히도록 키를 직접 등록 (translator 폴백 의존 X)
+    "개인회생": ["law office", "lawyer attorney", "legal document signing", "court gavel justice"],
+    "개인파산": ["law office", "lawyer consultation", "legal document", "court gavel"],
+    "법인회생": ["law office", "corporate lawyer meeting", "legal document", "court gavel"],
+    "회생파산": ["law office", "lawyer attorney", "legal document", "court gavel"],
+    "파산": ["law office", "lawyer consultation", "legal document", "court gavel"],
+    "회생": ["law office", "lawyer attorney", "legal consultation document", "court gavel"],
+    "채무조정": ["debt consultation meeting", "financial counseling", "calculator money document"],
+    "신용회복": ["financial counseling office", "debt consultation", "finance document calculator"],
+    "워크아웃": ["financial counseling", "debt restructuring meeting", "business finance document"],
+    "법률상담": ["law office consultation", "lawyer client meeting", "legal advice office"],
+    "노무사": ["labor law office", "hr consultation office", "employment contract document"],
+    "행정사": ["administrative office document", "government paperwork office", "document filing office"],
+    "손해사정": ["insurance claim document", "insurance consultation office", "claim paperwork office"],
+    "대출": ["bank loan finance", "money loan document", "financial consultation calculator"],
 }
 
 # 세션 중 이미 사용된 Pixabay 이미지 ID (중복 방지)
@@ -218,6 +235,95 @@ def _save_used_ids():
         pass
 
 
+# ── AI 기반 Pixabay 검색어 추출 (gpt-4o-mini, 하이브리드 1순위) ──
+_AI_API_KEY: str = ""
+_AI_QUERY_CACHE_FILE: str = ""
+_AI_QUERY_CACHE: dict = {}
+_AI_CACHE_LOCK = _threading.Lock()
+
+# [네이버 SEO 전략 기획자] 설계 — 정밀 타격용 시스템 프롬프트
+_PIXABAY_EXTRACT_SYSTEM = (
+    "너는 글로벌 이미지 사이트인 픽사베이(Pixabay)의 전용 영문 검색어 추출기야.\n"
+    "입력된 한국어 키워드에서 [앞뒤 지역명(시/군/구/동/역명), 상권 명칭, 고유명사]를 완벽하게 감지하여 삭제해라.\n"
+    "그다음, 남은 순수 '업종, 공간, 핵심 개념'을 분석하여 픽사베이에 검색했을 때 고화질 실사 사진이 "
+    "가장 잘 나올 만한 최적의 영문 단어 3개를 추상화/대체하여 콤마(,)로만 구분해서 출력해라.\n"
+    "(설명이나 서론 없이 단어만 출력할 것)\n"
+    "- 입력: '부산개인회생' -> 출력: 'lawyer, court, document'\n"
+    "- 입력: '역삼동 헬스장' -> 출력: 'gym, fitness, workout'\n"
+    "- 입력: '철원 율무밭' -> 출력: 'farm, grain field, agriculture'"
+)
+
+
+def configure_ai_extractor(api_key: str, cache_file: str = ""):
+    """OpenAI 키를 주입하면 search_images가 gpt-4o-mini로 검색어를 자동 추출(1순위).
+    cache_file 지정 시 키워드→검색어 결과를 영속 캐시(비용·속도 최적화).
+    키가 없거나 API 실패/타임아웃 시에는 BIZ_TO_EN 하드코딩 테이블로 자동 폴백."""
+    global _AI_API_KEY, _AI_QUERY_CACHE_FILE, _AI_QUERY_CACHE
+    _AI_API_KEY = (api_key or "").strip()
+    if cache_file:
+        _AI_QUERY_CACHE_FILE = cache_file
+        try:
+            import json as _json
+            if os.path.exists(cache_file):
+                with open(cache_file, "r", encoding="utf-8") as f:
+                    _AI_QUERY_CACHE = _json.load(f)
+        except Exception:
+            _AI_QUERY_CACHE = {}
+
+
+def _save_ai_cache():
+    if not _AI_QUERY_CACHE_FILE:
+        return
+    try:
+        import json as _json
+        os.makedirs(os.path.dirname(_AI_QUERY_CACHE_FILE), exist_ok=True)
+        with open(_AI_QUERY_CACHE_FILE, "w", encoding="utf-8") as f:
+            _json.dump(_AI_QUERY_CACHE, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def extract_pixabay_queries(keyword: str, api_key: str = "") -> list:
+    """gpt-4o-mini로 한국어 키워드 → 픽사베이 영문 검색어(최대 5개) 추출.
+    지역명/고유명사 제거 + 시각적 개념 추상화는 시스템 프롬프트가 담당.
+    실패/키없음 시 빈 리스트 반환 → 호출부에서 하드코딩 테이블로 폴백."""
+    kw = (keyword or "").strip()
+    key = (api_key or _AI_API_KEY or "").strip()
+    if not kw or not key:
+        return []
+    cached = _AI_QUERY_CACHE.get(kw)
+    if cached:
+        return list(cached)
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=key, timeout=15.0)
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": _PIXABAY_EXTRACT_SYSTEM},
+                {"role": "user", "content": kw},
+            ],
+            max_tokens=30,
+            temperature=0.3,
+        )
+        raw = (resp.choices[0].message.content or "").strip()
+    except Exception:
+        return []
+    raw = raw.splitlines()[0] if raw else ""
+    queries = []
+    for p in raw.split(","):
+        w = p.strip().strip("'\"`.").lower()
+        # 영문(아스키)만 채택 — 한글/설명이 섞이면 버림
+        if w and all(ord(c) < 128 for c in w) and any(c.isalpha() for c in w):
+            queries.append(w)
+    queries = queries[:5]
+    if queries:
+        with _AI_CACHE_LOCK:
+            _AI_QUERY_CACHE[kw] = queries
+            _save_ai_cache()
+    return queries
+
+
 def _tokenize_biz(keyword: str) -> list:
     """검색어/카테고리 풀스트링을 의미 토큰으로 분해.
     예: '음식점 > 한식 > 칼국수' → ['음식점','한식','칼국수']
@@ -229,6 +335,45 @@ def _tokenize_biz(keyword: str) -> list:
         k = k.replace(sep, " ")
     toks = [t.strip() for t in k.split() if t.strip()]
     return toks
+
+
+# 광역시·도 + 주요 시(市) 접두(지역명 stem) — '부산개인회생'/'수원개인파산' → 개념만 남김
+_METRO_STEMS = [
+    # 광역시·특별시·도
+    "서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
+    "경기", "강원", "충청", "충북", "충남", "전라", "전북", "전남",
+    "경상", "경북", "경남", "제주",
+    # 주요 시(글자에 붙는 복합 키워드 대비) — 긴 이름 우선 정렬은 _strip_region에서 처리
+    "수원", "성남", "용인", "고양", "안산", "안양", "남양주", "화성",
+    "평택", "의정부", "시흥", "파주", "김포", "광명", "군포", "하남",
+    "창원", "김해", "양산", "거제", "진주", "청주", "천안", "전주",
+    "포항", "구미", "경주", "원주", "춘천", "강릉", "목포", "여수",
+    "순천", "익산", "군산", "아산", "당진", "제천", "충주", "공주",
+]
+# 행정구역 단독 토큰 (시/도/군/구/읍/면/동/리) — '역삼동', '강남구' 등
+_ADMIN_TOKEN_RE = re.compile(
+    r"^[가-힣]{1,5}(특별자치시|특별자치도|특별시|광역시|시|도|군|구|읍|면|동|리)$"
+)
+
+
+def _strip_region(keyword: str) -> str:
+    """키워드에서 지역명(광역시·도 접두 + 행정구역 토큰)을 제거하고 순수 개념/업종만 반환.
+    예: '부산개인회생' → '개인회생', '역삼동 헬스장' → '헬스장'.
+    BIZ_TO_EN에 이미 등록된 업종 토큰은 절대 제거하지 않음(오제거 방지)."""
+    out = []
+    for tok in _tokenize_biz(keyword):
+        if tok in BIZ_TO_EN:            # 등록된 업종은 그대로 보존
+            out.append(tok)
+            continue
+        if _ADMIN_TOKEN_RE.match(tok):  # 순수 행정구역 토큰은 통째 제거
+            continue
+        # 지역 접두 제거 (긴 지명 우선, 제거 후 남는 글자가 있을 때만)
+        for stem in sorted(_METRO_STEMS, key=len, reverse=True):
+            if tok.startswith(stem) and len(tok) > len(stem):
+                tok = tok[len(stem):]
+                break
+        out.append(tok)
+    return " ".join(out).strip()
 
 
 def _get_en_queries(keyword: str) -> list:
@@ -250,6 +395,14 @@ def _get_en_queries(keyword: str) -> list:
         tl = tok.lower()
         for ko in sorted(BIZ_TO_EN.keys(), key=len, reverse=True):
             if ko in tl:
+                v = BIZ_TO_EN[ko]
+                return v if isinstance(v, list) else [v]
+    # 2.5) 지역명 제거 후 재매핑 (예: '부산개인회생' → '개인회생')
+    cleaned = _strip_region(k)
+    if cleaned and cleaned != k:
+        cl = cleaned.lower()
+        for ko in sorted(BIZ_TO_EN.keys(), key=len, reverse=True):
+            if ko in cl:
                 v = BIZ_TO_EN[ko]
                 return v if isinstance(v, list) else [v]
     # 3) 영문 입력은 그대로 (사용자 오버라이드 케이스)
@@ -881,6 +1034,21 @@ BIZ_TAG_EXCLUDE = {
              "toddler", "baby", "animal", "wildlife"],
     "무인카페": ["animal", "wildlife", "landscape", "fashion", "cosmetic", "fitness",
               "toddler", "baby"],
+    # 법률/금융/전문직 — 결과 hit 태그에 아래 중 하나는 반드시 포함돼야 채택
+    "개인회생": ["law", "lawyer", "legal", "court", "attorney", "justice", "document", "contract", "gavel"],
+    "개인파산": ["law", "lawyer", "legal", "court", "attorney", "document", "gavel"],
+    "법인회생": ["law", "lawyer", "legal", "court", "business", "document", "gavel"],
+    "회생파산": ["law", "lawyer", "legal", "court", "document", "gavel"],
+    "파산": ["law", "lawyer", "legal", "court", "document", "gavel"],
+    "회생": ["law", "lawyer", "legal", "court", "document", "gavel"],
+    "채무조정": ["finance", "debt", "money", "consulting", "document", "calculator", "counseling"],
+    "신용회복": ["finance", "debt", "money", "consulting", "document", "calculator"],
+    "워크아웃": ["finance", "business", "debt", "document", "meeting"],
+    "법률상담": ["law", "lawyer", "legal", "consultation", "office", "document"],
+    "노무사": ["law", "labor", "office", "document", "business", "contract"],
+    "행정사": ["office", "document", "paperwork", "government", "filing"],
+    "손해사정": ["insurance", "document", "claim", "office", "paperwork"],
+    "대출": ["finance", "money", "bank", "loan", "document", "calculator"],
 }
 
 
@@ -901,7 +1069,7 @@ def _tag_exclude_for(keyword: str):
 
 
 def search_images(api_key: str, keyword: str, count: int = 5,
-                  translator=None) -> list[dict]:
+                  translator=None, ai_api_key=None, manual_queries=None) -> list[dict]:
     """Pixabay 이미지 검색 — 키워드 관련성 우선.
 
     translator: 한글 → 영어 콜백 (호출부에서 주입, 예: GPT 번역).
@@ -909,82 +1077,102 @@ def search_images(api_key: str, keyword: str, count: int = 5,
     매핑·번역 모두 실패하면 빈 리스트 반환 (엉뚱한 사진 가져오지 않음)."""
     import random
 
-    queries = _get_en_queries(keyword)
-    # 매핑 실패 시 번역 콜백으로 영어 검색어 생성
-    if not queries and translator:
-        toks = _tokenize_biz(keyword)
-        last = toks[-1] if toks else keyword.strip()
-        if last:
-            try:
-                en = (translator(last) or "").strip()
-                if en and not any(0xAC00 <= ord(c) <= 0xD7A3 for c in en):
-                    queries = [en]
-            except Exception:
-                pass
+    # ── Pixabay 검색어 우선순위 체인 (명문화) ──
+    # 0순위: 사용자가 UI에 직접 입력한 수동 검색어 → AI/테이블/번역 전부 건너뛰고 그대로 사용
+    manual = [q.strip() for q in (manual_queries or []) if q and q.strip()]
+    if manual:
+        queries = manual
+        _override = True
+    else:
+        _override = False
+        # 1순위: AI(gpt-4o-mini) 추출 — 지역/고유명사 제거 + 시각 개념 추상화 (신종 키워드 대응)
+        queries = extract_pixabay_queries(keyword, ai_api_key or _AI_API_KEY)
+        # 2순위 폴백: 하드코딩 매핑 테이블 (API 장애/타임아웃/키없음 대비 비상용)
+        if not queries:
+            queries = _get_en_queries(keyword)
+        # 3순위 폴백: 단순 번역 콜백
+        if not queries and translator:
+            # 지역명을 먼저 발라낸 뒤 번역 (예: '부산개인회생'을 통째 번역하면
+            # 'Busan...'이 되어 바다 사진이 나오던 버그 차단 — 순수 개념만 번역)
+            cleaned_kw = _strip_region(keyword) or (keyword or "")
+            toks = _tokenize_biz(cleaned_kw)
+            last = toks[-1] if toks else cleaned_kw.strip()
+            if last:
+                try:
+                    en = (translator(last) or "").strip()
+                    if en and not any(0xAC00 <= ord(c) <= 0xD7A3 for c in en):
+                        queries = [en]
+                except Exception:
+                    pass
     if not queries:
         # 키워드 관련 영어 검색어를 만들 수 없음 — 엉뚱한 사진을 가져오느니 빈 리스트 반환
         return []
 
     random.shuffle(queries)
-    tag_filter = _tag_filter_for(keyword)
-    tag_exclude = _tag_exclude_for(keyword)
+    # 수동 오버라이드 시에는 업종 태그 필터를 적용하지 않음 (사용자 의도를 그대로 존중)
+    tag_filter = None if _override else _tag_filter_for(keyword)
+    tag_exclude = None if _override else _tag_exclude_for(keyword)
 
-    def _hit_matches(h):
-        tags = (h.get("tags") or "").lower()
-        if tag_exclude and any(t in tags for t in tag_exclude):
-            return False
-        if not tag_filter:
-            return True
-        return any(t in tags for t in tag_filter)
-
-    pool = []
+    # ── 후보 풀을 넉넉히 수집 (per_page=200으로 요청 수 최소화) ──
+    all_hits = []
     seen_ids_in_pool = set()
-    target = count * 4
-
-    # 1차: tag_filter 통과한 결과만 수집 (관련성 우선)
+    target_pool = max(count * 8, 80)
     for q in queries:
         for page in range(1, 4):
-            hits = _fetch_hits(api_key, q, page=page)
+            hits = _fetch_hits(api_key, q, page=page, per_page=200)
             if not hits:
                 break
             for h in hits:
                 hid = h.get("id")
-                if hid and hid not in seen_ids_in_pool and hid not in _USED_IMAGE_IDS and _hit_matches(h):
+                if hid and hid not in seen_ids_in_pool:
                     seen_ids_in_pool.add(hid)
-                    pool.append(h)
-            if len(pool) >= target:
+                    all_hits.append(h)
+            if len(all_hits) >= target_pool:
                 break
-        if len(pool) >= target:
+        if len(all_hits) >= target_pool:
             break
 
-    # 2차: 부족하면 _USED_IMAGE_IDS 캐시만 클리어해서 같은 필터로 다시 시도
-    # (tag_filter는 절대 풀지 않음 — 풀면 엉뚱한 사진 들어옴)
-    if len(pool) < count and _USED_IMAGE_IDS:
-        _USED_IMAGE_IDS.clear()
-        for q in queries:
-            for page in range(1, 4):
-                hits = _fetch_hits(api_key, q, page=page)
-                if not hits:
-                    break
-                for h in hits:
-                    hid = h.get("id")
-                    if hid and hid not in seen_ids_in_pool and _hit_matches(h):
-                        seen_ids_in_pool.add(hid)
-                        pool.append(h)
-                if len(pool) >= target:
-                    break
-            if len(pool) >= target:
-                break
-
-    if not pool:
+    if not all_hits:
         return []
 
-    if len(pool) > count:
-        pool = random.sample(pool, count)
+    def _excluded(h):
+        tags = (h.get("tags") or "").lower()
+        return bool(tag_exclude and any(t in tags for t in tag_exclude))
+
+    def _matches(h):
+        tags = (h.get("tags") or "").lower()
+        return (not tag_filter) or any(t in tags for t in tag_filter)
+
+    # ── 우선순위 티어 분류 ──
+    #  관련성(필터통과) 강 → 약, 그리고 신선(미사용) → 사용됨 순으로 채운다.
+    #  _USED_IMAGE_IDS는 "차단"이 아니라 "신선한 것 우선"용 소프트 신호일 뿐 —
+    #  풀이 말라도 절대 0장이 안 나오게 한다(예전 평생-중복금지 버그 제거).
+    fresh_strong, used_strong, medium, weak = [], [], [], []
+    for h in all_hits:
+        hid = h.get("id")
+        ex = _excluded(h)
+        if _matches(h) and not ex:
+            (used_strong if hid in _USED_IMAGE_IDS else fresh_strong).append(h)
+        elif not ex:
+            medium.append(h)
+        else:
+            weak.append(h)
+
+    for bucket in (fresh_strong, used_strong, medium, weak):
+        random.shuffle(bucket)
+
+    ordered = fresh_strong + used_strong + medium + weak
+    selected = ordered[:count]
+    # 후보 자체가 count보다 적으면 있는 것을 반복해서라도 무조건 count장 채움
+    if selected and len(selected) < count:
+        i = 0
+        while len(selected) < count:
+            selected.append(ordered[i % len(ordered)])
+            i += 1
 
     results = []
     with _USED_IDS_LOCK:
-        for hit in pool[:count]:
+        for hit in selected:
             _USED_IMAGE_IDS.add(hit.get("id"))
             results.append({
                 "id": hit.get("id"),
@@ -1027,13 +1215,19 @@ def add_watermark(img_path: str, text: str) -> None:
         draw = ImageDraw.Draw(overlay)
         bbox = draw.textbbox((0, 0), text, font=font)
         tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        margin = 12
+        margin = max(14, w // 60)
+        pad = max(8, font_size // 4)
         x = w - tw - margin
         y = h - th - margin
-        # 그림자
-        draw.text((x + 2, y + 2), text, font=font, fill=(0, 0, 0, 160))
-        # 흰색 텍스트
-        draw.text((x, y), text, font=font, fill=(255, 255, 255, 220))
+        # 반투명 어두운 배경 박스 — 어떤 사진(밝은/복잡한) 위에서도 업체명이 확실히 보이게
+        box = [x - pad, y - pad, x + tw + pad, y + th + pad]
+        try:
+            draw.rounded_rectangle(box, radius=pad, fill=(0, 0, 0, 140))
+        except Exception:
+            draw.rectangle(box, fill=(0, 0, 0, 140))
+        # 그림자 + 흰색 텍스트 (선명하게)
+        draw.text((x + 2, y + 2), text, font=font, fill=(0, 0, 0, 200))
+        draw.text((x, y), text, font=font, fill=(255, 255, 255, 245))
 
         result = Image.alpha_composite(img, overlay).convert("RGB")
         result.save(img_path, "JPEG", quality=92)
@@ -1041,30 +1235,89 @@ def add_watermark(img_path: str, text: str) -> None:
         print(f"워터마크 실패: {e}")
 
 
+def _diversify_image(img_path: str, allow_flip: bool = True) -> None:
+    """네이버 이미지 중복도 회피용 미세 변형.
+    가장자리 랜덤 크롭 + 밝기/채도 미세 조정 (+ 선택적 좌우반전)으로
+    원본 픽사베이 이미지를 재사용해도 픽셀/지각해시(pHash)가 달라지게 한다.
+    워터마크만으로는 네이버 유사도 검출을 못 피하므로 이 변형을 함께 적용."""
+    try:
+        from PIL import Image, ImageEnhance
+    except ImportError:
+        return
+    import random
+    try:
+        img = Image.open(img_path).convert("RGB")
+        w, h = img.size
+        lx = int(w * random.uniform(0.0, 0.06))
+        ty = int(h * random.uniform(0.0, 0.06))
+        rx = w - int(w * random.uniform(0.0, 0.06))
+        by = h - int(h * random.uniform(0.0, 0.06))
+        if rx - lx > w * 0.5 and by - ty > h * 0.5:
+            img = img.crop((lx, ty, rx, by)).resize((w, h))
+        img = ImageEnhance.Brightness(img).enhance(random.uniform(0.93, 1.07))
+        img = ImageEnhance.Color(img).enhance(random.uniform(0.94, 1.06))
+        if allow_flip and random.random() < 0.5:
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+        img.save(img_path, "JPEG", quality=92)
+    except Exception:
+        pass
+
+
 def download_images(api_key: str, keyword: str, count: int = 5,
-                    watermark_text: str = "", translator=None) -> list[str]:
-    """이미지를 검색하고 임시 폴더에 다운로드, 파일 경로 리스트 반환.
-    translator: BIZ_TO_EN 매핑 실패 시 한글→영어 번역 콜백."""
-    images = search_images(api_key, keyword, count, translator=translator)
+                    watermark_text: str = "", translator=None, ai_api_key=None,
+                    manual_queries=None) -> list[str]:
+    """이미지를 검색·다운로드하고 파일 경로 리스트 반환. **무조건 count장을 채워 반환**한다
+    (다운로드 실패/풀 부족 시 받은 이미지를 복제해서라도 채움 — 0장 절대 금지).
+    각 이미지에 중복도 회피용 미세 변형 + 업체명 워터마크를 적용한다.
+    우선순위: manual_queries(사용자 직접 입력) > ai_api_key(gpt-4o-mini) > 하드코딩 테이블 > translator."""
+    # 다운로드 실패에 대비해 후보를 넉넉히 확보
+    images = search_images(api_key, keyword, max(count * 4, count + 5),
+                           translator=translator, ai_api_key=ai_api_key,
+                           manual_queries=manual_queries)
     if not images:
         return []
 
     temp_dir = tempfile.mkdtemp(prefix="naver_blog_")
     paths = []
+    n = 0
+    for img in images:
+        if len(paths) >= count:
+            break
+        n += 1
+        file_path = os.path.join(temp_dir, f"image_{n}.jpg")
+        ok = False
+        for url in (img.get("large_url"), img.get("url")):  # large 실패 시 webformat 재시도
+            if not url:
+                continue
+            try:
+                resp = requests.get(url, timeout=30)
+                resp.raise_for_status()
+                with open(file_path, "wb") as f:
+                    f.write(resp.content)
+                ok = True
+                break
+            except Exception as e:
+                print(f"이미지 다운로드 재시도 ({n}): {e}")
+        if not ok:
+            continue
+        _diversify_image(file_path)              # 중복도 회피 미세 변형 (워터마크 전)
+        if watermark_text:
+            add_watermark(file_path, watermark_text)
+        paths.append(file_path)
 
-    for i, img in enumerate(images):
-        try:
-            resp = requests.get(img["large_url"], timeout=30)
-            resp.raise_for_status()
-
-            ext = "jpg"
-            file_path = os.path.join(temp_dir, f"image_{i+1}.{ext}")
-            with open(file_path, "wb") as f:
-                f.write(resp.content)
-            if watermark_text:
-                add_watermark(file_path, watermark_text)
-            paths.append(file_path)
-        except Exception as e:
-            print(f"이미지 다운로드 실패 ({i+1}): {e}")
+    # 무조건 count장 보장 — 후보 소진/다운로드 실패로 모자라면 복제(+재변형)해서 채움
+    if paths and len(paths) < count:
+        import shutil as _sh
+        i = 0
+        while len(paths) < count:
+            src = paths[i % len(paths)]
+            dst = os.path.join(temp_dir, f"image_dup_{len(paths) + 1}.jpg")
+            try:
+                _sh.copyfile(src, dst)
+                _diversify_image(dst, allow_flip=False)  # 복제본도 살짝 다르게 (워터마크 글자 보존 위해 반전 X)
+                paths.append(dst)
+            except Exception:
+                break
+            i += 1
 
     return paths
