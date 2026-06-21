@@ -15,7 +15,8 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None, is_admin=False, app_user="admin"):
         super().__init__(parent)
         self.setWindowTitle("환경설정")
-        self.setFixedSize(550, 620)
+        self.setMinimumWidth(550)
+        self.resize(560, 640)
         # 라이트 팔레트 강제 (Windows 다크모드 대응)
         self.setStyleSheet(
             "QDialog { background: #ffffff; color: #1e293b; }"
@@ -35,10 +36,20 @@ class SettingsDialog(QDialog):
 
     def _build_ui(self):
         main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 8)
 
-        # ── 설정 ──
+        # ── 상단 탭 ──
+        self.top_tabs = QTabWidget()
+        self.top_tabs.setStyleSheet(
+            "QTabBar::tab { background: #f1f5f9; color: #1e293b; padding: 8px 22px; font-size: 12px; }"
+            "QTabBar::tab:selected { background: #ffffff; color: #4a6cf7; font-weight: bold; }"
+        )
+        main_layout.addWidget(self.top_tabs, 1)
+
+        # ── 설정 탭 ──
         settings_tab = QWidget()
-        main_layout.addWidget(settings_tab)
+        self.top_tabs.addTab(settings_tab, "⚙️ 설정")
         settings_layout = QVBoxLayout(settings_tab)
 
         scroll = QScrollArea()
@@ -267,6 +278,14 @@ class SettingsDialog(QDialog):
         layout.addStretch()
         scroll.setWidget(scroll_widget)
         settings_layout.addWidget(scroll)
+
+        # ── 구독 현황 탭 ──
+        sub_tab = QWidget()
+        sub_layout = QVBoxLayout(sub_tab)
+        sub_layout.setContentsMargins(16, 12, 16, 12)
+        sub_layout.setSpacing(10)
+        self.top_tabs.addTab(sub_tab, "💳 구독 현황")
+        self._build_subscription_tab(sub_layout)
 
         # ── 버튼 ──
         btn_layout = QHBoxLayout()
@@ -522,6 +541,7 @@ class SettingsDialog(QDialog):
         if active // 3 < len(self.myeong_sub_tabs):
             self.myeong_sub_tabs[active // 3].setCurrentIndex(active % 3)
         self._update_myeong_expires_labels()
+        self._update_subscription_status()
 
         # SMTP 설정 로드 (관리자)
         if self.is_admin:
@@ -689,3 +709,221 @@ class SettingsDialog(QDialog):
 
         QMessageBox.information(self, "저장 완료", "설정이 저장되었습니다.")
 
+    # ─────────────────────────────────────────
+    # 구독 현황 탭
+    # ─────────────────────────────────────────
+    def _build_subscription_tab(self, layout):
+        if self.is_admin:
+            self._build_admin_subscription(layout)
+        else:
+            self._build_user_subscription(layout)
+
+    def _build_user_subscription(self, layout):
+        BOLD = QFont("맑은 고딕", 13, QFont.Bold)
+        hdr = QLabel("내 구독 현황")
+        hdr.setFont(BOLD)
+        hdr.setStyleSheet("color: #1e293b; margin-bottom: 4px;")
+        layout.addWidget(hdr)
+
+        self.sub_status_labels = []
+        SLOT_NAMES = ["명의 1 (아이디 1~3)", "명의 2 (아이디 4~6)", "명의 3 (아이디 7~9)"]
+
+        for i, name in enumerate(SLOT_NAMES):
+            frame = QFrame()
+            frame.setObjectName("subCard")
+            frame.setStyleSheet(
+                "QFrame#subCard { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }"
+            )
+            fl = QVBoxLayout(frame)
+            fl.setContentsMargins(14, 10, 14, 10)
+            fl.setSpacing(6)
+
+            name_lbl = QLabel(f"<b>{name}</b>")
+            name_lbl.setStyleSheet("background: transparent; border: none; font-size: 13px; color: #1e293b;")
+            fl.addWidget(name_lbl)
+
+            row1 = QHBoxLayout()
+            base_lbl = QLabel("기본 구독: 로딩 중...")
+            base_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px;")
+            row1.addWidget(base_lbl, 1)
+            btn_base = QPushButton("갱신")
+            btn_base.setFixedHeight(26)
+            btn_base.setStyleSheet("padding: 2px 12px; font-size: 11px; color: #6366f1; background: transparent; border: 1px solid #6366f1; border-radius: 4px;")
+            btn_base.setCursor(Qt.PointingHandCursor)
+            btn_base.clicked.connect(self._open_payment)
+            row1.addWidget(btn_base)
+            fl.addLayout(row1)
+
+            row2 = QHBoxLayout()
+            api_lbl = QLabel("GPT API 구독: 로딩 중...")
+            api_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px;")
+            row2.addWidget(api_lbl, 1)
+            btn_api = QPushButton("갱신")
+            btn_api.setFixedHeight(26)
+            btn_api.setStyleSheet("padding: 2px 12px; font-size: 11px; color: #6366f1; background: transparent; border: 1px solid #6366f1; border-radius: 4px;")
+            btn_api.setCursor(Qt.PointingHandCursor)
+            btn_api.clicked.connect(self._open_payment)
+            row2.addWidget(btn_api)
+            fl.addLayout(row2)
+
+            self.sub_status_labels.append((base_lbl, api_lbl))
+            layout.addWidget(frame)
+
+        layout.addStretch()
+
+        btn_refresh = QPushButton("🔄 구독 현황 새로고침")
+        btn_refresh.setStyleSheet(
+            "QPushButton { padding: 6px 20px; font-size: 12px; color: #4a6cf7; background: transparent; border: 1px solid #4a6cf7; border-radius: 6px; }"
+            "QPushButton:hover { background: #eff3ff; }"
+        )
+        btn_refresh.setCursor(Qt.PointingHandCursor)
+        btn_refresh.clicked.connect(self._refresh_subscription)
+        layout.addWidget(btn_refresh, alignment=Qt.AlignCenter)
+
+    def _build_admin_subscription(self, layout):
+        BOLD = QFont("맑은 고딕", 13, QFont.Bold)
+        hdr = QLabel("구독 관리 (관리자)")
+        hdr.setFont(BOLD)
+        hdr.setStyleSheet("color: #1e293b; margin-bottom: 4px;")
+        layout.addWidget(hdr)
+
+        user_row = QHBoxLayout()
+        user_row.addWidget(QLabel("사용자:"))
+        self.sub_user_combo = QComboBox()
+        self.sub_user_combo.setStyleSheet("padding: 4px; min-height: 28px;")
+        user_row.addWidget(self.sub_user_combo, 1)
+        btn_load = QPushButton("불러오기")
+        btn_load.setStyleSheet(
+            "QPushButton { padding: 4px 14px; font-size: 12px; color: #4a6cf7; border: 1px solid #4a6cf7; border-radius: 4px; background: transparent; }"
+            "QPushButton:hover { background: #eff3ff; }"
+        )
+        btn_load.setCursor(Qt.PointingHandCursor)
+        btn_load.clicked.connect(self._admin_load_user_sub)
+        user_row.addWidget(btn_load)
+        layout.addLayout(user_row)
+
+        FIELDS = [
+            ("기본 구독 명의 1", "expires"),
+            ("기본 구독 명의 2", "expires_2"),
+            ("기본 구독 명의 3", "expires_3"),
+            ("API 구독 명의 1",  "api_expires"),
+            ("API 구독 명의 2",  "api_expires_2"),
+            ("API 구독 명의 3",  "api_expires_3"),
+        ]
+        self.admin_sub_fields = {}
+        for label, key in FIELDS:
+            row = QHBoxLayout()
+            lbl = QLabel(label)
+            lbl.setMinimumWidth(130)
+            row.addWidget(lbl)
+            e = QLineEdit()
+            e.setPlaceholderText("YYYY-MM-DD  (빈칸=미구독)")
+            e.setStyleSheet("padding: 5px;")
+            row.addWidget(e, 1)
+            layout.addLayout(row)
+            self.admin_sub_fields[key] = e
+
+        btn_save = QPushButton("💾 구독 정보 저장")
+        btn_save.setStyleSheet(
+            "QPushButton { background: #4a6cf7; color: white; border: none; border-radius: 6px; padding: 8px 24px; font-size: 12px; font-weight: bold; }"
+            "QPushButton:hover { background: #3b5de7; }"
+        )
+        btn_save.setCursor(Qt.PointingHandCursor)
+        btn_save.clicked.connect(self._admin_save_user_sub)
+        layout.addWidget(btn_save, alignment=Qt.AlignCenter)
+
+        layout.addStretch()
+        self._admin_fill_user_combo()
+
+    def _admin_fill_user_combo(self):
+        from users import load_users as _lu
+        users = _lu()
+        self.sub_user_combo.clear()
+        for uid in sorted(users.keys()):
+            if uid == "admin":
+                continue
+            u = users[uid]
+            name = (u.get("name") or "").strip()
+            display = f"{uid}  ({name})" if name else uid
+            self.sub_user_combo.addItem(display, userData=uid)
+
+    def _admin_load_user_sub(self):
+        from users import load_users as _lu
+        uid = self.sub_user_combo.currentData()
+        if not uid:
+            QMessageBox.warning(self, "선택 오류", "사용자를 선택하세요.")
+            return
+        u = _lu().get(uid, {})
+        for key, e in self.admin_sub_fields.items():
+            e.setText((u.get(key) or "").strip())
+
+    def _admin_save_user_sub(self):
+        from users import update_user as _upd
+        uid = self.sub_user_combo.currentData()
+        if not uid:
+            QMessageBox.warning(self, "선택 오류", "사용자를 선택하세요.")
+            return
+        kwargs = {key: e.text().strip() for key, e in self.admin_sub_fields.items()}
+        try:
+            _upd(uid, **kwargs)
+            QMessageBox.information(self, "저장 완료", f"{uid}의 구독 정보가 저장되었습니다.")
+        except Exception as ex:
+            QMessageBox.critical(self, "저장 실패", str(ex))
+
+    def _open_payment(self):
+        parent = self.parent()
+        if parent and hasattr(parent, "_open_payment_dialog"):
+            parent._open_payment_dialog()
+        else:
+            QMessageBox.information(self, "안내", "메인 화면에서 '구독 연장' 버튼을 이용하세요.")
+
+    def _refresh_subscription(self):
+        from users import load_users as _lu
+        u = _lu().get(self.app_user, {})
+        parent = self.parent()
+        if parent:
+            cu = dict(getattr(parent, "current_user", {}))
+            for k in ["expires", "expires_2", "expires_3", "api_expires", "api_expires_2", "api_expires_3"]:
+                cu[k] = u.get(k, "")
+            parent.current_user = cu
+        self._update_subscription_status(u)
+
+    def _update_subscription_status(self, user=None):
+        if not hasattr(self, "sub_status_labels"):
+            return
+        import datetime as _dt
+        if user is None:
+            parent = self.parent()
+            user = getattr(parent, "current_user", {}) if parent else {}
+        today = _dt.date.today()
+        BASE_FIELDS = ["expires", "expires_2", "expires_3"]
+        API_FIELDS  = ["api_expires", "api_expires_2", "api_expires_3"]
+
+        def _fmt(exp_str):
+            s = (exp_str or "").strip()
+            if not s:
+                return "❌ 미구독", "#ef4444"
+            try:
+                d = _dt.date.fromisoformat(s)
+                days = (d - today).days
+                if days < 0:
+                    return f"❌ 만료됨 ({s})", "#ef4444"
+                color = "#22c55e" if days >= 31 else "#f59e0b" if days >= 8 else "#ef4444"
+                return f"✅ {days}일 남음 ({s})", color
+            except Exception:
+                return "? 알 수 없음", "#94a3b8"
+
+        is_admin_user = (user.get("role") == "admin" or self.is_admin)
+        for i, (base_lbl, api_lbl) in enumerate(self.sub_status_labels):
+            if is_admin_user:
+                base_lbl.setText("기본 구독: ♾️ 무제한")
+                base_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px; color: #22c55e;")
+                api_lbl.setText("GPT API 구독: ♾️ 무제한")
+                api_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px; color: #22c55e;")
+            else:
+                b_txt, b_col = _fmt(user.get(BASE_FIELDS[i], ""))
+                a_txt, a_col = _fmt(user.get(API_FIELDS[i], ""))
+                base_lbl.setText(f"기본 구독: {b_txt}")
+                base_lbl.setStyleSheet(f"background: transparent; border: none; font-size: 12px; color: {b_col};")
+                api_lbl.setText(f"GPT API 구독: {a_txt}")
+                api_lbl.setStyleSheet(f"background: transparent; border: none; font-size: 12px; color: {a_col};")

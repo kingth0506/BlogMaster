@@ -94,6 +94,11 @@ def load_users() -> dict:
                 "pw": data.get("pw", ""),
                 "role": data.get("role", "user"),
                 "expires": data.get("expires", ""),
+                "expires_2": data.get("expires_2", ""),
+                "expires_3": data.get("expires_3", ""),
+                "api_expires": data.get("api_expires", ""),
+                "api_expires_2": data.get("api_expires_2", ""),
+                "api_expires_3": data.get("api_expires_3", ""),
                 "max_accounts": int(data.get("max_accounts", 3)),
                 "name": data.get("name", ""),
                 "birth": data.get("birth", ""),
@@ -131,6 +136,11 @@ def save_users(users: dict):
                 "pw": u.get("pw", ""),
                 "role": u.get("role", "user"),
                 "expires": u.get("expires", ""),
+                "expires_2": u.get("expires_2", ""),
+                "expires_3": u.get("expires_3", ""),
+                "api_expires": u.get("api_expires", ""),
+                "api_expires_2": u.get("api_expires_2", ""),
+                "api_expires_3": u.get("api_expires_3", ""),
                 "max_accounts": int(u.get("max_accounts", 3)),
                 "name": u.get("name", ""),
                 "birth": u.get("birth", ""),
@@ -191,7 +201,10 @@ def create_user(username: str, password: str, role: str = "user", expires: str =
     return True
 
 
-def update_user(username: str, password=None, role=None, expires=None, expires_2=None, expires_3=None, max_accounts=None, email=None, shared_api_keys=None, api_keys=None, accounts=None, locked_naver_ids=None, prompts=None, keywordmaster_enabled=None) -> bool:
+def update_user(username: str, password=None, role=None, expires=None, expires_2=None, expires_3=None,
+                api_expires=None, api_expires_2=None, api_expires_3=None,
+                max_accounts=None, email=None, shared_api_keys=None, api_keys=None,
+                accounts=None, locked_naver_ids=None, prompts=None, keywordmaster_enabled=None) -> bool:
     users = load_users()
     u = users.get(username)
     if not u:
@@ -206,6 +219,12 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
         u["expires_2"] = expires_2
     if expires_3 is not None:
         u["expires_3"] = expires_3
+    if api_expires is not None:
+        u["api_expires"] = api_expires
+    if api_expires_2 is not None:
+        u["api_expires_2"] = api_expires_2
+    if api_expires_3 is not None:
+        u["api_expires_3"] = api_expires_3
     if max_accounts is not None:
         u["max_accounts"] = int(max_accounts)
     if email is not None:
@@ -232,6 +251,19 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
             print(f"[users.update_user] Firebase 쓰기 실패 ({username}): {e}", file=sys.stderr)
     _save_local(users)
     return True
+
+
+def is_api_expired(user: dict, slot: int = 1) -> bool:
+    """API 구독 만료 여부. slot=1,2,3. 빈 문자열이면 구독 없음(만료 취급)."""
+    key = "api_expires" if slot == 1 else f"api_expires_{slot}"
+    exp = (user.get(key) or "").strip()
+    if not exp:
+        return True
+    try:
+        d = datetime.datetime.strptime(exp, "%Y-%m-%d").date()
+        return datetime.date.today() > d
+    except Exception:
+        return True
 
 
 def delete_user(username: str) -> bool:

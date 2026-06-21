@@ -21,10 +21,13 @@ def get_service():
         creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception:
+                return None
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET, SCOPES)
-            creds = flow.run_local_server(port=0)
+            # 토큰 없으면 자동 로그인창 띄우지 않고 스킵
+            return None
         with open(TOKEN_FILE, "w") as f:
             f.write(creds.to_json())
     return build("drive", "v3", credentials=creds)
@@ -95,6 +98,8 @@ def upload_log_file(local_path: str, account_folder_name: str, parent_folder_id:
         return
     try:
         service = get_service()
+        if service is None:
+            return
         sub_id = get_or_create_folder(service, f"{LOGS_FOLDER_PREFIX}{account_folder_name}", parent_folder_id)
         file_name = os.path.basename(local_path)
         media = MediaFileUpload(local_path, resumable=False)
@@ -112,6 +117,8 @@ def delete_log_file(file_name: str, account_folder_name: str, parent_folder_id: 
     """Drive의 account 서브폴더에서 파일 삭제"""
     try:
         service = get_service()
+        if service is None:
+            return
         q = (f"name='{LOGS_FOLDER_PREFIX}{account_folder_name}' and '{parent_folder_id}' in parents"
              f" and mimeType='application/vnd.google-apps.folder' and trashed=false")
         results = service.files().list(q=q, fields="files(id)").execute()

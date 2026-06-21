@@ -29,6 +29,7 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
+                {"role": "system", "content": "너는 블로그 글쓰기 전문가다. 주어진 지시사항에 따라 블로그 본문만 작성한다. 평가·칭찬·설명·인사 없이 오직 블로그 본문 텍스트만 출력한다."},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.8,
@@ -157,8 +158,12 @@ def _title_blacklist(place: dict, keyword: str) -> list:
             items.update(["헬스", "헬스장", "피트니스", "gym"])
         if "네일" in biz:
             items.update(["네일", "네일샵", "네일아트"])
-    # 항상 차단할 문구
-    _BLOCKED_PHRASES = ["내돈내산", "솔직후기", "솔직 후기", "직접 방문", "방문 후기"]
+    # 항상 차단할 문구 (가격 관련 단어 포함)
+    _BLOCKED_PHRASES = [
+        "내돈내산", "솔직후기", "솔직 후기", "직접 방문", "방문 후기",
+        "이용권", "가격", "요금", "만원", "천원", "원권", "월정액", "회원권", "할인", "쿠폰",
+        "일일", "1일", "무료체험",
+    ]
     items.update(_BLOCKED_PHRASES)
     return [x for x in items if x and len(x) >= 2]
 
@@ -293,12 +298,12 @@ def _build_full_title(place: dict, keyword: str, suffix: str) -> str:
         prefix = free_text if free_text else biz_type
     elif ptype == "dong":
         loc = _pick_dong_level()
-        prefix = f"{loc} {biz_type}" if loc else biz_type
+        prefix = f"{loc}{biz_type}" if loc else biz_type
     elif ptype == "station":
-        prefix = f"{station}역 {biz_type}" if station else biz_type
+        prefix = f"{station}역{biz_type}" if station else biz_type
     elif ptype == "gu":
         loc = _pick_gu_level()
-        prefix = f"{loc} {biz_type}" if loc else biz_type
+        prefix = f"{loc}{biz_type}" if loc else biz_type
     else:
         prefix = biz_type
 
@@ -307,11 +312,11 @@ def _build_full_title(place: dict, keyword: str, suffix: str) -> str:
         loc_d = _pick_dong_level()
         loc_g = _pick_gu_level()
         if loc_d:
-            prefix = f"{loc_d} {biz_type}"
+            prefix = f"{loc_d}{biz_type}"
         elif station:
             prefix = f"{station}역 {biz_type}"
         elif loc_g:
-            prefix = f"{loc_g} {biz_type}"
+            prefix = f"{loc_g}{biz_type}"
 
     if suffix:
         blacklist = _title_blacklist(place, keyword)
