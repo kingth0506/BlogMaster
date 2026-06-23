@@ -3,7 +3,21 @@
 import json
 import os
 
-PROMPTS_FILE = os.path.join(os.path.dirname(__file__), "prompts.json")
+def _prompts_file() -> str:
+    """프롬프트 저장/읽기 경로.
+    편집 다이얼로그(ensure_from_bundle → %APPDATA%\\NaverBlogAuto)와 반드시 같은
+    사용자 데이터 폴더를 써야 저장한 프롬프트가 글 생성에 반영된다.
+    (과거: dirname(__file__) = 번들 read-only 경로라 설치본에서 편집분이 무시됐음)"""
+    try:
+        from app_paths import data_file, ensure_from_bundle
+        ensure_from_bundle("prompts.json")  # 최초 1회 번들 기본값을 사용자 폴더로 복사
+        return data_file("prompts.json")
+    except Exception:
+        return os.path.join(os.path.dirname(__file__), "prompts.json")
+
+
+# 하위호환: 모듈 로드시 한 번 경로 계산 (직접 참조하는 외부 코드 대비)
+PROMPTS_FILE = _prompts_file()
 
 DEFAULT_PROMPTS = {
     "기본": {
@@ -87,11 +101,12 @@ DEFAULT_PROMPTS = {
 
 
 def load_prompts() -> dict:
-    if os.path.exists(PROMPTS_FILE):
+    path = _prompts_file()
+    if os.path.exists(path):
         try:
-            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 saved = json.load(f)
-            # 기본 프롬프트와 병합
+            # 기본 프롬프트와 병합 (저장본이 기본을 덮어씀)
             merged = {**DEFAULT_PROMPTS, **saved}
             return merged
         except Exception:
@@ -100,7 +115,7 @@ def load_prompts() -> dict:
 
 
 def save_prompts(prompts: dict):
-    with open(PROMPTS_FILE, "w", encoding="utf-8") as f:
+    with open(_prompts_file(), "w", encoding="utf-8") as f:
         json.dump(prompts, f, ensure_ascii=False, indent=2)
 
 

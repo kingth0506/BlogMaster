@@ -172,9 +172,21 @@ def verify(username: str, password: str):
 
 
 def is_expired(user: dict) -> bool:
-    exp = (user.get("expires") or "").strip()
-    if not exp:
+    return is_account_expired(user, slot=1)
+
+
+def is_account_expired(user: dict, slot: int = 1) -> bool:
+    """명의(계정 슬롯)별 이용기간 만료 여부. slot=1,2,3.
+    - 관리자: 항상 False
+    - 1명의 빈값: 무제한(관리자 부여/레거시) → 만료 아님
+    - 2·3명의 빈값: '사용 불가'(무료 제공 안 함) → 만료 취급(차단)
+    - 날짜 있으면: 오늘 > 만료일 이면 만료"""
+    if (user or {}).get("role") == "admin":
         return False
+    field = "expires" if slot == 1 else f"expires_{slot}"
+    exp = (user.get(field) or "").strip()
+    if not exp:
+        return True  # 빈값 = 사용불가(차단). 무제한은 먼 미래 날짜(2099-12-31)로 부여한다.
     try:
         d = datetime.datetime.strptime(exp, "%Y-%m-%d").date()
         return datetime.date.today() > d

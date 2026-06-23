@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "1.8.8"
+APP_VERSION = "1.8.9"
 
 import os
 import sys
@@ -1244,6 +1244,14 @@ class MainWindow(QMainWindow):
         self._load_keyword_history()
         bid = cfg.get('accounts', [{}])[idx].get('blog_id', '') or '(미설정)'
         self._emit_log(f"계정 전환: {idx+1}번 ({bid})")
+        # 전환된 명의의 만료 상태를 봇1에 즉시 반영
+        try:
+            if self._is_user_expired():
+                self._show_expired_bot1()
+            else:
+                self._clear_expired_bot1()
+        except Exception:
+            pass
 
     def _current_blog_id(self) -> str:
         try:
@@ -1438,7 +1446,65 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        pass
+        # 만료 사용자: 진입 즉시 봇1에 '이용기간 만료' 표시
+        if self._is_user_expired():
+            self._show_expired_bot1()
+
+    def _is_user_expired(self) -> bool:
+        """현재 '활성 명의(아이디 드롭다운)'의 이용기간 만료 여부 (관리자는 항상 False).
+        active_account 인덱스(0/1/2) → 명의 슬롯(1/2/3)로 매핑해 해당 슬롯 만료를 본다."""
+        try:
+            from users import is_account_expired
+            from config import load_config
+            slot = int((load_config() or {}).get("active_account", 0) or 0) + 1
+            return is_account_expired(getattr(self, "current_user", {}) or {}, slot)
+        except Exception:
+            return False
+
+    def _show_expired_bot1(self):
+        """크롤링 현황 봇1 영역에 '이용기간 만료'를 현재 폰트보다 2pt 크게(빨강) 표시."""
+        try:
+            lbls = getattr(self, "crawl_worker_region_labels", None)
+            if lbls:
+                lbls[0].setText("이용기간 만료")
+                # 봇 지역 라벨 기본 11px → +2pt = 13px
+                lbls[0].setStyleSheet("font-size: 13px; color: #ef4444; font-weight: bold; padding-left: 4px;")
+        except Exception:
+            pass
+        try:
+            logs = getattr(self, "crawl_worker_logs", None)
+            if logs:
+                # 봇 로그 기본 11px → +2pt = 13px
+                logs[0].setHtml("<div style='color:#ef4444;font-size:13px;font-weight:bold;'>이용기간 만료</div>")
+        except Exception:
+            pass
+
+    def _clear_expired_bot1(self):
+        """봇1의 '이용기간 만료' 표시 해제 (정상 명의로 전환 시)."""
+        try:
+            lbls = getattr(self, "crawl_worker_region_labels", None)
+            if lbls:
+                lbls[0].setText("")
+                lbls[0].setStyleSheet("font-size: 11px; color: #334155; font-weight: bold; padding-left: 4px;")
+        except Exception:
+            pass
+        try:
+            logs = getattr(self, "crawl_worker_logs", None)
+            if logs:
+                logs[0].clear()
+        except Exception:
+            pass
+
+    def _block_if_expired(self) -> bool:
+        """만료면 봇1에 표시하고 안내 후 True(차단) 반환. 정상이면 False."""
+        if self._is_user_expired():
+            self._show_expired_bot1()
+            try:
+                QMessageBox.warning(self, "이용기간 만료", "이용기간 만료")
+            except Exception:
+                pass
+            return True
+        return False
 
     def _normalize_post_images(self, pix_key: str):
         """각 포스트의 실제 저장 이미지 갯수를 image_count에 맞춰 평준화
@@ -1763,7 +1829,8 @@ class MainWindow(QMainWindow):
             for d in dists:
                 child = QTreeWidgetItem(parent, [d])
                 child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
-                key = f"{sido} {d}"
+                # 시도명이 구 이름에 이미 포함되면 중복 제거 (세종/세종시 → 세종시, 제주/제주시 → 제주시)
+                key = d if d.startswith(sido) else f"{sido} {d}"
                 child.setCheckState(0, Qt.Checked if key in selected_set else Qt.Unchecked)
         # 시·도 항목들은 기본 접힘 — 사용자가 클릭해서 펼치도록
         tree.collapseAll()
@@ -1807,7 +1874,8 @@ class MainWindow(QMainWindow):
                 for i in range(parent.childCount()):
                     ch = parent.child(i)
                     if ch.checkState(0) == Qt.Checked:
-                        picked.append(f"{sido} {ch.text(0)}")
+                        _ct = ch.text(0)
+                        picked.append(_ct if _ct.startswith(sido) else f"{sido} {_ct}")
             self._selected_regions = picked
             self._save_selected_regions()
             self._refresh_regions_button()
@@ -2087,15 +2155,14 @@ class MainWindow(QMainWindow):
         for i, key in enumerate(["expires", "expires_2", "expires_3"]):
             exp = (user.get(key) or "").strip()
             if not exp:
-                if i == 0:
-                    parts.append(("<span style='color:#22c55e'>무료</span>", "#22c55e"))
-                else:
-                    parts.append(("<span style='color:#94a3b8'>0일</span>", "#94a3b8"))
+                parts.append(("<span style='color:#ef4444'>사용불가</span>", "#ef4444"))
             else:
                 try:
                     y, m, d = map(int, exp.split("-"))
                     days = (_dt.date(y, m, d) - today).days
-                    if days < 0:
+                    if days > 3650:
+                        parts.append(("<span style='color:#22c55e'>무제한</span>", "#22c55e"))
+                    elif days < 0:
                         parts.append(("<span style='color:#ef4444'>만료</span>", "#ef4444"))
                     else:
                         c = "#22c55e" if days >= 31 else "#f59e0b" if days >= 8 else "#ef4444"
@@ -2139,14 +2206,15 @@ class MainWindow(QMainWindow):
 
         def _status_txt(idx):
             days = _d[idx]
-            if days is None:   return "♾️ 무제한"
+            if days is None:   return "❌ 사용불가"
+            elif days > 3650:  return "♾️ 무제한"
             elif days > 0:     return f"✅ {days}일 남음"
-            elif idx == 0:     return "🆓 무료체험 가능"
-            else:              return "❌ 미구독"
+            else:              return "❌ 만료"
 
         def _api_status_txt(idx):
             days = _ad[idx]
-            if days is None:   return "♾️ 무제한"
+            if days is None:   return "❌ 미구독"
+            elif days > 3650:  return "♾️ 무제한"
             elif days > 0:     return f"✅ {days}일 남음"
             else:              return "❌ 미구독"
 
@@ -2910,6 +2978,8 @@ class MainWindow(QMainWindow):
         return True
 
     def _start_crawl(self):
+        if self._block_if_expired():
+            return
         if not self._check_api_keys():
             return
         _url_mode = self._radio_url.isChecked()
@@ -3322,6 +3392,8 @@ class MainWindow(QMainWindow):
 
     # ── 생성된 포스트 보기 (크롤 업체 목록 + 생성여부 표시) ──
     def _view_generated_posts(self):
+        if self._block_if_expired():
+            return
         posts = self._load_generated_posts()
         self._generated_posts = posts
 
@@ -3975,6 +4047,8 @@ class MainWindow(QMainWindow):
         return []
 
     def _generate_posts(self):
+        if self._block_if_expired():
+            return
         if not self._check_api_keys():
             return
         # 크롤 결과 파일에서 스냅샷 로드 (크롤이 동시에 돌아도 안 꼬이게)
@@ -4450,6 +4524,7 @@ class MainWindow(QMainWindow):
                 try:
                     _pl("기존 예약 발행 확인 중...")
                     existing = poster.peek_reservations()
+                    _resv_total = getattr(poster, "reservation_total", -1)
                     if existing:
                         reserved_count = len(existing)
                         latest = max(existing)
@@ -4460,6 +4535,13 @@ class MainWindow(QMainWindow):
                             _pl(f"→ 기존 예약 뒤로 이어 예약 ({base_time.strftime('%Y-%m-%d %H:%M')} 이후)")
                     else:
                         _pl("기존 예약 없음 — 첫 글 즉시발행 + 나머지 예약")
+                    # 예약 목록 패널은 가상 스크롤이라 날짜 개수가 실제보다 적게 읽힘.
+                    # 네이버 '예약 발행 N건' 라벨이 정확한 총수 → 99 한도 판정은 이 값으로 보정.
+                    if isinstance(_resv_total, int) and _resv_total > reserved_count:
+                        reserved_count = _resv_total
+                        _pl(f"네이버 예약 카운트 보정: 실제 예약 {reserved_count}건 (99 한도 기준)")
+                        if reserved_count > 0:
+                            first_immediate = False
                 except Exception as _pe:
                     _pl(f"기존 예약 조회 실패: {_pe} — 첫 글 즉시발행으로 진행")
                     first_immediate = True
@@ -5441,6 +5523,8 @@ class MainWindow(QMainWindow):
 
     # ── 블로그 포스팅 ──
     def _start_blog_posting(self):
+        if self._block_if_expired():
+            return
         # 크롤링 결과 불러오기 (현재 없으면 logs에서 로드)
         if not self.crawled_data:
             log_dir = self._get_logs_dir()
@@ -5906,10 +5990,8 @@ class LoginDialog(QDialog):
             self.msg.setStyleSheet("color: #ef4444; font-size: 11px;")
             self.msg.setText("아이디 또는 비밀번호가 틀렸습니다.")
             return
-        if is_expired(user):
-            self.msg.setStyleSheet(u"color: #ef4444; font-size: 11px;")
-            self.msg.setText(f"사용 기간 만료 ({user.get('expires','')})")
-            return
+        # 만료 사용자도 로그인은 허용 — 메인 화면 진입 후 모든 기능을 '이용기간 만료'로 차단한다.
+        # (관리자는 is_expired에서 항상 False라 영향 없음)
         if user.get("role") != "admin" and check_session_conflict(uid):
             self.msg.setStyleSheet("color: #ef4444; font-size: 11px;")
             self.msg.setText("이미 다른 기기에서 로그인 중입니다.")
@@ -6126,8 +6208,16 @@ class ExpiresEditor(QWidget):
         btn_inf.setFixedWidth(54)
         btn_inf.setStyleSheet("padding: 2px; font-size: 10px;")
         btn_inf.setCursor(Qt.PointingHandCursor)
-        btn_inf.clicked.connect(lambda: self.line.setText(""))
+        btn_inf.clicked.connect(lambda: self.line.setText("2099-12-31"))
         layout.addWidget(btn_inf)
+
+        # 사용불가 — 칸을 비워 빈값(=차단) 상태로. 빈칸이면 placeholder에 '사용불가' 표시됨
+        btn_block = QPushButton("사용불가")
+        btn_block.setFixedWidth(60)
+        btn_block.setStyleSheet("padding: 2px; font-size: 10px; color: #ef4444;")
+        btn_block.setCursor(Qt.PointingHandCursor)
+        btn_block.clicked.connect(lambda: self.line.setText(""))
+        layout.addWidget(btn_block)
         layout.addStretch()
 
     def _open_calendar(self):
@@ -6201,7 +6291,8 @@ class MyeongExpWidget(QWidget):
         if self._orig[idx] is None:
             self._editor.line.setPlaceholderText("미구독")
         else:
-            self._editor.line.setPlaceholderText("무제한")
+            # 빈값 = 사용불가 (무제한은 2099-12-31 날짜로 부여)
+            self._editor.line.setPlaceholderText("사용불가")
         for i, btn in enumerate(self._btns):
             btn.setChecked(i == idx)
             if i == idx:

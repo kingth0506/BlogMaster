@@ -1210,17 +1210,30 @@ class NaverBlogPoster:
         import datetime as _dt
         import re as _re
         try:
-            # 1) 예약 발행 [N]건 버튼 클릭
+            # 1) 예약 발행 [N]건 버튼 클릭 — 버튼 라벨의 'N건' 총수도 함께 캡처
+            #    (예약 목록 패널은 가상 스크롤이라 날짜 span이 실제 예약 수보다 적게 렌더됨.
+            #     'N건' 라벨이 정확한 총 예약 수이므로 99 한도 판정에 사용 — self.reservation_total)
+            self.reservation_total = -1
             click_res = self.driver.execute_script(r"""
                 const btns = document.querySelectorAll('button[class*="reserve_btn"], button[data-click-area*="schedule"]');
                 for (const b of btns) {
                     const r = b.getBoundingClientRect();
-                    if (r.width > 0 && r.height > 0) { b.click(); return 'clicked'; }
+                    if (r.width > 0 && r.height > 0) {
+                        const m = ((b.textContent||'').trim()).match(/(\d+)\s*건/);
+                        b.click();
+                        return {ok: true, total: m ? parseInt(m[1], 10) : -1};
+                    }
                 }
-                return 'no_btn';
+                return {ok: false, total: -1};
             """)
             _dlog(f"예약 목록 버튼 클릭: {click_res}")
-            if click_res != 'clicked':
+            try:
+                if isinstance(click_res, dict):
+                    self.reservation_total = int(click_res.get("total", -1))
+            except Exception:
+                self.reservation_total = -1
+            _dlog(f"예약 총수(N건 라벨): {self.reservation_total}")
+            if not (isinstance(click_res, dict) and click_res.get("ok")):
                 return []
             # 2) 모달/리스트 뜰 때까지 Python 폴링 — 각 span의 부모 컨텍스트도 같이 캡처
             dates_with_context = []
