@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "1.8.9"
+APP_VERSION = "1.9.0"
 
 import os
 import sys
@@ -6986,12 +6986,19 @@ if __name__ == "__main__":
         pass
     try:
         from PySide6.QtGui import QIcon as _QIcon_app
+        # frozen(onedir)에서는 icon.ico가 _internal(_MEIPASS)에 번들되므로 exe 폴더만 보면 못 찾음 → 여러 경로 탐색
+        _icon_dirs = []
         if getattr(sys, "frozen", False):
-            _app_icon_path = os.path.join(os.path.dirname(sys.executable), "icon.ico")
-        else:
-            _app_icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.ico")
-        if os.path.exists(_app_icon_path):
-            app.setWindowIcon(_QIcon_app(_app_icon_path))
+            _icon_dirs.append(os.path.dirname(sys.executable))
+            _icon_dirs.append(getattr(sys, "_MEIPASS", ""))
+        _icon_dirs.append(os.path.dirname(os.path.abspath(__file__)))
+        for _d in _icon_dirs:
+            if not _d:
+                continue
+            _app_icon_path = os.path.join(_d, "icon.ico")
+            if os.path.exists(_app_icon_path):
+                app.setWindowIcon(_QIcon_app(_app_icon_path))
+                break
     except Exception:
         pass
     # Windows 다크모드 무시하고 전역 라이트 팔레트 강제
