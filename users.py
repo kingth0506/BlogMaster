@@ -111,6 +111,8 @@ def load_users() -> dict:
                 "locked_naver_ids": data.get("locked_naver_ids", []),
                 "prompts": data.get("prompts", {}),
                 "keywordmaster_enabled": data.get("keywordmaster_enabled", False),
+                "privacy_consent": data.get("privacy_consent", False),
+                "privacy_consent_date": data.get("privacy_consent_date", ""),
             }
         # 최초 1회: 비어있으면 admin 생성
         if not users:
@@ -153,6 +155,8 @@ def save_users(users: dict):
                 "locked_naver_ids": u.get("locked_naver_ids", []),
                 "prompts": u.get("prompts", {}),
                 "keywordmaster_enabled": u.get("keywordmaster_enabled", False),
+                "privacy_consent": u.get("privacy_consent", False),
+                "privacy_consent_date": u.get("privacy_consent_date", ""),
             })
         _save_local(users)
     except Exception as e:
@@ -216,7 +220,8 @@ def create_user(username: str, password: str, role: str = "user", expires: str =
 def update_user(username: str, password=None, role=None, expires=None, expires_2=None, expires_3=None,
                 api_expires=None, api_expires_2=None, api_expires_3=None,
                 max_accounts=None, email=None, shared_api_keys=None, api_keys=None,
-                accounts=None, locked_naver_ids=None, prompts=None, keywordmaster_enabled=None) -> bool:
+                accounts=None, locked_naver_ids=None, prompts=None, keywordmaster_enabled=None,
+                privacy_consent=None, privacy_consent_date=None) -> bool:
     users = load_users()
     u = users.get(username)
     if not u:
@@ -253,6 +258,10 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
         u["prompts"] = prompts
     if keywordmaster_enabled is not None:
         u["keywordmaster_enabled"] = keywordmaster_enabled
+    if privacy_consent is not None:
+        u["privacy_consent"] = privacy_consent
+    if privacy_consent_date is not None:
+        u["privacy_consent_date"] = privacy_consent_date
     users[username] = u
     db = _init_firebase()
     if db is not None:

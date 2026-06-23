@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "1.9.0"
+APP_VERSION = "1.9.1"
 
 import os
 import sys
@@ -1450,6 +1450,9 @@ class MainWindow(QMainWindow):
         if self._is_user_expired():
             self._show_expired_bot1()
 
+        # 개인정보 수집·이용 동의 없으면 동의 창 (필수)
+        self._require_privacy_consent()
+
     def _is_user_expired(self) -> bool:
         """현재 '활성 명의(아이디 드롭다운)'의 이용기간 만료 여부 (관리자는 항상 False).
         active_account 인덱스(0/1/2) → 명의 슬롯(1/2/3)로 매핑해 해당 슬롯 만료를 본다."""
@@ -1505,6 +1508,66 @@ class MainWindow(QMainWindow):
                 pass
             return True
         return False
+
+    def _require_privacy_consent(self):
+        """개인정보 수집·이용 동의가 없는 사용자에게 동의 창을 띄우고, 동의 시 Firebase 저장.
+        동의 안 하면 프로그램 종료. (관리자·이미 동의한 사용자는 통과)"""
+        try:
+            user = getattr(self, "current_user", {}) or {}
+            if user.get("role") == "admin" or user.get("privacy_consent"):
+                return
+            dlg = QDialog(self)
+            dlg.setWindowTitle("개인정보 수집·이용 동의")
+            dlg.setMinimumWidth(460)
+            dlg.setModal(True)
+            v = QVBoxLayout(dlg)
+            v.setContentsMargins(22, 20, 22, 18)
+            v.setSpacing(12)
+            _title = QLabel("개인정보 수집·이용 동의 (필수)")
+            _title.setStyleSheet("font-size:16px; font-weight:bold;")
+            v.addWidget(_title)
+            _body = QLabel(
+                "서비스 제공 및 본인확인을 위해 아래 개인정보를 수집·이용합니다.\n\n"
+                "• 수집 항목: 아이디, 이름, 생년월일, 연락처, 이메일\n"
+                "• 이용 목적: 회원 식별·본인확인, 서비스 제공, 고객 지원\n"
+                "• 보유 기간: 회원 탈퇴 시까지 (관련 법령에 따른 보존 제외)\n\n"
+                "동의하셔야 서비스를 이용하실 수 있습니다."
+            )
+            _body.setWordWrap(True)
+            _body.setStyleSheet("font-size:13px; color:#334155;")
+            v.addWidget(_body)
+            _chk = QCheckBox("위 개인정보 수집·이용에 동의합니다.")
+            _chk.setStyleSheet("font-size:13px; font-weight:bold;")
+            v.addWidget(_chk)
+            _row = QHBoxLayout()
+            _btn_ok = QPushButton("동의하고 시작")
+            _btn_ok.setStyleSheet("background:#6366f1; color:white; border:none; border-radius:8px; padding:9px 18px; font-weight:bold;")
+            _btn_no = QPushButton("동의 안 함(종료)")
+            _btn_no.setStyleSheet("padding:9px 18px;")
+            _row.addStretch(); _row.addWidget(_btn_no); _row.addWidget(_btn_ok)
+            v.addLayout(_row)
+
+            def _agree():
+                if not _chk.isChecked():
+                    QMessageBox.warning(dlg, "동의 필요", "동의 체크 후 진행해주세요.")
+                    return
+                import datetime as _dt
+                _today = _dt.date.today().strftime("%Y-%m-%d")
+                try:
+                    from users import update_user
+                    update_user(user.get("username", ""), privacy_consent=True, privacy_consent_date=_today)
+                except Exception:
+                    pass
+                self.current_user["privacy_consent"] = True
+                self.current_user["privacy_consent_date"] = _today
+                dlg.accept()
+
+            _btn_ok.clicked.connect(_agree)
+            _btn_no.clicked.connect(dlg.reject)
+            if dlg.exec() != QDialog.Accepted:
+                QApplication.quit()
+        except Exception:
+            pass
 
     def _normalize_post_images(self, pix_key: str):
         """각 포스트의 실제 저장 이미지 갯수를 image_count에 맞춰 평준화
@@ -2230,14 +2293,14 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         layout.setContentsMargins(22, 18, 22, 18)
 
-        # ── 명의 선택 ──
-        layout.addWidget(QLabel("<b>명의 선택</b>  (1명의 = 네이버 아이디 3개)"))
+        # ── 명의 수 선택 (가격) ──
+        layout.addWidget(QLabel("<b>명의 수 선택</b>  (1명의 = 네이버 아이디 3개)"))
         myeong_bg = QButtonGroup(dlg)
         myeong_row = QHBoxLayout()
         myeong_row.setSpacing(8)
         _rm = []
         for _i, (_p, _s) in enumerate(zip(BASE_PRICES, ["1명의", "2명의", "3명의"])):
-            _r = QRadioButton(f"{_s}  {_p:,}원\n기본: {_status_txt(_i)}")
+            _r = QRadioButton(f"{_s}  {_p:,}원")
             _r.setStyleSheet("padding: 4px;")
             myeong_bg.addButton(_r)
             myeong_row.addWidget(_r)
@@ -2245,16 +2308,33 @@ class MainWindow(QMainWindow):
         _rm[0].setChecked(True)
         layout.addLayout(myeong_row)
 
+        # ── 적용할 명의(슬롯) 선택 ──
+        layout.addWidget(QLabel("<b>어느 명의에 적용할지 선택</b>  (위에서 고른 개수만큼 체크)"))
+        slot_row = QHBoxLayout()
+        slot_row.setSpacing(8)
+        _slot_chks = []
+        for _i in range(3):
+            _c = QCheckBox(f"명의{_i+1}  {_status_txt(_i)}")
+            _c.setStyleSheet("padding: 4px;")
+            slot_row.addWidget(_c)
+            _slot_chks.append(_c)
+        _slot_chks[0].setChecked(True)
+        layout.addLayout(slot_row)
+
+        def _selected_qty():
+            return next((i for i, r in enumerate(_rm) if r.isChecked()), 0) + 1
+
+        def _checked_slots():
+            return [i for i, c in enumerate(_slot_chks) if c.isChecked()]
+
         # ── API 구독 추가 ──
         chk_api = QCheckBox()
         chk_api.setStyleSheet("padding: 2px;")
         layout.addWidget(chk_api)
 
         def _update_api_chk():
-            _idx = next((i for i, r in enumerate(_rm) if r.isChecked()), 0)
-            _ap = API_PRICES[_idx]
-            _ast = _api_status_txt(_idx)
-            chk_api.setText(f"🔑 GPT글쓰기 API 구독  +{_ap:,}원/월  (현재 {_ast})")
+            _ap = API_PRICES[_selected_qty() - 1]
+            chk_api.setText(f"🔑 GPT글쓰기 API 구독  +{_ap:,}원/월  (선택한 명의에 적용)")
 
         _update_api_chk()
 
@@ -2266,7 +2346,7 @@ class MainWindow(QMainWindow):
         rp1   = QRadioButton("1개월")
         rp3   = QRadioButton("3개월 -5%")
         rp6   = QRadioButton("6개월 -10%")
-        rpInf = QRadioButton("무제한 770,000원\nAPI별도 가능")
+        rpInf = QRadioButton("무제한 770,000원/명의")
         rp1.setChecked(True)
         for _r in (rp1, rp3, rp6, rpInf):
             period_bg.addButton(_r)
@@ -2275,21 +2355,33 @@ class MainWindow(QMainWindow):
 
         # ── 금액 표시 ──
         price_lbl = QLabel()
-        price_lbl.setStyleSheet("font-size:18px; font-weight:bold; color:#6366f1; padding:6px 0;")
+        price_lbl.setStyleSheet("font-size:15px; font-weight:bold; color:#6366f1; padding:6px 0;")
         price_lbl.setAlignment(Qt.AlignCenter)
+        price_lbl.setWordWrap(True)
         layout.addWidget(price_lbl)
 
+        def _enforce_slots():
+            # 체크 개수가 명의 수를 넘으면 앞에서부터 명의 수만큼만 유지
+            qty = _selected_qty()
+            checked = _checked_slots()
+            if len(checked) > qty:
+                for i in checked[qty:]:
+                    _slot_chks[i].blockSignals(True)
+                    _slot_chks[i].setChecked(False)
+                    _slot_chks[i].blockSignals(False)
+
         def _calc():
-            _idx = next((i for i, r in enumerate(_rm) if r.isChecked()), 0)
-            _base = BASE_PRICES[_idx]
-            _api_add = API_PRICES[_idx]
+            _enforce_slots()
+            qty = _selected_qty()
+            _base = BASE_PRICES[qty - 1]
+            _api_add = API_PRICES[qty - 1]
+            chk = _checked_slots()
+            _names = ", ".join(f"명의{i+1}" for i in chk) or "(미선택)"
+            _warn = f"   ⚠ {qty}개 선택 필요 (현재 {len(chk)}개)" if len(chk) != qty else ""
             if rpInf.isChecked():
-                if chk_api.isChecked():
-                    price_lbl.setText(
-                        f"무제한  770,000원\n+ GPT API  {_api_add:,}원/월 별도"
-                    )
-                else:
-                    price_lbl.setText("무제한  770,000원")
+                _inf = 770000 * qty
+                _ex = f"\n+ GPT API {_api_add:,}원/월 별도" if chk_api.isChecked() else ""
+                price_lbl.setText(f"무제한 770,000원 × {qty}명의 = {_inf:,}원\n적용: {_names}{_warn}{_ex}")
             else:
                 if rp3.isChecked():   _m, _dc = 3, 0.05
                 elif rp6.isChecked(): _m, _dc = 6, 0.10
@@ -2297,11 +2389,11 @@ class MainWindow(QMainWindow):
                 _sub = int(_base * _m * (1 - _dc))
                 if chk_api.isChecked():
                     _sub += int(_api_add * _m * (1 - _dc))
-                _dt2 = f"  ({int(_dc*100)}% 할인)" if _dc else ""
-                price_lbl.setText(f"월 {_base:,}원{_dt2}  ×  {_m}개월  →  총 {_sub:,}원")
+                _d2 = f" ({int(_dc*100)}%할인)" if _dc else ""
+                price_lbl.setText(f"{_base:,}원/월{_d2} × {_m}개월 = 총 {_sub:,}원\n적용: {_names}{_warn}")
 
         _calc()
-        for _r in (*_rm, rp1, rp3, rp6, rpInf):
+        for _r in (*_rm, *_slot_chks, rp1, rp3, rp6, rpInf):
             _r.toggled.connect(lambda _: (_update_api_chk(), _calc()))
         chk_api.stateChanged.connect(lambda _: _calc())
 
@@ -2325,18 +2417,22 @@ class MainWindow(QMainWindow):
         btn_pay.setCursor(Qt.PointingHandCursor)
 
         def _send_notify():
-            _idx = next((i for i, r in enumerate(_rm) if r.isChecked()), 0)
-            _plan_names = ["1명의", "2명의", "3명의"]
-            _plan = _plan_names[_idx]
-            _field = FIELDS[_idx]
-            _api_field = API_FIELDS[_idx]
-            _base = BASE_PRICES[_idx]
-            _api_add = API_PRICES[_idx]
+            qty = _selected_qty()
+            chk = _checked_slots()
+            if len(chk) != qty:
+                QMessageBox.warning(dlg, "선택 확인",
+                    f"{qty}명의를 구매하셨으니 적용할 명의도 정확히 {qty}개 선택해주세요.\n(현재 {len(chk)}개 선택)")
+                return
+            _slot_codes = ",".join(str(i + 1) for i in chk)      # 예: "1,3"
+            _slot_label = ", ".join(f"명의{i+1}" for i in chk)
+            _plan = f"{qty}명의 ({_slot_label})"
+            _base = BASE_PRICES[qty - 1]
+            _api_add = API_PRICES[qty - 1]
             _with_api = chk_api.isChecked()
             _unlimited = rpInf.isChecked()
             if _unlimited:
                 _months = 1
-                _total = 770000 + (_api_add if _with_api else 0)
+                _total = 770000 * qty + (_api_add if _with_api else 0)
             else:
                 if rp3.isChecked():   _months, _dc = 3, 0.05
                 elif rp6.isChecked(): _months, _dc = 6, 0.10
@@ -2350,8 +2446,8 @@ class MainWindow(QMainWindow):
                     "plan": _plan,
                     "months": _months,
                     "amount": _total,
-                    "field": _field,
-                    "api_field": _api_field if _with_api else "",
+                    "field": _slot_codes,
+                    "api_field": _slot_codes if _with_api else "",
                     "unlimited": _unlimited,
                     "api": _with_api,
                 }).encode()
