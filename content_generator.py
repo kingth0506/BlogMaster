@@ -1,17 +1,196 @@
 # -*- coding: utf-8 -*-
 """AI 기반 블로그 글 생성 모듈 — 프롬프트 시스템 연동"""
 import re
+import json as _json
+import random
+import threading
 import openai
 from prompts import get_prompt_for_keyword
 
 
-def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
-    """GPT로 블로그 글 생성"""
-    client = openai.OpenAI(api_key=api_key)
+# ── 도입부 중복 방지: 최근 첫 문장 시그니처를 기억해두고 겹치면 다시 뽑는다 ──
+_seen_lock = threading.Lock()
+
+def _openings_path():
+    from app_paths import data_file
+    return data_file("recent_openings.json")
+
+def _opening_sig(text: str) -> str:
+    """첫 문장 시작부 시그니처 — 공백/문장부호 제거 후 앞 16자."""
+    first = (text or "").strip().split("\n")[0]
+    s = re.sub(r"[\s.,!?~…\"'()\[\]·]+", "", first)
+    return s[:16]
+
+def _split_title(text: str):
+    """본문 끝의 '===제목===' 다음 줄 문구를 제목 suffix로 분리. (body, suffix) 반환."""
+    if not text:
+        return "", ""
+    parts = re.split(r'\n?\s*===\s*제목\s*===\s*\n?', text, maxsplit=1)
+    if len(parts) == 2:
+        body = parts[0].rstrip()
+        suffix = parts[1].strip().split("\n")[0].strip().strip('"\'').strip()
+        return body, suffix
+    return text, ""
+
+
+def _check_reserve_opening(sig: str) -> bool:
+    """sig가 이미 있으면 True(중복). 없으면 즉시 등록(예약)하고 False. (병렬 생성 안전)"""
+    if not sig:
+        return False
+    with _seen_lock:
+        path = _openings_path()
+        try:
+            from app_paths import safe_load_json as _slj
+            seen = _slj(path, default=[], max_mb=10)
+            if not isinstance(seen, list):
+                seen = []
+        except Exception:
+            seen = []
+        if sig in seen:
+            return True
+        seen.append(sig)
+        seen = seen[-500:]   # 최근 500개만 유지
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                _json.dump(seen, f, ensure_ascii=False)
+        except Exception:
+            pass
+        return False
+
+
+# ── 글마다 다른 결을 주기 위한 '변형 지시' (기본 프롬프트는 그대로, 스타일만 랜덤) ──
+# ★ 공통 시점: '그냥 가봤다' 후기가 아니라, 필요해서 좋은 곳을 찾아 헤매다 이곳을 발견한 느낌.
+# 첫 문장 '형태(모드)'만 랜덤 지정 — 예시 문장은 주지 않는다(베껴서 반복되는 것 방지).
+_VAR_OPENING = [
+    "첫 문장을 속마음·혼잣말 톤으로 열어라.",
+    "첫 문장을 짧고 강한 한마디로 열어라.",
+    "첫 문장을 독자에게 던지는 질문으로 열어라.",
+    "첫 문장을 구체적인 장면·행동 묘사로 열어라.",
+    "첫 문장을 결론부터 던지며 열어라.",
+    "첫 문장을 주변 사람과의 대화·조언으로 열어라.",
+    "첫 문장을 겪던 고민의 핵심으로 바로 들어가 열어라.",
+    "첫 문장을 계기가 된 사건으로 열어라.",
+]
+# 첫 부분의 '내용 각도'를 랜덤으로 — 알맹이가 달라져 첫 문장이 자연히 갈린다(베낄 문장 없음).
+_VAR_INTRO_ANGLE = [
+    "비용이 부담돼 망설였던 마음",
+    "시간이 없어 급했던 상황",
+    "처음이라 뭘 모르던 막막함",
+    "후기를 믿기 어려웠던 의심",
+    "주변에 물어봐도 답이 없던 답답함",
+    "여러 번 실망한 뒤라 신중해진 태도",
+    "가까운 곳부터 알아보던 기준",
+    "실력·전문성을 가장 중요하게 봤던 점",
+    "가족·지인의 권유가 계기가 된 점",
+    "더 미룰 수 없어 결심하게 된 순간",
+]
+_VAR_TONE = [
+    "전체 말투는 친근하고 다정한 구어체로.",
+    "전체 말투는 차분하고 신뢰감 있는 정보 전달형으로.",
+    "전체 말투는 활기차고 생동감 있게.",
+    "전체 말투는 담백하고 깔끔하게, 군더더기 없이.",
+    "전체 말투는 친구에게 추천하듯 솔직하게.",
+]
+_VAR_STRUCTURE = [
+    "장점을 먼저 풀고 뒤에서 상세 정보를 정리하는 순서로.",
+    "정보·특징을 먼저 정리하고 뒤에서 느낌·추천으로 마무리하는 순서로.",
+    "이야기 흐름(스토리텔링)으로 자연스럽게 이어가되 중간중간 핵심 정보를 녹여라.",
+    "핵심 포인트 몇 가지를 중심으로 각 포인트를 풀어가는 구성으로.",
+]
+_VAR_EMPHASIS = [
+    "이번 글은 '분위기·공간'을 특히 강조하라.",
+    "이번 글은 '서비스·응대'를 특히 강조하라.",
+    "이번 글은 '접근성·위치·편의'를 특히 강조하라.",
+    "이번 글은 '가격·구성·가성비'를 특히 강조하라.",
+    "이번 글은 '전문성·경험'을 특히 강조하라.",
+]
+
+
+def _variation_directive() -> str:
+    """매 호출마다 랜덤 조합 — 같은 업체·키워드라도 글의 결이 달라지게.
+    출력 형식(소제목/이미지 마커 등)은 절대 바꾸지 말 것을 명시."""
+    parts = [
+        random.choice(_VAR_TONE),
+        random.choice(_VAR_STRUCTURE),
+        random.choice(_VAR_EMPHASIS),
+        "같은 표현·문장 구조를 반복하지 말고 어휘를 다양하게 바꿔라.",
+    ]
+    random.shuffle(parts)
+    # 고정 시점 앵커 — 모든 글이 '필요해서 찾다가 발견' 프레임을 갖도록
+    anchor = ("글 전체를 '필요해서 좋은 곳을 찾아 여기저기 알아보고 비교하다가 결국 이곳을 "
+              "발견하게 된' 시점으로 풀어라. 단순히 '가봤어요'가 아니라, 찾아 헤맨 끝에 만난 느낌을 살려라.")
+    # 도입부: '형태(모드)' + '내용 각도'를 랜덤으로 → 첫 문장이 매번 갈림 (베낄 예시는 주지 않음)
+    opening = (random.choice(_VAR_OPENING)
+               + " 도입에 '" + random.choice(_VAR_INTRO_ANGLE) + "'을(를) 녹여라.")
+    fixed = [
+        opening,
+        "★첫 문장을 '최근/요즘/얼마 전/며칠 전/요새/근래/저는/저도' 같은 흔한 말로 시작하지 마라. "
+        "매 글의 첫 문장을 서로 완전히 다르게 열어라(같은 시작어 반복 금지).",
+        "분량은 공백 포함 2000자 이상(50문장 이상)으로 충분히 길고 풍부하게 써라. 절대 짧게 끝내지 마라.",
+    ]
+    return ("\n\n[이번 글 작성 스타일 — 아래 지시를 반영하되, 위에서 요구한 "
+            "글자수·소제목·이미지 마커 등 출력 형식은 그대로 유지하라]\n- "
+            + "\n- ".join(fixed) + "\n- " + "\n- ".join(parts))
+
+
+# ── 업종 관점 격리 (다른 업종 소재 침범 0) ─────────────────────────
+_ELDERCARE = ("요양원", "요양병원", "실버타운", "주야간", "데이케어", "노인요양", "노인", "실버", "치매", "요양")
+_CHILDCARE = ("어린이집", "유치원", "키즈", "소아", "아동", "놀이학교", "영유아", "유아")
+
+def _harden_perspective(prompt: str, place: dict, keyword: str) -> str:
+    """프롬프트의 '★ 글쓴이 관점' 섹션을 해당 업종 전용으로 교체.
+    다른 업종 소재(특히 요양원·어르신)를 프롬프트에서 제거 + 강한 금지 → 오염 0."""
+    biz = " ".join(str(place.get(k, "")) for k in ("category", "업종", "search_keyword")) + " " + str(keyword or "")
+    is_elder = any(w in biz for w in _ELDERCARE)
+    is_child = any(w in biz for w in _CHILDCARE)
+    if is_elder:
+        persp = ("글쓴이는 '가족'이며, 부모님·할머니·할아버지(어르신)를 모실 곳을 찾는 입장에서 쓴다. "
+                 "어르신 돌봄에 관한 글이므로 가족 시점이 자연스럽다.")
+        ban = ""
+    elif is_child:
+        persp = "글쓴이는 '부모'이며, 자녀를 위해 이곳을 찾는 입장에서 쓴다."
+        ban = "★★★ 절대 금지: 요양원·어르신·부모님 돌봄 등 노인 돌봄 소재를 단 한 문장도 넣지 마라."
+    else:
+        persp = "글쓴이는 '본인'이며, 본인이 직접 이용/해결하려고 이곳을 찾는 입장에서 쓴다."
+        ban = ("★★★ 절대 금지: 요양원·어르신·부모님·조부모·노인 돌봄·자녀 돌봄 등 이 업종과 무관한 "
+               "다른 업종/소재를 단 한 문장, 단 한 단어도 넣지 마라. 다른 업종 이야기가 들어가면 실패한 글이다.")
+    block = (f"### ★ 글쓴이 관점 (엄격 — 이것만 따르라)\n"
+             f"이 글은 오직 '{keyword}' 그 자체에 관한 글이다. {persp}\n"
+             + (ban + "\n" if ban else "") + "\n")
+    secs = re.split(r'(?=### )', prompt)
+    out, replaced = [], False
+    for s in secs:
+        if s.startswith('### ★ 글쓴이 관점'):
+            out.append(block); replaced = True
+        else:
+            out.append(s)
+    if not replaced:
+        out.insert(0, block)
+    return "".join(out)
+
+
+def generate_with_gpt(api_key: str, place: dict, keyword: str, engine: str = "gpt") -> dict:
+    """블로그 글 생성 — engine='deepseek' / 'gpt' / 'gemini'. (제미나이는 OpenAI 호환 엔드포인트 사용)"""
+    if engine == "deepseek":
+        client = openai.OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        model = "deepseek-chat"
+    elif engine == "gemini":
+        client = openai.OpenAI(api_key=api_key,
+                               base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
+        model = "gemini-2.5-flash"
+    else:
+        client = openai.OpenAI(api_key=api_key)
+        model = "gpt-4o-mini"
     # 지역 확장 크롤링: 이 업체가 수집된 실제 검색 키워드(예: "강남구 파스타") 우선
     keyword = place.get("search_keyword") or keyword
     prompt_data = get_prompt_for_keyword(keyword)
     prompt = _fill_prompt(prompt_data.get("blog", ""), place, keyword)
+    prompt = _harden_perspective(prompt, place, keyword)   # ★ 업종 관점 격리 (다른 업종 소재 침범 0)
+    prompt = prompt + _variation_directive()   # 글마다 다른 스타일 지시 (반복 방지)
+    # 제목을 같은 호출에서 함께 생성 (별도 호출 제거로 API 호출 절감, 품질 동일)
+    prompt = prompt + ("\n\n[제목 출력] 본문을 모두 쓴 뒤 맨 마지막에 별도 줄로 '===제목===' 을 출력하고, "
+                       "그 다음 줄에 제목 마무리 문구 1개만 15자 이내로 써라. "
+                       "지역명·업종·업체명·해시태그·기호는 넣지 말고, 검색자가 클릭하고 싶은 간결하고 진정성 있는 문구로.")
 
     # 디버그: 실제 전송 프롬프트 파일에 기록
     try:
@@ -26,21 +205,104 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
         raise ValueError(f"프롬프트가 너무 짧음 ({len(prompt or '')}자) - 생성 중단")
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
+        _kw = dict(
+            model=model,
             messages=[
                 {"role": "system", "content": "너는 블로그 글쓰기 전문가다. 주어진 지시사항에 따라 블로그 본문만 작성한다. 평가·칭찬·설명·인사 없이 오직 블로그 본문 텍스트만 출력한다."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.8,
+            temperature=0.9,
             max_tokens=4096,
         )
+        # 제미나이(OpenAI 호환)는 frequency/presence_penalty 미지원 → 딥시크·GPT에만 적용
+        if engine != "gemini":
+            _kw["frequency_penalty"] = 0.25
+            _kw["presence_penalty"] = 0.2
+        response = client.chat.completions.create(**_kw)
     except Exception as e:
-        raise RuntimeError(f"GPT API 호출 실패: {e}") from e
+        _low = str(e).lower()
+        # 제미나이 무료 한도 초과 (RESOURCE_EXHAUSTED / 429 / rate limit)
+        if engine == "gemini" and ("resource_exhausted" in _low or "rate limit" in _low
+                or "quota" in _low or "429" in _low):
+            raise RuntimeError("제미나이 무료 사용 한도를 초과했습니다. 잠시 후 다시 시도하거나, "
+                               "내일(한도 초기화 후) 다시 이용해주세요. (또는 딥시크·챗GPT 키 사용)") from e
+        # 딥시크/GPT 잔액(크레딧) 소진
+        if ("insufficient_quota" in _low or "exceeded your current quota" in _low
+                or "insufficient balance" in _low or "insufficient_balance" in _low
+                or ("quota" in _low and "exceed" in _low) or "billing_not_active" in _low):
+            raise RuntimeError("API 크레딧(잔액)이 부족합니다. 사용 중인 API 키에 결제·충전을 해주세요.") from e
+        raise RuntimeError(f"AI API 호출 실패: {e}") from e
 
     if not response.choices:
-        raise RuntimeError("GPT 응답 없음 (choices 비어있음)")
-    raw_text = response.choices[0].message.content
+        raise RuntimeError("AI 응답 없음 (choices 비어있음)")
+    raw_text = response.choices[0].message.content or ""
+    if not raw_text.strip():
+        raise RuntimeError("AI 응답 본문이 비어있음")
+
+    # 본문에서 제목 문구 분리 (같은 호출로 받은 것)
+    raw_text, title_suffix = _split_title(raw_text)
+
+    # ★ 첫머리 상투적 시간부사 제거 — "최근/요즘/얼마 전" 등으로 시작하는 습관 강제 차단
+    _LEAD = r'^\s*(?:최근에|최근\s|요즘에|요즘|요새|근래에|근래|얼마\s*전,?|며칠\s*전,?)\s*'
+    def _strip_lead(t):
+        try:
+            return re.sub(_LEAD, '', (t or '').lstrip(), count=1)
+        except Exception:
+            return t or ''
+    raw_text = _strip_lead(raw_text)
+
+    # ★ 도입부 중복 방지 — 첫 문장이 최근 글과 겹치면 다시 뽑는다 (최대 2회). 병렬 생성 안전.
+    sig = _opening_sig(raw_text)
+    tries = 0
+    while _check_reserve_opening(sig) and tries < 2:
+        tries += 1
+        first_line = raw_text.strip().split("\n")[0][:30]
+        try:
+            _rgkw = dict(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "너는 블로그 글쓰기 전문가다. 블로그 본문만 출력한다."},
+                    {"role": "user", "content": prompt + f"\n\n★★첫 문장을 반드시 \"{first_line}\"와 완전히 다른 표현·다른 시작으로 열어라. 앞부분이 조금이라도 겹치면 안 된다."},
+                ],
+                temperature=1.0,
+                max_tokens=4096,
+            )
+            if engine != "gemini":
+                _rgkw["frequency_penalty"] = 0.3
+                _rgkw["presence_penalty"] = 0.3
+            rg = client.chat.completions.create(**_rgkw)
+            nt = (rg.choices[0].message.content or "").strip()
+            if nt:
+                nt, nts = _split_title(nt)
+                if nts:
+                    title_suffix = nts
+                raw_text = _strip_lead(nt)
+                sig = _opening_sig(raw_text)
+        except Exception:
+            break
+
+    # ★ 길이 보강 — 짧으면 한 번 '한두 단락만' 이어 써서 1500자+ 보장 (과증식 방지로 가볍게)
+    # 코드 해시태그로 교체되며 약간 짧아지므로 1550자 버퍼로 트리거
+    try:
+        if len(raw_text) < 1550:
+            cont = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "너는 블로그 글쓰기 전문가다. 블로그 본문만 출력한다."},
+                    {"role": "user", "content": prompt},
+                    {"role": "assistant", "content": raw_text},
+                    {"role": "user", "content": f"방금 글이 약 {len(raw_text)}자로 살짝 짧다. 같은 업체·같은 시점·같은 말투로, 더 구체적인 내용 한두 단락만 자연스럽게 이어 써서 전체가 1800자 정도가 되게 해라. 이미 쓴 내용 반복 금지. 마무리 인사·해시태그·이미지 마커([이미지])·제목(===제목===)은 새로 붙이지 말고 이어지는 본문 문장만 출력해라."},
+                ],
+                temperature=0.9,
+                max_tokens=900,
+            )
+            more = (cont.choices[0].message.content or "").strip()
+            if more:
+                more, _ = _split_title(more)   # 혹시 제목 붙어오면 제거
+                raw_text = raw_text.rstrip() + "\n\n" + more
+    except Exception:
+        pass
+
     # 디버그: 응답도 저장
     try:
         dbg2 = _os.path.join(_os.path.dirname(__file__), "last_response.txt")
@@ -48,7 +310,7 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str) -> dict:
             _f.write(raw_text or "")
     except Exception:
         pass
-    title_suffix = _generate_title(client, keyword, place, prompt_data, provider="gpt")
+    # 제목은 본문 호출에서 함께 받은 title_suffix 사용 (별도 GPT 호출 제거)
     title = _build_full_title(place, keyword, title_suffix)
     return parse_blog_content(raw_text, title)
 
@@ -322,7 +584,15 @@ def _build_full_title(place: dict, keyword: str, suffix: str) -> str:
         blacklist = _title_blacklist(place, keyword)
         clean = _clean_suffix(suffix, blacklist)
         if clean and len(clean) >= 3:
-            return f"{prefix} {name} {clean}"
+            # 제목 형식 랜덤 — ★지역+업종(prefix)은 '무조건 맨 앞'. 뒤 배열(업체명/문구)만 다양화
+            templates = [
+                "{p} {n} {c}",
+                "{p} {n} - {c}",
+                "{p} {c}, {n}",
+                "{p} {c} {n}",
+                "{p}, {n} {c}",
+            ]
+            return random.choice(templates).format(p=prefix, n=name, c=clean).strip()
 
     return f"{prefix} {name} 방문 후기"
 
@@ -470,7 +740,8 @@ def _generate_title(client, keyword, place, prompt_data, provider="gpt"):
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": title_prompt}],
-            temperature=0.9,
+            temperature=0.95,
+            frequency_penalty=0.4,   # 제목 표현 다양화
             max_tokens=500,
         )
         titles = [l.strip().lstrip("0123456789.-) ") for l in response.choices[0].message.content.strip().split("\n") if l.strip()]
@@ -512,7 +783,7 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
         "title": title,
         "body": body.strip(),
         "tags": tags,
-        "image_count": max(image_count, 3),
+        "image_count": 3,  # 무조건 3장 고정
         "raw": raw_text,
     }
 
@@ -544,23 +815,31 @@ def _build_hashtags(place: dict, keyword: str) -> list:
     if station.endswith("역"):
         station = station[:-1]
     name = (place.get("name", "") or "").strip().replace(" ", "")
-    out = []
-    def _add(t):
-        t = (t or "").strip()
-        if t and t not in out:
-            out.append(t)
-    if gu: _add(f"{gu}{biz}")
-    if dong: _add(f"{dong}{biz}")
-    if station: _add(f"{station}역{biz}")
-    if metro: _add(f"{metro}{biz}")
-    _add(f"{biz}추천")          # 업종(키워드)+추천 — 전 업종 공통
-    if name: _add(name)
-    return out[:7]
+    # 핵심 태그(검색 가치 큰 것 — 가능하면 포함) + 선택 풀
+    core, pool = [], []
+    if dong: core.append(f"{dong}{biz}")
+    if gu: core.append(f"{gu}{biz}")
+    if station: pool.append(f"{station}역{biz}")
+    if metro: pool.append(f"{metro}{biz}")
+    pool.append(f"{biz}추천")
+    if dong: pool.append(f"{dong}{biz}추천")
+    if gu: pool.append(f"{gu}{biz}추천")
+    pool.append(biz)
+    if name: pool.append(name)
+    # 중복 제거(코어 기준)
+    seen = set(core)
+    pool = [t for t in pool if t and not (t in seen or seen.add(t))]
+    # 개수 랜덤(5~8), 순서 랜덤
+    target = random.randint(5, 8)
+    random.shuffle(pool)
+    chosen = core + pool[:max(0, target - len(core))]
+    random.shuffle(chosen)
+    return chosen[:8]
 
 
-def generate_content(provider: str, api_key: str, place: dict, keyword: str, prompt_override: str = None, title_prefix: str = None) -> dict:
-    """통합 생성 함수 — GPT 전용 (Gemini는 안정성/가격 이슈로 비활성화).
-    provider 인자는 하위호환을 위해 남겨두나 무시됨.
+def generate_content(provider: str, api_key: str, place: dict, keyword: str, prompt_override: str = None, title_prefix: str = None, deepseek_key: str = None, gpt_key: str = None, gemini_key: str = None, engine: str = None) -> dict:
+    """통합 생성 함수 — 사용자가 선택한 엔진(engine)으로 생성.
+    engine: 'deepseek' / 'gpt' / 'gemini'. 선택 엔진 실패(크레딧/한도)면 그대로 에러(안내용).
     title_prefix: "dong"/"station"/"gu"로 제목 prefix 형식 강제, None이면 prompts.json 기본값."""
     if prompt_override or title_prefix:
         place = dict(place)
@@ -568,7 +847,15 @@ def generate_content(provider: str, api_key: str, place: dict, keyword: str, pro
             place["category"] = prompt_override
         if title_prefix:
             place["_override_title_prefix"] = title_prefix
-    result = generate_with_gpt(api_key, place, keyword)
+    # 선택 엔진 → 키 매핑
+    keymap = {"deepseek": deepseek_key, "gpt": gpt_key, "gemini": gemini_key}
+    eng = (engine or "").strip().lower()
+    if eng not in ("deepseek", "gpt", "gemini") or not keymap.get(eng):
+        # 엔진 미지정/키없음 → 있는 키 아무거나 (하위호환: 딥시크>GPT>제미나이)
+        eng = next((e for e in ("deepseek", "gpt", "gemini") if keymap.get(e)), None)
+    if not eng:
+        raise RuntimeError("선택한 엔진의 API 키가 없습니다. 설정에서 API 키를 입력해주세요.")
+    result = generate_with_gpt(keymap[eng], place, keyword, engine=eng)
 
     # 해시태그: GPT 출력(페르소나/감성 섞임)을 무시하고 코드로 '지역+업종' 검색태그만 생성.
     # 본문 끝의 GPT 해시태그/[태그] 줄은 제거하고 코드 태그로 깔끔히 교체.

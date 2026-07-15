@@ -215,9 +215,8 @@ def configure_used_ids_file(path: str):
     _USED_IMAGE_IDS = set()
     if path and os.path.exists(path):
         try:
-            import json as _json
-            with open(path, "r", encoding="utf-8") as f:
-                data = _json.load(f)
+            from app_paths import safe_load_json as _slj
+            data = _slj(path, default={}, max_mb=20) or {}
             _USED_IMAGE_IDS = set(data.get("ids", []))
         except Exception:
             pass
@@ -283,10 +282,8 @@ def configure_ai_extractor(api_key: str, cache_file: str = ""):
     if cache_file:
         _AI_QUERY_CACHE_FILE = cache_file
         try:
-            import json as _json
-            if os.path.exists(cache_file):
-                with open(cache_file, "r", encoding="utf-8") as f:
-                    _AI_QUERY_CACHE = _json.load(f)
+            from app_paths import safe_load_json as _slj
+            _AI_QUERY_CACHE = _slj(cache_file, default={}, max_mb=20) or {}
         except Exception:
             _AI_QUERY_CACHE = {}
 
@@ -433,12 +430,14 @@ def _get_en_queries(keyword: str) -> list:
 
 
 def _fetch_hits(api_key: str, query: str, page: int = 1, per_page: int = 80) -> list:
+    # 검색어에 한글이 있으면 lang=ko (픽사베이 웹과 동일하게 한국어 검색). 영어면 en.
+    _has_ko = any(0xAC00 <= ord(c) <= 0xD7A3 for c in (query or ""))
     params = {
         "key": api_key,
         "q": query,
         "image_type": "photo",
         "per_page": per_page,
-        "lang": "en",
+        "lang": "ko" if _has_ko else "en",
         "safesearch": "true",
         "orientation": "horizontal",
         "page": page,
@@ -1289,41 +1288,70 @@ def download_images(api_key: str, keyword: str, count: int = 5,
     """이미지를 검색·다운로드하고 파일 경로 리스트 반환. **무조건 count장을 채워 반환**한다
     (다운로드 실패/풀 부족 시 받은 이미지를 복제해서라도 채움 — 0장 절대 금지).
     각 이미지에 중복도 회피용 미세 변형 + 업체명 워터마크를 적용한다.
-    우선순위: manual_queries(사용자 직접 입력) > ai_api_key(gpt-4o-mini) > 하드코딩 테이블 > translator."""
-    # 다운로드 실패에 대비해 후보를 넉넉히 확보
-    images = search_images(api_key, keyword, max(count * 4, count + 5),
-                           translator=translator, ai_api_key=ai_api_key,
-                           manual_queries=manual_queries)
-    if not images:
-        return []
-
+    우선순위: 로컬 이미지 라이브러리(GitHub 릴리즈) > 픽사베이.
+      픽사베이 내부 검색어 우선순위: manual_queries > ai_api_key(gpt-4o-mini) > 하드코딩 테이블 > translator."""
     temp_dir = tempfile.mkdtemp(prefix="naver_blog_")
     paths = []
-    n = 0
-    for img in images:
-        if len(paths) >= count:
-            break
-        n += 1
-        file_path = os.path.join(temp_dir, f"image_{n}.jpg")
-        ok = False
-        for url in (img.get("large_url"), img.get("url")):  # large 실패 시 webformat 재시도
-            if not url:
-                continue
-            try:
-                resp = requests.get(url, timeout=30)
-                resp.raise_for_status()
-                with open(file_path, "wb") as f:
-                    f.write(resp.content)
-                ok = True
+
+    # ── 1순위: 로컬 이미지 라이브러리 ────────────────────────────
+    # 키워드(업종)가 라이브러리에 있으면 내 사진을 쓰고 픽사베이는 건너뛴다.
+    # manual_queries(사용자가 직접 영문 검색어 지정)는 픽사베이 검색 의도이므로 로컬 스킵.
+    local_sources = []
+    if not manual_queries:
+        try:
+            import local_image_store as _lis
+            local_sources = _lis.fetch(keyword, count)
+        except Exception:
+            local_sources = []
+
+    if local_sources:
+        import shutil as _sh
+        n = 0
+        for src in local_sources:
+            if len(paths) >= count:
                 break
-            except Exception as e:
-                print(f"이미지 다운로드 재시도 ({n}): {e}")
-        if not ok:
-            continue
-        _diversify_image(file_path)              # 중복도 회피 미세 변형 (워터마크 전)
-        if watermark_text:
-            add_watermark(file_path, watermark_text)
-        paths.append(file_path)
+            n += 1
+            dst = os.path.join(temp_dir, f"image_{n}.jpg")
+            try:
+                _sh.copyfile(src, dst)
+            except Exception:
+                continue
+            _diversify_image(dst)                   # 중복도 회피 미세 변형
+            if watermark_text:
+                add_watermark(dst, watermark_text)  # 업체명 워터마크
+            paths.append(dst)
+
+    # ── 2순위: 부족분은 픽사베이로 보충 ──────────────────────────
+    # 로컬 업종이 없으면 전량, 로컬 풀이 모자라면 모자란 만큼만 픽사베이에서 가져온다.
+    if len(paths) < count:
+        need = count - len(paths)
+        images = search_images(api_key, keyword, max(need * 4, need + 5),
+                               translator=translator, ai_api_key=ai_api_key,
+                               manual_queries=manual_queries)
+        for img in (images or []):
+            if len(paths) >= count:
+                break
+            idx = len(paths) + 1
+            file_path = os.path.join(temp_dir, f"image_px_{idx}.jpg")
+            ok = False
+            for url in (img.get("large_url"), img.get("url")):  # large 실패 시 webformat 재시도
+                if not url:
+                    continue
+                try:
+                    resp = requests.get(url, timeout=30)
+                    resp.raise_for_status()
+                    with open(file_path, "wb") as f:
+                        f.write(resp.content)
+                    ok = True
+                    break
+                except Exception as e:
+                    print(f"이미지 다운로드 재시도 ({idx}): {e}")
+            if not ok:
+                continue
+            _diversify_image(file_path)              # 중복도 회피 미세 변형 (워터마크 전)
+            if watermark_text:
+                add_watermark(file_path, watermark_text)
+            paths.append(file_path)
 
     # 무조건 count장 보장 — 후보 소진/다운로드 실패로 모자라면 복제(+재변형)해서 채움
     if paths and len(paths) < count:

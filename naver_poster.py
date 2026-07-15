@@ -89,6 +89,31 @@ class NaverBlogPoster:
         except Exception as e:
             _dlog(f"Default/LOCK 제거 실패: {e}")
 
+        # ★ 크롬 프로필 Preferences 파일이 비대(폭주)하거나 깨졌으면 삭제 —
+        # undetected_chromedriver가 handle_prefs에서 이 파일을 json.load 하다 크래시하는 것 방지.
+        # (Preferences 정상 크기는 수십~수백KB. 5MB 넘으면 비정상 → 삭제하면 크롬이 새로 만듦)
+        import json as _json_chk
+        for _pref_rel in ["Default/Preferences", "Default/Secure Preferences",
+                          "Preferences", "Secure Preferences"]:
+            _pf = os.path.join(profile_dir, *_pref_rel.split("/"))
+            try:
+                if not os.path.exists(_pf):
+                    continue
+                _bad = False
+                if os.path.getsize(_pf) > 5 * 1024 * 1024:   # 5MB 초과 = 비정상
+                    _bad = True
+                else:
+                    try:
+                        with open(_pf, "r", encoding="utf-8") as _f:
+                            _json_chk.load(_f)
+                    except Exception:
+                        _bad = True   # 파싱 불가 = 손상
+                if _bad:
+                    os.remove(_pf)
+                    _dlog(f"손상/비대 프로필 파일 삭제: {_pref_rel}")
+            except Exception as e:
+                _dlog(f"프로필 파일 점검 실패({_pref_rel}): {e}")
+
         def _build_opts():
             o = uc.ChromeOptions()
             if self.headless:
@@ -243,12 +268,26 @@ class NaverBlogPoster:
             _dlog(f"ID/PW 입력 완료 (id={self.naver_id})")
             self._sleep(0.3)
 
-            # 로그인 버튼 클릭
-            login_btn = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.ID, "log.login"))
-            )
-            login_btn.click()
-            _dlog("로그인 버튼 클릭")
+            # 로그인 버튼 클릭 — 네이티브 클릭이 안 먹는 환경 대비해 JS 클릭까지 확실히
+            try:
+                login_btn = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.ID, "log.login"))
+                )
+                try:
+                    login_btn.click()
+                except Exception:
+                    pass
+            except Exception as e:
+                _dlog(f"로그인 버튼 탐색 실패: {e}")
+            # JS로 한 번 더 확실히 클릭(네이버 암호화 onclick 발동)
+            try:
+                self.driver.execute_script(
+                    "var b=document.getElementById('log.login')||document.querySelector('button[type=submit]');"
+                    "if(b){b.click();}"
+                )
+            except Exception:
+                pass
+            _dlog("로그인 버튼 클릭(네이티브+JS)")
             self._sleep(1.5)
             _dlog(f"로그인 후 URL: {self.driver.current_url}")
 
@@ -264,22 +303,63 @@ class NaverBlogPoster:
                 _dlog("로그인 성공 확인")
                 return True
 
-            # 캡챠 등의 경우 대기
-            _dlog("로그인 미완료 - 캡챠/추가인증 대기 (60초)")
-            print("로그인 확인 대기중... (캡챠가 있으면 수동으로 해결해주세요)")
+            # 캡챠/추가인증 필요 → 구석/화면밖에 있던 창을 눈앞으로 가져와 사용자가 풀게
             try:
-                WebDriverWait(self.driver, 60).until(
-                    lambda d: "nid.naver.com" not in d.current_url
-                )
-                _dlog("추가 인증 후 로그인 성공")
-                return True
+                self.driver.set_window_position(220, 120)
+                self.driver.set_window_size(1180, 860)
+                self.driver.execute_script("window.focus(); try{window.alert;}catch(e){}")
             except Exception:
-                _dlog("로그인 확인 시간 초과")
-                return False
+                pass
+            # 캡챠/추가인증 대기 — 사용자가 직접 캡챠 풀고 로그인 버튼을 누름. (앱은 안 누름)
+            # 사용자가 로그인 창을 닫으면 즉시 '로그인 실패'.
+            _dlog("로그인 미완료 - 캡챠/추가인증 대기 (최대 120초)")
+            print("로그인 확인 대기중... 캡챠를 풀고 로그인 버튼을 직접 눌러주세요.")
+            import time as _t2
+            deadline = _t2.time() + 120
+            while _t2.time() < deadline:
+                # 사용자가 로그인 창을 닫으면 즉시 실패
+                try:
+                    if not self.driver.window_handles:
+                        _dlog("로그인 창 닫힘 → 로그인 실패")
+                        return False
+                except Exception:
+                    _dlog("브라우저 접근 불가(창 닫힘) → 로그인 실패")
+                    return False
+                # 로그인 완료(네이버 도메인 벗어남) 확인
+                try:
+                    if "nid.naver.com" not in self.driver.current_url:
+                        _dlog("추가 인증 후 로그인 성공")
+                        return True
+                except Exception:
+                    _dlog("브라우저 접근 불가(창 닫힘) → 로그인 실패")
+                    return False
+                _t2.sleep(1.0)
+            _dlog("로그인 확인 시간 초과")
+            return False
 
         except Exception as e:
             print(f"로그인 실패: {e}")
             return False
+
+    def check_status(self) -> str:
+        """계정 상태 점검 — 포스팅과 '동일한' login()으로 로그인 후 페이지로 판별.
+        반환: '정상' / '보호조치' / '로그인실패' / '확인불가'."""
+        PROT = ["보호조치", "이용이 제한", "이용 제한", "이용제한", "로그인이 제한",
+                "정책을 위반", "계정이 보호", "비정상적인 로그인", "정상적인 활동이 아"]
+        try:
+            ok = self.login()   # ★ 포스팅과 똑같은 로그인 방식 (기기등록·패스키 처리 포함)
+            try:
+                page = self.driver.page_source or ""
+                url = self.driver.current_url or ""
+            except Exception:
+                return "확인불가"
+            if any(k in page for k in PROT):
+                return "보호조치"
+            if ok and "nid.naver.com" not in url:
+                return "정상"
+            return "로그인실패"
+        except Exception:
+            return "확인불가"
 
     def _handle_device_confirm(self):
         """'새로운 기기에서 로그인' 페이지(deviceConfirm)면 '등록' 버튼 클릭"""
@@ -619,8 +699,8 @@ class NaverBlogPoster:
             return _re.sub(r'[ \t]*' + MARK + r'[ \t]*\n?', '', body).strip()
         positions = [m.start() for m in _re.finditer(MARK, body)]
         L = max(1, len(body))
-        # 마커 수 적정(n~n+2) + 상단~하단 분산 → 형식만 [이미지]로 통일해 유지
-        if (n <= len(positions) <= n + 2
+        # 마커 수가 정확히 n + 상단~하단 분산 → 형식만 [이미지]로 통일해 유지 (무조건 n장 보장)
+        if (len(positions) == n
                 and positions[0] < L * 0.45 and positions[-1] > L * 0.55):
             return _re.sub(MARK, '[이미지]', body)
         # 재배치: 기존 마커(둘 다) 제거 후 문단 사이 균등 삽입
@@ -804,19 +884,45 @@ class NaverBlogPoster:
             self._sleep(0.6)
             try:
                 clicked = self.driver.execute_script("""
+                    const targetName = (arguments[1]||'').replace(/\\s+/g,'');
                     const placePopup = document.querySelector('[class*="placesMap"], [class*="place-popup"], [class*="map-popup"]');
                     const scope = placePopup || document;
-                    const btns = scope.querySelectorAll('button');
-                    for (const b of btns) {
-                        const txt = (b.textContent||'').trim();
-                        if (txt === '추가' || txt === '+ 추가' || txt.startsWith('+ 추가')) {
-                            b.click();
-                            return 'clicked:' + txt;
+                    const addBtns = Array.from(scope.querySelectorAll('button')).filter(b => {
+                        const t = (b.textContent||'').trim();
+                        return t === '추가' || t === '+ 추가' || t.startsWith('+ 추가');
+                    });
+                    if (addBtns.length === 0) return 'no_add';
+                    // 주소 토큰(2글자 이상)으로 올바른 결과 선택
+                    const addrToks = (arguments[0]||'').split(/[\\s,]+/).filter(s => s && s.length >= 2);
+                    // '추가' 버튼이 속한 결과 행의 텍스트 추출 (목록 전체로 번지지 않게 250자 제한)
+                    function rowText(b){
+                        let el = b, last = b;
+                        for (let i=0; i<8 && el; i++){
+                            el = el.parentElement;
+                            if (!el) break;
+                            const tx = (el.textContent||'').trim();
+                            if (tx.length > 250) break;
+                            last = el;
+                            if ((el.tagName||'').toLowerCase() === 'li') return tx;
                         }
+                        return (last.textContent||'').trim();
                     }
-                    return 'no_add';
-                """)
-                _dlog(f"장소 '+ 추가' 클릭: {clicked}")
+                    let best = null, bestScore = -1, bestIdx = 0;
+                    addBtns.forEach((b, i) => {
+                        const ctx = rowText(b).replace(/\\s+/g,'');
+                        let score = 0;
+                        for (const tok of addrToks){
+                            if (ctx.indexOf(tok.replace(/\\s+/g,'')) >= 0) score += 2;
+                        }
+                        if (targetName && ctx.indexOf(targetName) >= 0) score += 1;
+                        if (score > bestScore){ bestScore = score; best = b; bestIdx = i; }
+                    });
+                    // 주소가 하나도 안 맞으면(score 0) 기존처럼 첫 결과로 폴백
+                    const chosen = (bestScore > 0 ? best : addBtns[0]);
+                    chosen.click();
+                    return 'clicked idx=' + (bestScore>0?bestIdx:0) + ' score=' + bestScore + '/' + addBtns.length;
+                """, place_address or "", place_name or "")
+                _dlog(f"장소 '+ 추가' 클릭(주소매칭): {clicked}")
                 self._sleep(0.2)
             except Exception as e:
                 _dlog(f"추가 버튼 클릭 실패: {e}")
@@ -1347,22 +1453,8 @@ class NaverBlogPoster:
                 self._select_category_in_dialog(category)
                 self._sleep(0.15)
 
-            # 태그
-            if tags:
-                try:
-                    tag_input = WebDriverWait(self.driver, 5).until(
-                        EC.presence_of_element_located((
-                            By.CSS_SELECTOR, "input[placeholder*='태그'], input[id*='tag'], .tag_input__Bw7SQ input"
-                        ))
-                    )
-                    tag_input.click()
-                    for tag in tags:
-                        tag_input.send_keys(tag)
-                        tag_input.send_keys(Keys.ENTER)
-                        self._sleep(0.15)
-                    _dlog(f"태그 {len(tags)}개 입력")
-                except Exception as e:
-                    _dlog(f"태그 입력 실패: {e}")
+            # 태그칸 입력 제거 — 본문 끝 해시태그(#태그)를 네이버가 자동으로 태그로 변환하므로 중복 불필요
+            _dlog("태그칸 입력 생략(본문 해시태그 자동 변환 사용)")
 
             # align_after_last 인라인 처리 제거 — 다이얼로그 안에서 예약 패널 열면
             # 발행 컨트롤(라디오/datepicker/시간/발행 버튼)이 가려져 발행 자체가 실패함.
@@ -1847,23 +1939,8 @@ class NaverBlogPoster:
                 self._select_category_in_dialog(category)
                 self._sleep(0.25)
 
-            # 태그 입력 (발행 다이얼로그 내)
-            if tags:
-                try:
-                    tag_input = WebDriverWait(self.driver, 5).until(
-                        EC.presence_of_element_located((
-                            By.CSS_SELECTOR, "input[placeholder*='태그'], input[id*='tag'], .tag_input__Bw7SQ input"
-                        ))
-                    )
-                    tag_input.click()
-                    for tag in tags:
-                        tag_input.send_keys(tag)
-                        tag_input.send_keys(Keys.ENTER)
-                        self._sleep(0.15)
-                    _dlog(f"태그 {len(tags)}개 입력 완료")
-                    self._sleep(0.15)
-                except Exception as e:
-                    _dlog(f"태그 입력 실패: {e}")
+            # 태그칸 입력 제거 — 본문 끝 해시태그(#태그)를 네이버가 자동으로 태그로 변환하므로 중복 불필요
+            _dlog("태그칸 입력 생략(본문 해시태그 자동 변환 사용)")
 
             # 2차: 다이얼로그 내부 '발행' 버튼 — data-testid="seOnePublishBtn" 정확 매칭
             final_clicked = self.driver.execute_script("""
@@ -1904,5 +1981,8 @@ class NaverBlogPoster:
     def close(self):
         """브라우저 종료"""
         if self.driver:
-            self.driver.quit()
+            try:
+                self.driver.quit()
+            except Exception as e:
+                _dlog(f"브라우저 종료 중 오류(무시): {e}")
             self.driver = None

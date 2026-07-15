@@ -31,10 +31,24 @@ DEFAULT_CONFIG = {
     "image_source": "auto",
 }
 
-API_KEY_FIELDS = ("gpt_key_list", "gemini_key_list", "pixabay_key_list")
+API_KEY_FIELDS = ("gpt_key_list", "gemini_key_list", "pixabay_key_list", "deepseek_key_list")
 
 # 현재 로그인한 앱-유저 (main.py에서 로그인 성공 시 set_current_user 호출)
 _current_app_user = "admin"
+
+
+def _grace_expired(u: dict) -> bool:
+    """공용키 유예기간(shared_api_grace_until, YYYY-MM-DD)이 지났으면 True.
+    유예일이 없으면(관리자가 상시 부여한 경우) 만료 아님(False)."""
+    g = ((u or {}).get("shared_api_grace_until") or "").strip()
+    if not g:
+        return False
+    try:
+        import datetime as _dt
+        y, m, d = map(int, g.split("-"))
+        return _dt.date.today() > _dt.date(y, m, d)
+    except Exception:
+        return False
 
 
 def set_current_user(username: str):
@@ -91,6 +105,8 @@ def load_config() -> dict:
         user_bucket = akbu.get(user, {})
         for kn in API_KEY_FIELDS:
             merged[kn] = list(user_bucket.get(kn, []))
+        # 자기(본인) AI 키 보유 여부 — 공용키 fallback 적용 '전'에 판정 (구독 만료 게이트에서 사용)
+        merged["_own_ai_key"] = any(any(k for k in (merged.get(_kn) or [])) for _kn in ("gpt_key_list", "gemini_key_list", "deepseek_key_list"))
         # Firebase 사용자 레코드에서 API 키 우선 적용 (관리자 어디서든 동기화)
         try:
             from users import load_users as _lu
@@ -100,12 +116,16 @@ def load_config() -> dict:
                 online = [k for k in (online_keys.get(kn) or []) if k]
                 if online:
                     merged[kn] = list(online)
-            shared = _u.get("shared_api_keys", {}) or {}
-            if shared:
+            # Firebase 본인 키까지 반영해 자기 키 보유 여부 갱신
+            merged["_own_ai_key"] = any(any(k for k in (merged.get(_kn) or [])) for _kn in ("gpt_key_list", "gemini_key_list", "deepseek_key_list"))
+            # ★ 공용키(shared_api_keys) 배포 중단 — 각 사용자는 본인 키만 사용 (PG 심사 대응).
+            #   단, 관리자(admin)가 특정인에게 부여한 shared 키는 계속 반영(수동 부여 경로 유지).
+            _u_shared = _u.get("shared_api_keys", {}) or {}
+            if _u_shared and _u.get("shared_api_keys_admin_granted") and not _grace_expired(_u):
                 for kn in API_KEY_FIELDS:
                     own = [k for k in merged.get(kn, []) if k]
                     if not own:
-                        merged[kn] = list(shared.get(kn) or [])
+                        merged[kn] = list(_u_shared.get(kn) or [])
                 merged["_has_shared_keys"] = True
         except Exception as e:
             import sys
@@ -132,8 +152,10 @@ def load_config() -> dict:
             online = [k for k in (online_keys.get(kn) or []) if k]
             if online:
                 default[kn] = list(online)
+        default["_own_ai_key"] = any(any(k for k in (default.get(_kn) or [])) for _kn in ("gpt_key_list", "gemini_key_list", "deepseek_key_list"))
+        # ★ 공용키 배포 중단 — 관리자가 직접 부여한(shared_api_keys_admin_granted) 유저만 공용키 반영.
         shared = _fb_user.get("shared_api_keys", {}) or {}
-        if shared:
+        if shared and _fb_user.get("shared_api_keys_admin_granted") and not _grace_expired(_fb_user):
             for kn in API_KEY_FIELDS:
                 own = [k for k in default.get(kn, []) if k]
                 if not own:

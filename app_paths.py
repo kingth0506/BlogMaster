@@ -27,6 +27,32 @@ def data_file(name: str) -> str:
     return os.path.join(get_app_data_dir(), name)
 
 
+def safe_load_json(path, default=None, max_mb: int = 40):
+    """JSON을 안전하게 로드. 파일이 비정상적으로 크거나(폭주) 깨졌으면
+    백업(.corrupt.bak) 후 default 반환 — 절대 예외를 올리지 않는다(앱 멈춤 방지)."""
+    import json as _json
+    if not os.path.exists(path):
+        return default
+    try:
+        if os.path.getsize(path) > max_mb * 1024 * 1024:
+            try:
+                os.replace(path, path + ".corrupt.bak")
+            except Exception:
+                pass
+            return default
+    except Exception:
+        pass
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        try:
+            os.replace(path, path + ".corrupt.bak")
+        except Exception:
+            pass
+        return default
+
+
 def ensure_from_bundle(name: str):
     """번들된 기본 파일을 최초 실행시 사용자 폴더로 복사 (있으면 skip)"""
     dst = data_file(name)

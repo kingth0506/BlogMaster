@@ -76,7 +76,7 @@ class SettingsDialog(QDialog):
 
         # AI는 GPT 전용 — 선택 UI 제거
         ai_frame = QHBoxLayout()
-        ai_info = QLabel("AI: GPT (ChatGPT)")
+        ai_info = QLabel("AI: 자동 글쓰기")
         ai_info.setStyleSheet("font-weight: bold; color: #1e293b;")
         ai_frame.addWidget(ai_info)
         # 내부 호환용 더미 (저장/로드 로직에서 참조됨, 화면엔 안 보임)
@@ -89,22 +89,103 @@ class SettingsDialog(QDialog):
         btn_lazy = QPushButton("(발급받기 귀찮으신분들 클릭)")
         btn_lazy.setStyleSheet("padding: 3px 10px; font-size: 11px; color: #ef4444; background: transparent; border: 1px solid #ef4444; border-radius: 4px;")
         btn_lazy.setCursor(Qt.PointingHandCursor)
-        btn_lazy.clicked.connect(self._show_paid_api_info)
+        btn_lazy.clicked.connect(lambda: __import__('webbrowser').open("https://n-jobs.kr/payment.html"))
         ai_frame.addWidget(btn_lazy)
         ai_frame.addStretch()
         ai_w = QWidget()
         ai_w.setLayout(ai_frame)
         layout.addWidget(ai_w)
 
-        # API 키 입력 (각 3개씩 탭) — Gemini 제거, GPT/Pixabay만 사용
+        # 본인 API 키 입력 — 글쓰기 엔진(딥시크/GPT/제미나이) + 이미지(Pixabay)
         api_configs = [
-            ("GPT API 키", "gpt_key", "키 발급받기 (유료)", "https://platform.openai.com/api-keys", "#1e293b", ""),
-            ("Pixabay API 키", "pixabay_key", "키 발급받기 (유료)", "https://pixabay.com/api/docs/", "#22c55e", ""),
+            ("딥시크 API 키", "deepseek_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#7c3aed", ""),
+            ("챗GPT API 키", "gpt_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#1e293b", ""),
+            ("제미나이 API 키", "gemini_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#4285f4", ""),
+            ("Pixabay API 키", "pixabay_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb7380e18179d4dedc5714db", "#22c55e", ""),
         ]
 
         self.api_key_fields = {}
+
+        def _test_key(key_prefix, entry):
+            from PySide6.QtWidgets import QMessageBox, QApplication
+            import requests as _rq
+            key = (entry.text() or "").strip()
+            if not key:
+                QMessageBox.warning(self, "API 키 테스트", "키를 먼저 입력한 뒤 테스트하세요.")
+                return
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            ok = False
+            detail = ""
+            try:
+                if key_prefix == "pixabay_key":
+                    r = _rq.get("https://pixabay.com/api/",
+                                params={"key": key, "q": "test", "per_page": 3}, timeout=10)
+                    ok = (r.status_code == 200)
+                    detail = "정상 작동하는 키입니다." if ok else f"무효한 키입니다. (HTTP {r.status_code})\n{r.text[:120]}"
+                elif key_prefix == "gpt_key":
+                    r = _rq.get("https://api.openai.com/v1/models",
+                                headers={"Authorization": f"Bearer {key}"}, timeout=10)
+                    ok = (r.status_code == 200)
+                    if ok:
+                        detail = "정상 작동하는 키입니다."
+                    elif r.status_code == 401:
+                        detail = "무효한 키입니다. (인증 실패 401)"
+                    else:
+                        detail = f"사용할 수 없습니다. (HTTP {r.status_code}) — 결제/권한/한도 확인 필요"
+                elif key_prefix == "deepseek_key":
+                    r = _rq.get("https://api.deepseek.com/user/balance",
+                                headers={"Authorization": f"Bearer {key}"}, timeout=10)
+                    ok = (r.status_code == 200)
+                    if ok:
+                        detail = "정상 작동하는 키입니다."
+                    elif r.status_code == 401:
+                        detail = "무효한 키입니다. (인증 실패 401)"
+                    else:
+                        detail = f"사용할 수 없습니다. (HTTP {r.status_code}) — 결제/충전 확인 필요"
+                elif key_prefix == "gemini_key":
+                    r = _rq.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={key}", timeout=10)
+                    ok = (r.status_code == 200)
+                    if ok:
+                        detail = "정상 작동하는 키입니다."
+                    elif r.status_code in (400, 403):
+                        detail = "무효한 키입니다. (인증 실패)"
+                    else:
+                        detail = f"사용할 수 없습니다. (HTTP {r.status_code})"
+                else:
+                    detail = "지원하지 않는 키 종류입니다."
+            except Exception as e:
+                detail = f"네트워크 오류: {e}"
+            finally:
+                QApplication.restoreOverrideCursor()
+            if ok:
+                QMessageBox.information(self, "API 키 테스트", f"✅ {detail}")
+            else:
+                QMessageBox.critical(self, "API 키 테스트", f"❌ {detail}")
+
+        # ── 글쓰기 엔진 선택 (딥시크 / 챗GPT / 제미나이 중 택1) ──
+        _eng_row = QHBoxLayout()
+        _eng_lbl = QLabel("글쓰기 엔진:")
+        _eng_lbl.setMinimumWidth(110)
+        _eng_row.addWidget(_eng_lbl)
+        self.rb_eng_deepseek = QRadioButton("딥시크")
+        self.rb_eng_gpt = QRadioButton("챗GPT")
+        self.rb_eng_gemini = QRadioButton("제미나이")
+        self._eng_grp = QButtonGroup(self)
+        for _rb in (self.rb_eng_deepseek, self.rb_eng_gpt, self.rb_eng_gemini):
+            self._eng_grp.addButton(_rb)
+            _eng_row.addWidget(_rb)
+        _eng_row.addStretch()
+        self.rb_eng_deepseek.setChecked(True)
+        layout.addLayout(_eng_row)
+        _eng_help = QLabel("선택한 엔진의 API 키가 있어야 글이 생성됩니다. (제미나이는 무료 한도가 있어 대량 생성 시 느릴 수 있어요)")
+        _eng_help.setStyleSheet("color:#64748b; font-size:11px; padding:2px 0 6px 0;")
+        _eng_help.setWordWrap(True)
+        layout.addWidget(_eng_help)
+
         for label, key_prefix, btn_text, url, color, _ in api_configs:
-            row = QHBoxLayout()
+            row_w = QWidget()
+            row = QHBoxLayout(row_w)
+            row.setContentsMargins(0, 0, 0, 0)
             lbl = QLabel(label)
             lbl.setMinimumWidth(110)
             row.addWidget(lbl)
@@ -126,8 +207,20 @@ class SettingsDialog(QDialog):
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked, u=url: __import__('webbrowser').open(u))
             row.addWidget(btn)
-            layout.addLayout(row)
-            self.api_key_fields[key_prefix] = {"entry": entry}
+            # 키 테스트 버튼 — 입력한 키가 실제로 작동하는지 즉시 확인
+            btn_test = QPushButton("테스트")
+            btn_test.setCursor(Qt.PointingHandCursor)
+            btn_test.setStyleSheet("padding: 3px 10px; font-size: 11px; color: #2563eb; background: transparent; border: 1px solid #2563eb; border-radius: 4px;")
+            btn_test.clicked.connect(lambda checked, kp=key_prefix, e=entry: _test_key(kp, e))
+            row.addWidget(btn_test)
+            layout.addWidget(row_w)
+            self.api_key_fields[key_prefix] = {"entry": entry, "row": row_w}
+
+        # 모든 키칸(딥시크·GPT·제미나이·픽사베이)은 항상 표시 — 각자 본인 키 직접 입력
+        for _kp in ("deepseek_key", "gpt_key", "gemini_key", "pixabay_key"):
+            _fi = self.api_key_fields.get(_kp)
+            if _fi and _fi.get("row"):
+                _fi["row"].setVisible(True)
 
         self._divider(layout)
 
@@ -349,6 +442,7 @@ class SettingsDialog(QDialog):
                     entry.setText("")
                     entry.setReadOnly(False)
                     entry.setStyleSheet("padding: 5px;")
+        self._sync_key_mode_radio()
         # 부모 윈도우의 잔여기간(남은일수) 라벨도 갱신
         try:
             parent = self.parent()
@@ -411,17 +505,18 @@ class SettingsDialog(QDialog):
                 lbl.setText("📌 관리자 계정  —  무제한")
                 lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #22c55e; padding: 2px 4px;")
             return
+        # 아이디 1개 = 명의 1개 구조 — 빈 명의2/3 라벨은 숨김 (분할 전 구계정 호환용으로 로직은 유지)
         keys = ["expires", "expires_2", "expires_3"]
-        names = ["1명의 (아이디 1-3)", "2명의 (아이디 4-6)", "3명의 (아이디 7-9)"]
+        names = ["구독 (네이버 아이디 3개)", "2명의 (아이디 4-6)", "3명의 (아이디 7-9)"]
         for i, (lbl, key, name) in enumerate(zip(self.myeong_expires_labels, keys, names)):
             exp = (cu.get(key) or "").strip()
+            if i > 0 and not exp:
+                lbl.setVisible(False)
+                continue
+            lbl.setVisible(True)
             if not exp:
-                if i == 0:
-                    lbl.setText(f"📌 {name}  —  무료 체험 중")
-                    lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #22c55e; padding: 2px 4px;")
-                else:
-                    lbl.setText(f"📌 {name}  —  미구독 (구독 연장에서 신청)")
-                    lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #94a3b8; padding: 2px 4px;")
+                lbl.setText(f"📌 {name}  —  무료 체험 중")
+                lbl.setStyleSheet("font-size: 12px; font-weight: bold; color: #22c55e; padding: 2px 4px;")
             else:
                 try:
                     y, m, d = map(int, exp.split("-"))
@@ -449,6 +544,19 @@ class SettingsDialog(QDialog):
         line.setFrameShape(QFrame.HLine)
         line.setStyleSheet("color: #e0e0e0;")
         layout.addWidget(line)
+
+    def _sync_key_mode_radio(self):
+        """저장된 글쓰기 엔진 선택(ai_engine)을 라디오에 복원."""
+        try:
+            eng = (self.cfg.get("ai_engine") or "deepseek").strip().lower()
+            if eng == "gpt":
+                self.rb_eng_gpt.setChecked(True)
+            elif eng == "gemini":
+                self.rb_eng_gemini.setChecked(True)
+            else:
+                self.rb_eng_deepseek.setChecked(True)
+        except Exception:
+            pass
 
     def _load_values(self):
         # AI 제공자는 GPT 전용 고정
@@ -498,6 +606,7 @@ class SettingsDialog(QDialog):
                     entry.setReadOnly(False)
                     entry.setStyleSheet("padding: 5px;")
 
+        self._sync_key_mode_radio()
         accounts = self.cfg.get("accounts", [])
         # 잠긴 네이버 ID 목록 (한 번 사용한 ID는 본인도 변경 불가)
         locked_set = set((s or "").strip().lower() for s in user_entry.get("locked_naver_ids", []))
@@ -576,7 +685,17 @@ class SettingsDialog(QDialog):
         self.pw_msg.setText("비밀번호가 변경되었습니다.")
 
     def _save(self):
-        self.cfg["ai_provider"] = "GPT"  # GPT 전용 고정
+        self.cfg["ai_provider"] = "GPT"  # 하위호환
+        # 글쓰기 엔진 선택 저장 (deepseek / gpt / gemini)
+        try:
+            if self.rb_eng_gpt.isChecked():
+                self.cfg["ai_engine"] = "gpt"
+            elif self.rb_eng_gemini.isChecked():
+                self.cfg["ai_engine"] = "gemini"
+            else:
+                self.cfg["ai_engine"] = "deepseek"
+        except Exception:
+            self.cfg["ai_engine"] = "deepseek"
 
         # API 키 저장 — 관리자만 api_keys_by_user/Firebase api_keys에 저장.
         # 비관리자는 본인 버킷을 절대 건드리지 않음 (shared 키 leak 방지).
@@ -755,7 +874,7 @@ class SettingsDialog(QDialog):
             fl.addLayout(row1)
 
             row2 = QHBoxLayout()
-            api_lbl = QLabel("GPT API 구독: 로딩 중...")
+            api_lbl = QLabel("API 구독: 로딩 중...")
             api_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px;")
             row2.addWidget(api_lbl, 1)
             btn_api = QPushButton("갱신")
@@ -802,13 +921,10 @@ class SettingsDialog(QDialog):
         user_row.addWidget(btn_load)
         layout.addLayout(user_row)
 
+        # 아이디 1개 = 명의 1개 — 관리자 부여도 명의1(expires)만 사용 (명의2/3 입력 제거)
         FIELDS = [
-            ("기본 구독 명의 1", "expires"),
-            ("기본 구독 명의 2", "expires_2"),
-            ("기본 구독 명의 3", "expires_3"),
-            ("API 구독 명의 1",  "api_expires"),
-            ("API 구독 명의 2",  "api_expires_2"),
-            ("API 구독 명의 3",  "api_expires_3"),
+            ("기본 구독", "expires"),
+            ("API 구독",  "api_expires"),
         ]
         self.admin_sub_fields = {}
         for label, key in FIELDS:
@@ -918,12 +1034,19 @@ class SettingsDialog(QDialog):
             if is_admin_user:
                 base_lbl.setText("기본 구독: ♾️ 무제한")
                 base_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px; color: #22c55e;")
-                api_lbl.setText("GPT API 구독: ♾️ 무제한")
+                api_lbl.setText("API 구독: ♾️ 무제한")
                 api_lbl.setStyleSheet("background: transparent; border: none; font-size: 12px; color: #22c55e;")
             else:
+                # 1명의 구조 — 값 없는 명의2/3 상태 라벨은 숨김
+                if i > 0 and not (user.get(BASE_FIELDS[i]) or user.get(API_FIELDS[i])):
+                    base_lbl.setVisible(False)
+                    api_lbl.setVisible(False)
+                    continue
+                base_lbl.setVisible(True)
+                api_lbl.setVisible(True)
                 b_txt, b_col = _fmt(user.get(BASE_FIELDS[i], ""))
                 a_txt, a_col = _fmt(user.get(API_FIELDS[i], ""))
                 base_lbl.setText(f"기본 구독: {b_txt}")
                 base_lbl.setStyleSheet(f"background: transparent; border: none; font-size: 12px; color: {b_col};")
-                api_lbl.setText(f"GPT API 구독: {a_txt}")
+                api_lbl.setText(f"API 구독: {a_txt}")
                 api_lbl.setStyleSheet(f"background: transparent; border: none; font-size: 12px; color: {a_col};")

@@ -1070,9 +1070,28 @@ def save_results(results: list[dict], filepath: str, keyword: str = ""):
 
 
 def load_results(filepath: str) -> dict:
-    """{'keyword': str, 'items': list} 반환. 구버전 호환."""
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    """{'keyword': str, 'items': list} 반환. 구버전 호환.
+    파일이 비정상적으로 크거나(폭주) 깨졌으면 백업 후 빈 결과 반환 — 앱이 멈추지 않음."""
+    import os as _os
+    empty = {"keyword": "", "items": []}
+    try:
+        if _os.path.getsize(filepath) > 80 * 1024 * 1024:  # 80MB 초과 = 비정상
+            try:
+                _os.replace(filepath, filepath + ".corrupt.bak")
+            except Exception:
+                pass
+            return empty
+    except Exception:
+        pass
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        try:
+            _os.replace(filepath, filepath + ".corrupt.bak")
+        except Exception:
+            pass
+        return empty
     if isinstance(data, list):
         return {"keyword": "", "items": data}
-    return data
+    return data if isinstance(data, dict) else empty

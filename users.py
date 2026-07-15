@@ -106,6 +106,8 @@ def load_users() -> dict:
                 "referrer": data.get("referrer", ""),
                 "email": data.get("email", ""),
                 "shared_api_keys": data.get("shared_api_keys", {}),
+                "shared_api_keys_admin_granted": data.get("shared_api_keys_admin_granted", False),
+                "shared_api_grace_until": data.get("shared_api_grace_until", ""),
                 "api_keys": data.get("api_keys", {}),
                 "accounts": data.get("accounts", []),
                 "locked_naver_ids": data.get("locked_naver_ids", []),
@@ -150,6 +152,8 @@ def save_users(users: dict):
                 "referrer": u.get("referrer", ""),
                 "email": u.get("email", ""),
                 "shared_api_keys": u.get("shared_api_keys", {}),
+                "shared_api_keys_admin_granted": u.get("shared_api_keys_admin_granted", False),
+                "shared_api_grace_until": u.get("shared_api_grace_until", ""),
                 "api_keys": u.get("api_keys", {}),
                 "accounts": u.get("accounts", []),
                 "locked_naver_ids": u.get("locked_naver_ids", []),
@@ -221,7 +225,8 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
                 api_expires=None, api_expires_2=None, api_expires_3=None,
                 max_accounts=None, email=None, shared_api_keys=None, api_keys=None,
                 accounts=None, locked_naver_ids=None, prompts=None, keywordmaster_enabled=None,
-                privacy_consent=None, privacy_consent_date=None) -> bool:
+                privacy_consent=None, privacy_consent_date=None,
+                shared_api_keys_admin_granted=None, shared_api_grace_until=None) -> bool:
     users = load_users()
     u = users.get(username)
     if not u:
@@ -248,6 +253,10 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
         u["email"] = email
     if shared_api_keys is not None:
         u["shared_api_keys"] = shared_api_keys
+    if shared_api_keys_admin_granted is not None:
+        u["shared_api_keys_admin_granted"] = shared_api_keys_admin_granted
+    if shared_api_grace_until is not None:
+        u["shared_api_grace_until"] = shared_api_grace_until
     if api_keys is not None:
         u["api_keys"] = api_keys
     if accounts is not None:
@@ -275,7 +284,10 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
 
 
 def is_api_expired(user: dict, slot: int = 1) -> bool:
-    """API 구독 만료 여부. slot=1,2,3. 빈 문자열이면 구독 없음(만료 취급)."""
+    """API 구독 만료 여부. slot=1,2,3. 빈 문자열이면 구독 없음(만료 취급).
+    - 관리자: 항상 False (만료 아님)"""
+    if (user or {}).get("role") == "admin":
+        return False
     key = "api_expires" if slot == 1 else f"api_expires_{slot}"
     exp = (user.get(key) or "").strip()
     if not exp:
@@ -310,13 +322,15 @@ def find_user_by_identity(name: str, phone: str, email: str):
     import re as _re
     def _norm_phone(p):
         return _re.sub(r"\D", "", p or "")
+    name = (name or "").strip()
+    email = (email or "").strip().lower()
     users = load_users()
     for uid, u in users.items():
         if uid == "admin":
             continue
-        if (u.get("name", "").strip() == name.strip()
+        if ((u.get("name", "") or "").strip() == name
                 and _norm_phone(u.get("phone", "")) == _norm_phone(phone)
-                and (u.get("email", "") or "").strip().lower() == email.strip().lower()):
+                and (u.get("email", "") or "").strip().lower() == email):
             return uid
     return None
 
@@ -334,29 +348,10 @@ SESSION_TTL_MINUTES = 10
 
 
 def check_session_conflict(username: str) -> bool:
-    """다른 기기에서 활성 세션이 있으면 True 반환. Firebase 불가 시 False(허용)."""
-    db = _init_firebase()
-    if db is None:
-        return False
-    try:
-        doc = db.collection(COLLECTION).document(username).get()
-        if not doc.exists:
-            return False
-        data = doc.to_dict() or {}
-        if not data.get("session_id"):
-            return False
-        heartbeat = data.get("session_heartbeat")
-        if heartbeat is None:
-            return False
-        now = datetime.datetime.now(datetime.timezone.utc)
-        try:
-            age_min = (now - heartbeat).total_seconds() / 60
-        except TypeError:
-            hb_aware = heartbeat.replace(tzinfo=datetime.timezone.utc)
-            age_min = (now - hb_aware).total_seconds() / 60
-        return age_min <= SESSION_TTL_MINUTES
-    except Exception:
-        return False
+    """여러 컴퓨터에서 동시 로그인 허용 — 중복 세션 검사 비활성화.
+    (이전: 다른 기기에 활성 세션이 있으면 True로 로그인 차단했으나,
+     한 아이디를 여러 PC에서 쓰도록 항상 False 반환.)"""
+    return False
 
 
 def set_session(username: str, session_id: str):

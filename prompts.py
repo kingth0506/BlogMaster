@@ -100,18 +100,39 @@ DEFAULT_PROMPTS = {
 }
 
 
+def _bundled_base() -> dict:
+    """번들된 prompts.json의 '기본'(배포 시 고정된 캐논). 사용자가 못 지우게 항상 이걸로 고정.
+    번들에서 못 읽으면 DEFAULT_PROMPTS['기본']로 폴백."""
+    try:
+        from app_paths import get_bundle_dir
+        p = os.path.join(get_bundle_dir(), "prompts.json")
+        with open(p, "r", encoding="utf-8") as f:
+            b = json.load(f).get("기본") or {}
+        if (b.get("blog") or "").strip():
+            return b
+    except Exception:
+        pass
+    return DEFAULT_PROMPTS["기본"]
+
+
+def get_base_prompt() -> dict:
+    """수정·삭제 불가인 '기본' 프롬프트(캐논) 사본."""
+    return dict(_bundled_base())
+
+
 def load_prompts() -> dict:
+    merged = dict(DEFAULT_PROMPTS)
     path = _prompts_file()
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 saved = json.load(f)
-            # 기본 프롬프트와 병합 (저장본이 기본을 덮어씀)
             merged = {**DEFAULT_PROMPTS, **saved}
-            return merged
         except Exception:
-            pass
-    return dict(DEFAULT_PROMPTS)
+            merged = dict(DEFAULT_PROMPTS)
+    # '기본'은 항상 번들 캐논으로 고정 — 사용자가 비우거나 지워도 자동 복구
+    merged["기본"] = dict(_bundled_base())
+    return merged
 
 
 def save_prompts(prompts: dict):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "1.9.1"
+APP_VERSION = "2.4.1"
 
 import os
 import sys
@@ -100,10 +100,10 @@ QLabel { color: #1e293b; background: transparent; }
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
         stop:0 #4f46e5, stop:1 #6366f1);
 }
-#header QLabel { color: white; font-size: 19px; font-weight: bold; letter-spacing: 1px; }
+#header QLabel { color: white; font-size: 16px; font-weight: bold; letter-spacing: 0px; }
 #header QPushButton {
     background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.25);
-    border-radius: 7px; padding: 6px 18px; font-weight: bold; font-size: 12px;
+    border-radius: 7px; padding: 5px 10px; font-weight: bold; font-size: 11px;
 }
 #header QPushButton:hover { background: rgba(255,255,255,0.28); }
 
@@ -394,6 +394,8 @@ class MainWindow(QMainWindow):
     crawl_count_signal = Signal(str)
     post_count_signal = Signal(str)
     publish_count_signal = Signal(str)
+    resv_signal = Signal()  # 예약 현황 라벨 갱신(메인스레드)
+    acct_status_signal = Signal(str)  # 계정 점검 결과(메인스레드)
     _app_quit_signal = Signal()
 
     def __init__(self):
@@ -418,6 +420,8 @@ class MainWindow(QMainWindow):
         self.crawl_count_signal.connect(self._update_crawl_count)
         self.post_count_signal.connect(self._update_post_count)
         self.publish_count_signal.connect(self._update_publish_count)
+        self.resv_signal.connect(self._update_reservation_label)
+        self.acct_status_signal.connect(self._show_acct_status)
         self._app_quit_signal.connect(lambda: __import__('PySide6.QtWidgets', fromlist=['QApplication']).QApplication.instance().quit())
 
         self._build_ui()
@@ -575,13 +579,58 @@ class MainWindow(QMainWindow):
         header.setObjectName("header")
         header.setFixedHeight(55)
         h_layout = QHBoxLayout(header)
-        h_layout.setContentsMargins(25, 0, 20, 0)
+        h_layout.setContentsMargins(12, 0, 10, 0)
+        h_layout.setSpacing(5)
 
         title = QLabel("블로그마스터")
         h_layout.addWidget(title)
         ver_lbl = QLabel(f"v{APP_VERSION}")
         ver_lbl.setStyleSheet("font-size: 12px; color: #94a3b8; margin-left: 6px;")
         h_layout.addWidget(ver_lbl)
+
+        # ── 카카오톡 오픈채팅: 버튼 클릭 시 QR + 바로입장 팝업 ──
+        import webbrowser as _wb
+        from PySide6.QtGui import QPixmap as _QPixmap
+        _KAKAO_URL = "https://open.kakao.com/o/gZvid0Ai"
+        try:
+            from app_paths import get_bundle_dir as _gbd
+            _qr_path = os.path.join(_gbd(), "kakao_qr.png")
+        except Exception:
+            _qr_path = os.path.join(os.path.dirname(__file__), "kakao_qr.png")
+
+        def _open_kakao_qr_popup():
+            d = QDialog(self)
+            d.setWindowTitle("카카오톡 오픈채팅 입장")
+            _v = QVBoxLayout(d)
+            if os.path.exists(_qr_path):
+                _big = QLabel()
+                _big.setPixmap(_QPixmap(_qr_path).scaled(280, 280, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                _big.setAlignment(Qt.AlignCenter)
+                _v.addWidget(_big)
+            _cap = QLabel("휴대폰 카메라로 QR을 찍거나\n아래 버튼으로 바로 입장하세요")
+            _cap.setAlignment(Qt.AlignCenter)
+            _v.addWidget(_cap)
+            _enter = QPushButton("💬 바로입장")
+            _enter.setCursor(Qt.PointingHandCursor)
+            _enter.setStyleSheet("background: #FEE500; color: #3C1E1E; border: none; border-radius: 8px; padding: 10px 18px; font-weight: bold;")
+            _enter.clicked.connect(lambda: _wb.open(_KAKAO_URL))
+            _v.addWidget(_enter)
+            d.exec()
+
+        btn_kakao = QPushButton("💬 오픈채팅")
+        btn_kakao.setCursor(Qt.PointingHandCursor)
+        btn_kakao.setStyleSheet("background: #FEE500; color: #3C1E1E; border: none; border-radius: 6px; padding: 5px 9px; font-weight: bold; margin-left: 10px;")
+        btn_kakao.clicked.connect(_open_kakao_qr_popup)
+        h_layout.addWidget(btn_kakao)
+
+        # ── 사용법 (노션 가이드) ──
+        _NOTION_URL = "https://shared-rise-9e5.notion.site/37df3feefb738039ae90e6ac73a9e2ea"
+        btn_manual = QPushButton("📖 사용법")
+        btn_manual.setCursor(Qt.PointingHandCursor)
+        btn_manual.setStyleSheet("background: #0f172a; color: white; border: none; border-radius: 6px; padding: 5px 9px; font-weight: bold; margin-left: 8px;")
+        btn_manual.clicked.connect(lambda: _wb.open(_NOTION_URL))
+        h_layout.addWidget(btn_manual)
+
         h_layout.addStretch()
 
         self.dash_expires = QLabel("")
@@ -590,7 +639,7 @@ class MainWindow(QMainWindow):
 
         btn_payment = QPushButton("💳 구독 연장")
         btn_payment.setCursor(Qt.PointingHandCursor)
-        btn_payment.setStyleSheet("background: #6366f1; color: white; border: none; border-radius: 6px; padding: 6px 14px; font-weight: bold;")
+        btn_payment.setStyleSheet("background: #6366f1; color: white; border: none; border-radius: 6px; padding: 5px 9px; font-weight: bold;")
         btn_payment.clicked.connect(self._open_payment_dialog)
         h_layout.addWidget(btn_payment)
 
@@ -598,6 +647,12 @@ class MainWindow(QMainWindow):
         btn_prompts.setCursor(Qt.PointingHandCursor)
         btn_prompts.clicked.connect(self._open_prompt_editor)
         h_layout.addWidget(btn_prompts)
+
+        btn_engage = QPushButton("💬 댓글·이웃")
+        btn_engage.setCursor(Qt.PointingHandCursor)
+        btn_engage.setStyleSheet("background: #10b981; color: white; border: none; border-radius: 6px; padding: 5px 9px; font-weight: bold;")
+        btn_engage.clicked.connect(self._open_engage_dialog)
+        h_layout.addWidget(btn_engage)
 
         self.btn_admin = QPushButton("관리자")
         self.btn_admin.setStyleSheet("background: #f59e0b; color: white; border: none; border-radius: 6px; padding: 6px 14px;")
@@ -926,10 +981,26 @@ class MainWindow(QMainWindow):
 
         dash_layout.addWidget(QLabel("계정:"))
         dash_layout.addWidget(self.account_combo)
+        # 예약 발행 현황 (계정 옆) — 전환 시 캐시에서 자동 표시 + 조회 버튼으로 실시간 갱신
+        self.btn_resv = QPushButton("📅 예약조회")
+        self.btn_resv.setCursor(Qt.PointingHandCursor)
+        self.btn_resv.setStyleSheet("background:#0ea5e9; color:white; border:none; border-radius:6px; padding:5px 10px; font-size:11px; font-weight:bold;")
+        self.btn_resv.clicked.connect(self._check_reservations)
+        dash_layout.addWidget(self.btn_resv)
+        # 계정 보호조치 점검 버튼
+        self.btn_acct_check = QPushButton("🛡️ 계정점검")
+        self.btn_acct_check.setCursor(Qt.PointingHandCursor)
+        self.btn_acct_check.setStyleSheet("background:#64748b; color:white; border:none; border-radius:6px; padding:5px 10px; font-size:11px; font-weight:bold; margin-left:4px;")
+        self.btn_acct_check.clicked.connect(self._check_accounts_status)
+        dash_layout.addWidget(self.btn_acct_check)
+        self.resv_label = QLabel("📅 예약: -")
+        self.resv_label.setStyleSheet("color:#475569; font-size:11px; margin-left:6px;")
+        dash_layout.addWidget(self.resv_label)
         dash_layout.addStretch()
         right_layout.addWidget(dash)
 
         self._update_dashboard()
+        self._update_reservation_label()
         self._refresh_status_panes()
         from PySide6.QtCore import QTimer as _QT
         self._status_pane_timer = _QT(self)
@@ -1204,6 +1275,253 @@ class MainWindow(QMainWindow):
         return base
 
     # ── 계정 선택 ──
+    # ── 예약 발행 현황 (계정별 캐시 + 실시간 조회) ──
+    def _resv_cache_file(self):
+        return os.path.join(os.path.dirname(__file__), "reservation_status.json")
+
+    def _active_blog_id(self):
+        try:
+            cfg = load_config()
+            idx = cfg.get("active_account", 0)
+            accs = cfg.get("accounts", [])
+            return (accs[idx].get("blog_id", "") if idx < len(accs) else "") or f"acc{idx}"
+        except Exception:
+            return "default"
+
+    def _load_resv_cache(self):
+        try:
+            with open(self._resv_cache_file(), "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    def _save_resv_status(self, blog_id, count, latest_str):
+        """예약 현황을 계정별로 파일에 저장(파일만 — 라벨 갱신은 호출부에서 메인스레드로)."""
+        if not blog_id:
+            return
+        try:
+            import datetime as _dt
+            c = self._load_resv_cache()
+            c[blog_id] = {"count": int(count), "latest": latest_str or "",
+                          "checked": _dt.datetime.now().strftime("%m-%d %H:%M")}
+            with open(self._resv_cache_file(), "w", encoding="utf-8") as f:
+                json.dump(c, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _update_reservation_label(self):
+        if not hasattr(self, "resv_label"):
+            return
+        c = self._load_resv_cache().get(self._active_blog_id(), {})
+        if not c:
+            self.resv_label.setText("📅 예약: 조회 전")
+            self.resv_label.setToolTip("옆 '예약조회' 버튼으로 확인하세요.")
+            return
+        import datetime as _dt
+        cnt = c.get("count", 0)
+        latest = c.get("latest", "")
+        txt = f"📅 예약 {cnt}건"
+        if latest:
+            try:
+                lt = _dt.datetime.strptime(latest, "%Y-%m-%d %H:%M")
+                secs = (lt - _dt.datetime.now()).total_seconds()
+                if secs > 0:
+                    d = int(secs // 86400); h = int((secs % 86400) // 3600)
+                    txt += f" · 마지막 {latest} ({d}일 {h}시간 남음)"
+                else:
+                    txt += f" · 마지막 {latest} (지남)"
+            except Exception:
+                txt += f" · 마지막 {latest}"
+        if c.get("checked"):
+            txt += f"   ({c['checked']} 기준)"
+        self.resv_label.setText(txt)
+        self.resv_label.setToolTip("")
+
+    def _kill_profile_chrome(self, blog_id):
+        """해당 계정 프로필을 쓰는 고아 크롬 프로세스 종료 (프로필 잠금/충돌 방지)."""
+        if not blog_id:
+            return
+        try:
+            import subprocess
+            ps = ("Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+                  "Where-Object { $_.CommandLine -like '*chrome_profile*" + blog_id + "*' } | "
+                  "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                           timeout=15, capture_output=True)
+        except Exception:
+            pass
+
+    def _check_reservations(self):
+        if getattr(self, "_resv_checking", False):
+            return
+        if self.is_crawling or getattr(self, "is_posting", False):
+            QMessageBox.information(self, "안내", "크롤링/발행 중에는 예약조회를 할 수 없습니다. 끝난 뒤 눌러주세요.")
+            return
+        cfg = load_config()
+        idx = cfg.get("active_account", 0)
+        accs = cfg.get("accounts", [])
+        if idx >= len(accs):
+            QMessageBox.warning(self, "안내", "계정 정보가 없습니다.")
+            return
+        account = accs[idx]
+        if not account.get("naver_id") or not account.get("naver_pw"):
+            QMessageBox.warning(self, "안내", "네이버 아이디/비밀번호를 먼저 설정해주세요.")
+            return
+        if self._block_if_expired():
+            return
+        self._resv_checking = True
+        self.btn_resv.setEnabled(False)
+        self.resv_label.setText("📅 예약 조회 중... (구석 로그인 창 — 캡챠 뜨면 앞으로 나옵니다)")
+        bid = account.get("blog_id", "") or self._active_blog_id()
+
+        from PySide6.QtCore import QObject, Signal as _Sig
+        class _RS(QObject):
+            done = _Sig(int, str, str)  # count, latest, error
+        sig = _RS()
+
+        def _on_done(count, latest, err):
+            self._resv_checking = False
+            self.btn_resv.setEnabled(True)
+            if err:
+                self.resv_label.setText("📅 예약 조회 실패")
+                QMessageBox.warning(self, "예약 조회", f"조회 실패:\n{err}")
+                return
+            self._save_resv_status(bid, count, latest)
+            self._update_reservation_label()
+
+        sig.done.connect(_on_done)
+
+        # 로그인 창을 계정점검과 동일한 정상 크기로 (작은 창이 봇탐지→캡챠 유발 가능성 → 동일하게 맞춤)
+        _cx, _cy, _cw, _ch = 80, 60, 1180, 820
+
+        def _worker():
+            poster = None
+            try:
+                import time as _t
+                self._kill_profile_chrome(bid)  # 시작 전 고아 크롬 정리 (잠금/충돌 방지)
+                for _attempt in range(3):
+                    try:
+                        poster = NaverBlogPoster(
+                            naver_id=account["naver_id"], naver_pw=account["naver_pw"],
+                            blog_id=account["blog_id"],
+                            window_x=_cx, window_y=_cy,   # 구석에서 로그인 (캡챠 뜨면 login()이 앞으로)
+                            window_w=_cw, window_h=_ch,
+                            stop_flag=lambda: False, speed_factor=0.7)  # 포스팅과 동일(봇탐지 회피)
+                        poster.start_browser()
+                        break
+                    except Exception:
+                        try:
+                            if poster:
+                                poster.close()
+                        except Exception:
+                            pass
+                        poster = None
+                        _t.sleep(2.0)
+                if poster is None:
+                    sig.done.emit(0, "", "브라우저를 시작하지 못했습니다. 잠시 후 다시 시도해주세요.")
+                    return
+                self._active_posters.append(poster)  # 참조 유지 → 워커 종료 시 드라이버 GC로 인한 크래시 방지
+                if not poster.login():
+                    sig.done.emit(0, "", "네이버 로그인 실패 (캡챠가 떴다면 창에서 풀고 다시 눌러주세요)")
+                    return
+                # 로그인 끝 → 창을 화면 밖으로 (수집 과정은 안 보이게)
+                try:
+                    poster.driver.set_window_position(-32000, -32000)
+                except Exception:
+                    pass
+                existing = poster.peek_reservations() or []
+                total = getattr(poster, "reservation_total", -1)
+                count = total if (isinstance(total, int) and total > len(existing)) else len(existing)
+                latest = max(existing).strftime("%Y-%m-%d %H:%M") if existing else ""
+                sig.done.emit(int(count), latest, "")
+            except Exception as e:
+                sig.done.emit(0, "", str(e))
+            finally:
+                try:
+                    if poster:
+                        try:
+                            self._active_posters.remove(poster)
+                        except Exception:
+                            pass
+                        poster.close()
+                except Exception:
+                    pass
+                try:
+                    self._kill_profile_chrome(bid)  # 종료 후 잔류 크롬 정리
+                except Exception:
+                    pass
+
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _show_acct_status(self, txt):
+        self.btn_acct_check.setEnabled(True)
+        self.btn_acct_check.setText("🛡️ 계정점검")
+        QMessageBox.information(self, "계정 상태 점검 결과", txt)
+
+    def _check_accounts_status(self):
+        if getattr(self, "_acct_checking", False):
+            return
+        if self.is_crawling or getattr(self, "is_posting", False):
+            QMessageBox.information(self, "안내", "크롤링/발행 중에는 계정점검을 할 수 없습니다.")
+            return
+        cfg = load_config()
+        accs = cfg.get("accounts", [])
+        targets = [a for a in accs if a.get("naver_id") and a.get("naver_pw")]
+        if not targets:
+            QMessageBox.warning(self, "안내", "네이버 아이디/비밀번호가 설정된 계정이 없습니다.")
+            return
+        reply = QMessageBox.question(
+            self, "계정 점검",
+            f"{len(targets)}개 계정의 보호조치 여부를 점검합니다.\n계정마다 로그인해서 확인하므로 몇 분 걸릴 수 있어요. 진행할까요?",
+            QMessageBox.Yes | QMessageBox.No)
+        if reply != QMessageBox.Yes:
+            return
+        self._acct_checking = True
+        self.btn_acct_check.setEnabled(False)
+        self.btn_acct_check.setText("점검 중...")
+
+        def _worker():
+            results = []
+            try:
+                for a in targets:
+                    bid = a.get("blog_id", "") or a.get("naver_id", "")
+                    self._emit_post_log(f"[계정점검] {bid} 확인 중...")
+                    poster = None
+                    try:
+                        self._kill_profile_chrome(a.get("blog_id", ""))
+                        poster = NaverBlogPoster(
+                            naver_id=a["naver_id"], naver_pw=a["naver_pw"],
+                            blog_id=a.get("blog_id", "") or a.get("naver_id", ""),
+                            window_x=80, window_y=60,   # 보이게 — 캡챠 뜨면 처리 가능(포스팅과 동일)
+                            window_w=1180, window_h=820, stop_flag=lambda: False, speed_factor=0.7)
+                        poster.start_browser()
+                        status = poster.check_status()
+                    except Exception as e:
+                        status = f"확인불가({str(e)[:20]})"
+                    finally:
+                        try:
+                            if poster:
+                                poster.close()
+                        except Exception:
+                            pass
+                        try:
+                            self._kill_profile_chrome(a.get("blog_id", ""))
+                        except Exception:
+                            pass
+                    icon = {"정상": "✅", "보호조치": "🛑", "캡챠필요": "🔐",
+                            "로그인실패": "❌", "확인불가": "⚠️"}.get(status, "⚠️")
+                    results.append(f"{icon} {bid} : {status}")
+                    self._emit_post_log(f"[계정점검] {bid} → {status}")
+            except Exception as e:
+                results.append(f"오류: {e}")
+            finally:
+                self._acct_checking = False
+            self.acct_status_signal.emit("\n".join(results) if results else "결과 없음")
+
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
     def _refresh_account_combo(self):
         accounts = self.cfg.get("accounts", [])
         active = self.cfg.get("active_account", 0)
@@ -1222,6 +1540,14 @@ class MainWindow(QMainWindow):
         if idx < 0:
             return
         prev_idx = self.cfg.get("active_account", 0)
+        # 작업 중엔 계정 전환 금지 — 수집/발행 데이터가 다른 계정으로 섞이는 것 방지
+        if self.is_crawling or getattr(self, 'is_posting', False) or getattr(self, 'is_generating', False):
+            self.account_combo.blockSignals(True)
+            self.account_combo.setCurrentIndex(prev_idx)
+            self.account_combo.blockSignals(False)
+            QMessageBox.warning(self, "안내",
+                "크롤링·발행·생성이 진행 중일 때는 계정을 전환할 수 없습니다.\n작업이 끝난 뒤 전환해 주세요.")
+            return
         if idx != prev_idx:
             accounts = self.cfg.get("accounts", [])
             new_bid = (accounts[idx].get("blog_id", "") if idx < len(accounts) else "") or f"acc{idx}"
@@ -1244,6 +1570,10 @@ class MainWindow(QMainWindow):
         self._load_keyword_history()
         bid = cfg.get('accounts', [{}])[idx].get('blog_id', '') or '(미설정)'
         self._emit_log(f"계정 전환: {idx+1}번 ({bid})")
+        try:
+            self._update_reservation_label()  # 전환된 계정의 예약 현황 캐시 표시
+        except Exception:
+            pass
         # 전환된 명의의 만료 상태를 봇1에 즉시 반영
         try:
             if self._is_user_expired():
@@ -1388,6 +1718,11 @@ class MainWindow(QMainWindow):
     def apply_user_session(self, user: dict):
         """로그인 성공 후 호출 — 역할에 따라 관리자 버튼 노출 + 계정 슬롯 제한"""
         self.current_user = user
+        # 로그인 시 로컬 프롬프트를 '기본 + 이 사용자 것'만으로 정리 (이전 사용자 프롬프트 제거)
+        try:
+            self._scope_prompts_to_user(user)
+        except Exception:
+            pass
         try:
             self.btn_admin.setVisible(user.get("role") == "admin")
         except Exception:
@@ -1453,13 +1788,60 @@ class MainWindow(QMainWindow):
         # 개인정보 수집·이용 동의 없으면 동의 창 (필수)
         self._require_privacy_consent()
 
+        # 공용키 유예 안내 — 기존 공용키 사용자는 유예 종료일까지 매 로그인 시 안내
+        try:
+            self._notify_shared_key_grace(user)
+        except Exception:
+            pass
+
+    def _notify_shared_key_grace(self, user: dict):
+        """공용(부여) API 키 유예 대상에게 '며칠 후 사라짐' 안내 (매 로그인 1회).
+        유예 종료 후엔 '만료됨 → 본인 키 입력' 안내."""
+        if not user or user.get("role") == "admin":
+            return
+        g = (user.get("shared_api_grace_until") or "").strip()
+        if not g or not user.get("shared_api_keys_admin_granted"):
+            return
+        import datetime as _dt
+        try:
+            y, m, d = map(int, g.split("-"))
+            left = (_dt.date(y, m, d) - _dt.date.today()).days
+        except Exception:
+            return
+        if left >= 0:
+            QMessageBox.warning(
+                self, "API 키 안내",
+                f"제공되던 공용 API 키가 {g}에 종료됩니다. (D-{left})\n\n"
+                f"종료 이후에는 글쓰기가 되지 않으니, 그 전에 설정에서 본인 API 키\n"
+                f"(딥시크 · 챗GPT · 제미나이 중 택1)를 발급받아 입력해주세요.\n\n"
+                f"딥시크 발급: platform.deepseek.com")
+        else:
+            QMessageBox.critical(
+                self, "API 키 만료",
+                "제공되던 공용 API 키가 만료되었습니다.\n\n"
+                "이제부터는 본인 API 키를 입력해야 글쓰기가 가능합니다.\n"
+                "설정 → API 키에서 딥시크 · 챗GPT · 제미나이 중 하나를 발급받아 입력해주세요.\n\n"
+                "딥시크 발급: platform.deepseek.com")
+
+    def _account_slot(self, acct_idx: int) -> int:
+        """아이디 인덱스 → 명의(요금제 슬롯 1/2/3).
+        명의는 3개 고정, 계정은 3명의로 나눠 담는다(명의당 아이디수=ceil(전체/3)).
+        예) 9개 → 3개씩(0~2=1, 3~5=2, 6~8=3),  3개 → 1개씩(0=1,1=2,2=3)."""
+        import math
+        try:
+            from config import load_config
+            n = len((load_config() or {}).get("accounts", []) or [])
+        except Exception:
+            n = 3
+        per = max(1, math.ceil(n / 3)) if n else 1
+        return min(3, int(acct_idx) // per + 1)
+
     def _is_user_expired(self) -> bool:
-        """현재 '활성 명의(아이디 드롭다운)'의 이용기간 만료 여부 (관리자는 항상 False).
-        active_account 인덱스(0/1/2) → 명의 슬롯(1/2/3)로 매핑해 해당 슬롯 만료를 본다."""
+        """현재 활성 아이디가 속한 명의의 이용기간 만료 여부 (관리자는 항상 False)."""
         try:
             from users import is_account_expired
             from config import load_config
-            slot = int((load_config() or {}).get("active_account", 0) or 0) + 1
+            slot = self._account_slot(int((load_config() or {}).get("active_account", 0) or 0))
             return is_account_expired(getattr(self, "current_user", {}) or {}, slot)
         except Exception:
             return False
@@ -1507,6 +1889,33 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
             return True
+        return False
+
+    def _block_if_api_expired(self) -> bool:
+        """활성 명의의 API(GPT 글쓰기) 구독이 만료면 안내 후 True(차단). 정상이면 False.
+        단, 자기(본인) API 키를 쓰는 유저는 공용키 구독과 무관하므로 만료로 차단하지 않는다."""
+        try:
+            from users import is_api_expired as _is_api_exp, load_users as _lu
+            from config import get_current_user as _gcu, load_config as _lc
+            cfg = _lc() or {}
+            uname = _gcu() or ""
+            user = _lu().get(uname, {})
+            # 자기 API 키 사용자 → 만료 차단 안 함 (본인이 API 결제 주체)
+            def _own(src):
+                return any(any(k for k in ((src or {}).get(f) or [])) for f in ("gpt_key_list", "gemini_key_list", "deepseek_key_list"))
+            if cfg.get("_own_ai_key") or _own(user.get("api_keys")) or _own((cfg.get("api_keys_by_user") or {}).get(uname, {})):
+                return False
+            slot = self._account_slot(int(cfg.get("active_account", 0) or 0))
+            if _is_api_exp(user, slot=slot):
+                reply = QMessageBox.question(
+                    self, "API 기간 만료",
+                    "API 기간이 만료되었습니다.\n키를 수정하거나 결제 부탁드립니다.\n\n결제 창을 여시겠습니까?",
+                    QMessageBox.Yes | QMessageBox.No)
+                if reply == QMessageBox.Yes:
+                    self._open_payment_dialog()
+                return True
+        except Exception:
+            pass
         return False
 
     def _require_privacy_consent(self):
@@ -2182,6 +2591,23 @@ class MainWindow(QMainWindow):
         if meta_removed:
             self._emit_log(f"macOS 메타파일 정리: {meta_removed}개 삭제")
 
+    def _scope_prompts_to_user(self, user: dict):
+        """로그인한 사용자 기준으로 로컬 prompts.json 재설정 — '기본(캐논) + 이 사용자 프롬프트'만 남김.
+        이전에 로그인했던 다른 사용자의 프롬프트는 화면/생성에서 사라진다(각 계정 클라우드 저장본은 유지)."""
+        try:
+            import json as _j
+            from app_paths import data_file as _df
+            from prompts import get_base_prompt as _gbp
+            data = {"기본": _gbp()}
+            user_prompts = (user or {}).get("prompts", {}) or {}
+            for k, v in user_prompts.items():
+                if k != "기본" and isinstance(v, dict):
+                    data[k] = v
+            with open(_df("prompts.json"), "w", encoding="utf-8") as f:
+                _j.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
     def _sync_admin_api_keys_from_firebase(self, user: dict):
         """admin 로그인 시 Firebase의 api_keys를 로컬 config.json의 api_keys_by_user에 덮어쓰기"""
         api_keys = user.get("api_keys") or {}
@@ -2214,31 +2640,55 @@ class MainWindow(QMainWindow):
             return
         import datetime as _dt
         today = _dt.date.today()
-        parts = []
-        for i, key in enumerate(["expires", "expires_2", "expires_3"]):
-            exp = (user.get(key) or "").strip()
+
+        def _fmt(exp):
+            """만료일 문자열 → (표시텍스트, 색). 값 없으면 None."""
+            exp = (exp or "").strip()
             if not exp:
-                parts.append(("<span style='color:#ef4444'>사용불가</span>", "#ef4444"))
+                return None
+            try:
+                y, m, d = map(int, exp.split("-"))
+                days = (_dt.date(y, m, d) - today).days
+            except Exception:
+                return ("?", "#94a3b8")
+            if days > 3650:
+                return ("무제한", "#22c55e")
+            if days < 0:
+                return ("만료", "#ef4444")
+            c = "#22c55e" if days >= 31 else "#f59e0b" if days >= 8 else "#ef4444"
+            return (f"{days}일", c)
+
+        # 아이디 1개 = 명의 1개 구조 — 값이 있는 슬롯만 표시 (분할 전 구계정 호환용으로 2·3도 남김)
+        slot_keys = [("expires", "api_expires"),
+                     ("expires_2", "api_expires_2"),
+                     ("expires_3", "api_expires_3")]
+        blocks = []
+        for i, (ek, ak) in enumerate(slot_keys):
+            if i > 0 and not (user.get(ek) or user.get(ak)):
+                continue  # 빈 명의2/3은 표시 안 함
+            mv = _fmt(user.get(ek))
+            if mv is None:
+                blocks.append("<span style='color:#cbd5e1'>구독 없음</span>")
+                continue
+            mtxt, mc = mv
+            av = _fmt(user.get(ak))
+            if av is None:
+                api_part = "<span style='color:#cbd5e1'>API-</span>"
             else:
-                try:
-                    y, m, d = map(int, exp.split("-"))
-                    days = (_dt.date(y, m, d) - today).days
-                    if days > 3650:
-                        parts.append(("<span style='color:#22c55e'>무제한</span>", "#22c55e"))
-                    elif days < 0:
-                        parts.append(("<span style='color:#ef4444'>만료</span>", "#ef4444"))
-                    else:
-                        c = "#22c55e" if days >= 31 else "#f59e0b" if days >= 8 else "#ef4444"
-                        parts.append((f"<span style='color:{c}'>{days}일</span>", c))
-                except Exception:
-                    parts.append(("<span style='color:#94a3b8'>?</span>", "#94a3b8"))
-        html = "[" + "/".join(p for p, _ in parts) + "]"
+                api_part = f"<span style='color:{av[1]}'>API {av[0]}</span>"
+            label = "구독" if i == 0 else f"명의{i+1}"
+            blocks.append(f"{label} <span style='color:{mc}'>{mtxt}</span>·{api_part}")
+        html = " · ".join(blocks)
         self.dash_expires.setText(html)
         self.dash_expires.setTextFormat(Qt.RichText)
-        self.dash_expires.setStyleSheet("font-size: 16px; font-weight: bold;")
+        self.dash_expires.setStyleSheet("font-size: 11px; font-weight: bold;")
 
     # ── 구독 결제 ──
     def _open_payment_dialog(self):
+        # 결제는 웹페이지로 연결 (인앱 결제창 대신 n-jobs.kr 결제 페이지)
+        import webbrowser as _wb
+        _wb.open("https://n-jobs.kr/payment.html")
+        return
         from PySide6.QtWidgets import QButtonGroup, QRadioButton, QCheckBox
         import datetime as _dt
         from config import get_current_user as _gcu
@@ -2334,7 +2784,7 @@ class MainWindow(QMainWindow):
 
         def _update_api_chk():
             _ap = API_PRICES[_selected_qty() - 1]
-            chk_api.setText(f"🔑 GPT글쓰기 API 구독  +{_ap:,}원/월  (선택한 명의에 적용)")
+            chk_api.setText(f"🔑 글쓰기 API 구독  +{_ap:,}원/월  (선택한 명의에 적용)")
 
         _update_api_chk()
 
@@ -2380,7 +2830,7 @@ class MainWindow(QMainWindow):
             _warn = f"   ⚠ {qty}개 선택 필요 (현재 {len(chk)}개)" if len(chk) != qty else ""
             if rpInf.isChecked():
                 _inf = 770000 * qty
-                _ex = f"\n+ GPT API {_api_add:,}원/월 별도" if chk_api.isChecked() else ""
+                _ex = f"\n+ API {_api_add:,}원/월 별도" if chk_api.isChecked() else ""
                 price_lbl.setText(f"무제한 770,000원 × {qty}명의 = {_inf:,}원\n적용: {_names}{_warn}{_ex}")
             else:
                 if rp3.isChecked():   _m, _dc = 3, 0.05
@@ -2397,20 +2847,71 @@ class MainWindow(QMainWindow):
             _r.toggled.connect(lambda _: (_update_api_chk(), _calc()))
         chk_api.stateChanged.connect(lambda _: _calc())
 
-        # ── 계좌 안내 ──
+        # ── 계좌이체 결제 안내 ──
         account_box = QLabel(
-            "🏦  입금 계좌\n\n"
-            "하나은행  806-910287-39407\n"
-            "예금주: 김태현\n\n"
-            "입금자명은 본인 이름으로 입력해 주세요."
+            "🏦  결제 안내  (현재 계좌이체)\n"
+            "───────────────────────────\n"
+            "①  위에 표시된 합계 금액을 확인합니다.\n"
+            "②  아래 계좌로 입금합니다.\n"
+            "        하나은행   806-910287-39407\n"
+            "        예금주 : 김태현\n"
+            "        ※ 입금자명은 '본인 이름'으로 입력해 주세요.\n"
+            "③  아래 '입금 완료 알림' 버튼을 누릅니다.\n"
+            "④  관리자 확인 후 자동으로 연장됩니다.\n"
+            "───────────────────────────\n"
+            "💳  카드 결제는 지원 준비중입니다. (곧 지원 예정)"
         )
         account_box.setStyleSheet(
             "background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; "
-            "padding:12px; font-size:12px;"
+            "padding:14px; font-size:12px;"
         )
         account_box.setWordWrap(True)
-        account_box.setAlignment(Qt.AlignCenter)
+        account_box.setAlignment(Qt.AlignLeft)
         layout.addWidget(account_box)
+
+        # ── 결제 문의 → 카카오톡 오픈채팅 (QR + 바로입장 팝업) ──
+        def _open_pay_inquiry():
+            import webbrowser as _wb
+            from PySide6.QtGui import QPixmap as _QPixmap
+            _PAY_URL = "https://open.kakao.com/o/sqpEYNuf"
+            try:
+                from app_paths import get_bundle_dir as _gbd
+                _qp = os.path.join(_gbd(), "kakao_qr_pay.png")
+            except Exception:
+                _qp = os.path.join(os.path.dirname(__file__), "kakao_qr_pay.png")
+            d = QDialog(dlg)
+            d.setWindowTitle("결제 문의 (카카오톡 오픈채팅)")
+            _v = QVBoxLayout(d)
+            _t = QLabel("💳 결제 문의 오픈채팅")
+            _t.setAlignment(Qt.AlignCenter)
+            _t.setStyleSheet("font-size:15px; font-weight:bold;")
+            _v.addWidget(_t)
+            if os.path.exists(_qp):
+                _big = QLabel()
+                _big.setPixmap(_QPixmap(_qp).scaled(280, 280, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                _big.setAlignment(Qt.AlignCenter)
+                _v.addWidget(_big)
+            _cap = QLabel("휴대폰 카메라로 QR을 찍거나 아래 버튼으로 입장하세요.\n\n"
+                          "※ 이 채팅방은 결제에 대한 상담만 가능합니다.")
+            _cap.setAlignment(Qt.AlignCenter)
+            _cap.setStyleSheet("color:#475569;")
+            _cap.setWordWrap(True)
+            _v.addWidget(_cap)
+            _enter = QPushButton("💬 바로입장")
+            _enter.setCursor(Qt.PointingHandCursor)
+            _enter.setStyleSheet("background:#FEE500; color:#3C1E1E; border:none; border-radius:8px; padding:10px 18px; font-weight:bold;")
+            _enter.clicked.connect(lambda: _wb.open(_PAY_URL))
+            _v.addWidget(_enter)
+            d.exec()
+
+        btn_inquiry = QPushButton("💬 결제 문의 (카카오톡 오픈채팅)")
+        btn_inquiry.setCursor(Qt.PointingHandCursor)
+        btn_inquiry.setStyleSheet(
+            "background:#FEE500; color:#3C1E1E; border:none; border-radius:8px; "
+            "padding:9px; font-size:13px; font-weight:bold;"
+        )
+        btn_inquiry.clicked.connect(_open_pay_inquiry)
+        layout.addWidget(btn_inquiry)
 
         btn_pay = QPushButton("✅ 입금 완료 알림")
         btn_pay.setStyleSheet("background:#6366f1; color:white; border:none; border-radius:8px; padding:10px; font-size:14px; font-weight:bold;")
@@ -2546,6 +3047,10 @@ class MainWindow(QMainWindow):
         """Pixabay 검색에 가장 적합한 업종 문자열을 골라 반환.
         우선순위: search_keyword 마지막 토큰 > category 마지막 토큰 > fallback_keyword > category 풀스트링.
         예: search_keyword='강남구 치과' → '치과', category='의원 > 치과의원' → '치과의원'."""
+        # 사용자가 포스트 생성 시 직접 입력한 '사진 검색 키워드'가 있으면 그걸 최우선 사용
+        _ov = (getattr(self, "_override_image_keyword", "") or "").strip()
+        if _ov:
+            return _ov
         from image_handler import _tokenize_biz, BIZ_TO_EN, _strip_region
         # category_2 (더 구체적) → search_keyword → category_1 → fallback 순
         # 매핑 키(ko)를 직접 반환 → 지역명 없는 '순수 개념'이 보장됨
@@ -2693,7 +3198,7 @@ class MainWindow(QMainWindow):
                 blog_p = (m_blog.group(1).strip() if m_blog else "")
                 title_p = (m_title.group(1).strip() if m_title else "")
                 if not blog_p or not title_p:
-                    self._emit_log(f"  [경고] '{biz_type}' 프롬프트 파싱 실패 — GPT 응답: {text[:200]!r}")
+                    self._emit_log(f"  [경고] '{biz_type}' 프롬프트 파싱 실패 — AI 응답: {text[:200]!r}")
                     return
                 try:
                     with open(prompts_path, "r", encoding="utf-8") as _f:
@@ -2760,6 +3265,12 @@ class MainWindow(QMainWindow):
                 pass
         if not prompts:
             prompts = {"기본": {"blog": "", "title": ""}}
+        # '기본'은 항상 번들 캐논으로 고정 (수정·삭제 불가, 실수로 비운 경우 자동 복구)
+        try:
+            from prompts import get_base_prompt as _gbp
+            prompts["기본"] = _gbp()
+        except Exception:
+            pass
 
         dlg = QDialog(self)
         dlg.setWindowTitle("프롬프트 편집")
@@ -2769,28 +3280,53 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         top.addWidget(QLabel("업종 선택:"))
         type_combo = QComboBox()
-        type_combo.addItems(list(prompts.keys()))
+        # '기본'은 목록에서 숨김 — 파생/직접추가한 업종만 보이게 (기본은 내부 폴백으로만 사용)
+        type_combo.addItems([k for k in prompts.keys() if k != "기본"])
         top.addWidget(type_combo, 1)
 
         btn_add = QPushButton("+ 업종 추가")
+        btn_add_user = QPushButton("+ 사용자 프롬프트")
+        btn_add_user.setStyleSheet("background: #6366f1; color: white; border-radius: 6px; padding: 4px 10px;")
         btn_auto = QPushButton("AI 자동 생성")
         btn_auto.setStyleSheet("background: #22c55e; color: white; border-radius: 6px; padding: 4px 10px;")
         btn_del = QPushButton("삭제")
         btn_del.setStyleSheet("background: #ef4444; color: white; border-radius: 6px; padding: 4px 10px;")
         top.addWidget(btn_add)
+        top.addWidget(btn_add_user)
         top.addWidget(btn_auto)
         top.addWidget(btn_del)
         layout.addLayout(top)
 
-        layout.addWidget(QLabel("블로그 본문 프롬프트:"))
+        _edit_style = "QTextEdit { border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px; background: #ffffff; }"
+        _lbl_blog = QLabel("블로그 본문 프롬프트:")
+        layout.addWidget(_lbl_blog)
         blog_edit = QTextEdit()
         blog_edit.setAcceptRichText(False)
+        blog_edit.setStyleSheet(_edit_style)
         layout.addWidget(blog_edit, 3)
 
-        layout.addWidget(QLabel("제목 프롬프트:"))
+        _lbl_title = QLabel("제목 프롬프트:")
+        layout.addWidget(_lbl_title)
         title_edit = QTextEdit()
         title_edit.setAcceptRichText(False)
+        title_edit.setStyleSheet(_edit_style)
         layout.addWidget(title_edit, 1)
+
+        # 파생(기본 기반) 프롬프트 선택 시 일반 사용자에게는 내용 대신 보여줄 안내 (load_current에서 토글)
+        _info = QLabel("이 업종 프롬프트는 기본을 기반으로 자동 생성됩니다.\n'AI 자동 생성'을 누르면 만들어져 저장되며, 내용은 비공개입니다.")
+        _info.setStyleSheet("color:#64748b; padding:24px; font-size:13px;")
+        _info.setWordWrap(True)
+        _info.setVisible(False)
+        layout.addWidget(_info, 1)
+
+        def _set_content_visible(show):
+            _lbl_blog.setVisible(show); blog_edit.setVisible(show)
+            _lbl_title.setVisible(show); title_edit.setVisible(show)
+            _info.setVisible(not show)
+
+        def _kind_of(key):
+            # '_kind': 'user'(직접작성=공개) / 'derived'(기본기반=비공개). 없으면 파생 취급.
+            return (prompts.get(key, {}) or {}).get("_kind", "derived")
 
         # 제목 키워드 형식은 포스트 생성 다이얼로그에서 결정 (여기서 제거)
 
@@ -2799,18 +3335,33 @@ class MainWindow(QMainWindow):
         def load_current():
             key = type_combo.currentText()
             data = prompts.get(key, {"blog": "", "title": "", "pixabay_list": []})
+            kind = _kind_of(key)
+            # 내용은 항상 박스에 로드(파생이라 숨겨도 저장 무결성 유지)
             blog_edit.blockSignals(True); title_edit.blockSignals(True)
             blog_edit.setPlainText(data.get("blog", ""))
             title_edit.setPlainText(data.get("title", ""))
             blog_edit.blockSignals(False); title_edit.blockSignals(False)
             current["key"] = key
+            # 표시: 관리자는 항상 / 일반 사용자는 '직접작성(user)'만 보임, '파생'은 숨김(비공개)
+            show = bool(is_admin or kind == "user")
+            _set_content_visible(show)
+            # 잠금: 기본은 항상 / 일반 사용자의 파생도 잠금(어차피 숨김)
+            locked = (key == "기본") or (not is_admin and kind != "user")
+            blog_edit.setReadOnly(locked)
+            title_edit.setReadOnly(locked)
+            btn_del.setEnabled(key != "기본")
+            btn_auto.setEnabled(key != "기본")   # AI 자동생성은 파생/직접 모두 가능
 
         def save_current_to_memory():
+            if current["key"] == "기본":
+                return  # 기본은 캐논 고정 — 편집 내용 저장 안 함
             if current["key"] in prompts:
+                _k = (prompts[current["key"]] or {}).get("_kind", "derived")
                 prompts[current["key"]] = {
                     "blog": blog_edit.toPlainText(),
                     "title": title_edit.toPlainText(),
                     "pixabay_list": [],
+                    "_kind": _k,
                 }
 
         def on_type_changed():
@@ -2825,13 +3376,34 @@ class MainWindow(QMainWindow):
             name = (name or "").strip()
             if ok and name and name not in prompts:
                 save_current_to_memory()
-                prompts[name] = {"blog": "", "title": "", "pixabay_list": ["", "", ""]}
+                # 기본 기반 '파생' 업종 — 내용 비공개(일반 사용자). AI 자동생성으로 완성
+                _base = prompts.get("기본", {}) or {}
+                prompts[name] = {
+                    "blog": _base.get("blog", ""),
+                    "title": _base.get("title", ""),
+                    "pixabay_list": ["", "", ""],
+                    "_kind": "derived",
+                }
+                type_combo.addItem(name)
+                type_combo.setCurrentText(name)
+
+        def add_user_prompt():
+            from PySide6.QtWidgets import QInputDialog
+            name, ok = QInputDialog.getText(dlg, "사용자 프롬프트 추가", "이름:")
+            name = (name or "").strip()
+            if ok and name and name not in prompts:
+                save_current_to_memory()
+                # 사용자가 '직접 작성'하는 프롬프트 — 내용 보이고 편집 가능(공개)
+                prompts[name] = {"blog": "", "title": "", "pixabay_list": ["", "", ""], "_kind": "user"}
                 type_combo.addItem(name)
                 type_combo.setCurrentText(name)
 
         def del_type():
             key = type_combo.currentText()
             if not key:
+                return
+            if key == "기본":
+                QMessageBox.warning(dlg, "안내", "기본 프롬프트는 삭제할 수 없습니다.")
                 return
             if len(prompts) <= 1:
                 QMessageBox.warning(dlg, "경고", "최소 1개는 남겨야 합니다.")
@@ -2877,7 +3449,7 @@ class MainWindow(QMainWindow):
             provider = "GPT"  # GPT 전용
             api_keys = [k for k in cfg2.get("gpt_key_list", []) if k]
             if not api_keys:
-                QMessageBox.critical(dlg, "오류", "GPT API 키를 설정해주세요.")
+                QMessageBox.critical(dlg, "오류", "API 키를 설정해주세요.")
                 return
             base = prompts.get("기본", {"blog": "", "title": ""})
             ref_example = """# 역할
@@ -3016,6 +3588,7 @@ class MainWindow(QMainWindow):
             threading.Thread(target=_worker, daemon=True).start()
 
         btn_add.clicked.connect(add_type)
+        btn_add_user.clicked.connect(add_user_prompt)
         btn_auto.clicked.connect(auto_generate)
         btn_del.clicked.connect(del_type)
 
@@ -3067,11 +3640,555 @@ class MainWindow(QMainWindow):
     # ── 크롤링 ──
     def _check_api_keys(self) -> bool:
         cfg = load_config()
-        has_key = any(k for k in cfg.get("gpt_key_list", []) if k) or any(k for k in cfg.get("gemini_key_list", []) if k)
+        has_key = any(k for k in cfg.get("gpt_key_list", []) if k) or any(k for k in cfg.get("gemini_key_list", []) if k) or any(k for k in cfg.get("deepseek_key_list", []) if k)
         if not has_key:
             QMessageBox.warning(self, "API 키 필요", "API 키가 설정되지 않았습니다.\n설정에서 API 키를 입력하거나 관리자에게 문의하세요.")
             return False
         return True
+
+    def _open_engage_dialog(self):
+        """💬 댓글·이웃 관리 — 서로이웃 목록 / 댓글목록+원글삭제 / 공감·자동답글."""
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QCheckBox, QPushButton, QLabel,
+            QTextEdit, QTextBrowser, QTabWidget, QWidget, QTableWidget, QTableWidgetItem,
+            QAbstractItemView, QSpinBox, QComboBox,
+        )
+        from PySide6.QtCore import QTimer, Qt
+        import threading, queue
+        import comment_buddy_manager as cbm
+
+        cfg = load_config()
+        accounts = cfg.get("accounts", []) or []
+        accounts = [a for a in accounts if a.get("blog_id") or a.get("naver_id")]
+        if not accounts:
+            QMessageBox.critical(self, "오류", "네이버 계정 정보를 먼저 설정해주세요.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("💬 댓글·이웃 관리")
+        dlg.resize(1040, 820)
+        dlg.setMinimumSize(820, 640)
+        root = QVBoxLayout(dlg)
+
+        import math as _math
+        GROUP = max(1, _math.ceil(len(accounts) / 3)) if accounts else 1  # 한 명의당 아이디 수
+
+        def _acct_disp(i):
+            """네이버아이디/블로그아이디 형식."""
+            a = accounts[i]
+            nid = (a.get("naver_id", "") or "").strip() or "-"
+            bid = (a.get("blog_id", "") or "").strip()
+            return f"{nid}/{bid}" if bid else nid
+
+        def _slot_expired(acct_idx):
+            """계정(아이디)이 속한 명의의 요금제 만료/미결제 여부."""
+            try:
+                from users import is_account_expired
+                return is_account_expired(getattr(self, "current_user", {}) or {}, self._account_slot(acct_idx))
+            except Exception:
+                return False
+
+        acct_row = QHBoxLayout()
+        acct_row.addWidget(QLabel("<b>명의(계정):</b>"))
+        cmb_acct = QComboBox()
+        # 명의별로 그룹 헤더 + 그 아래 아이디들
+        for g in range(0, len(accounts), GROUP):
+            myeongui = g // GROUP + 1
+            cmb_acct.addItem(f"━━ {myeongui}명의 ━━")
+            try:
+                cmb_acct.model().item(cmb_acct.count() - 1).setEnabled(False)  # 헤더 선택 불가
+            except Exception:
+                pass
+            for j in range(g, min(g + GROUP, len(accounts))):
+                lab = f"    {j - g + 1}. {_acct_disp(j)}"
+                if _slot_expired(j):
+                    lab += "   🔒미결제"
+                cmb_acct.addItem(lab)
+                cmb_acct.setItemData(cmb_acct.count() - 1, j, Qt.UserRole)
+        # 활성 계정 선택 (없으면 첫 아이디)
+        _active = cfg.get("active_account", 0)
+        _sel = 1
+        for r in range(cmb_acct.count()):
+            if cmb_acct.itemData(r, Qt.UserRole) == _active:
+                _sel = r
+                break
+        cmb_acct.setCurrentIndex(_sel)
+        acct_row.addWidget(cmb_acct, 1)
+        b_login = QPushButton("로그인")
+        b_login.setStyleSheet("background:#2563eb;color:white;border:none;border-radius:6px;padding:6px 18px;font-weight:bold;")
+        acct_row.addWidget(b_login)
+        root.addLayout(acct_row)
+
+        def _cur_acct_idx():
+            """현재 선택된 아이디의 accounts 인덱스 (헤더면 None)."""
+            return cmb_acct.currentData(Qt.UserRole)
+
+        tabs = QTabWidget()
+        root.addWidget(tabs, 1)
+
+        state = {"stop": False, "busy": False, "poster": None, "mgr": None, "acct_idx": -1}
+        q = queue.Queue()
+
+        def _log(m):
+            q.put(("log", str(m)))
+            try:
+                print(f"[engage] {m}", flush=True)  # 진단용 — _gui_run.log 에도 남김
+            except Exception:
+                pass
+
+        log_view = QTextEdit()
+        log_view.setReadOnly(True)
+        log_view.setStyleSheet("background:#0f172a;color:#e2e8f0;font-family:Consolas;font-size:12px;")
+
+        def _kill_profile_chrome(blog_id):
+            """해당 계정 프로필을 쓰는 고아 크롬 프로세스 종료 (close 후에도 남는 것 정리)."""
+            if not blog_id:
+                return
+            try:
+                import subprocess
+                ps = ("Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+                      "Where-Object { $_.CommandLine -like '*chrome_profile*" + blog_id + "*' } | "
+                      "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }")
+                subprocess.run(["powershell", "-NoProfile", "-Command", ps],
+                               timeout=15, capture_output=True)
+            except Exception:
+                pass
+
+        def _ensure_mgr():
+            idx = _cur_acct_idx()
+            if idx is None:
+                return None
+            account = accounts[idx]
+            # 계정이 바뀌었으면 기존 세션 닫기
+            if state["mgr"] is not None and state["acct_idx"] != idx:
+                old_idx = state["acct_idx"]
+                old_blog = accounts[old_idx].get("blog_id", "") if 0 <= old_idx < len(accounts) else ""
+                _log(f"계정 전환 → {idx//GROUP+1}명의 {idx%GROUP+1}. {_acct_disp(idx)} 재로그인")
+                try:
+                    state["poster"].close()
+                except Exception:
+                    pass
+                state["mgr"] = None
+                state["poster"] = None
+                _kill_profile_chrome(old_blog)  # 고아 크롬 확실히 정리
+                import time as _t_sw
+                _t_sw.sleep(2.0)  # 이전 크롬 완전 종료 대기 (바로 새 크롬 띄우면 충돌)
+            # 같은 계정이고 세션 살아있으면 재사용
+            elif state["mgr"] is not None and state["poster"] is not None:
+                try:
+                    _ = state["poster"].driver.current_url
+                    return state["mgr"]
+                except Exception:
+                    _log("브라우저가 닫혀 다시 로그인합니다...")
+                    try:
+                        state["poster"].close()
+                    except Exception:
+                        pass
+                    state["mgr"] = None
+                    state["poster"] = None
+            if not account.get("naver_id") or not account.get("naver_pw"):
+                _log(f"⚠ {account.get('blog_id','')}에 네이버 아이디/비번이 없습니다.")
+                return None
+            _log(f"로그인 중... 크롬 창에서 진행됩니다 ({idx//GROUP+1}명의 {idx%GROUP+1}. {_acct_disp(idx)})")
+            _kill_profile_chrome(account.get("blog_id", ""))  # 시작 전 이 계정 고아 크롬 정리
+            import time as _t_st
+            poster = None
+            for _attempt in range(3):
+                try:
+                    poster = NaverBlogPoster(
+                        naver_id=account["naver_id"], naver_pw=account["naver_pw"],
+                        blog_id=account["blog_id"], headless=False,
+                        window_w=1180, window_h=820, stop_flag=lambda: state["stop"])
+                    poster.start_browser()
+                    break
+                except Exception as e:
+                    _log(f"브라우저 시작 실패 ({_attempt+1}/3): {str(e)[:55]}")
+                    try:
+                        if poster:
+                            poster.close()
+                    except Exception:
+                        pass
+                    poster = None
+                    _t_st.sleep(2.5)
+            if poster is None:
+                _log("브라우저를 시작하지 못했습니다. 잠시 후 다시 시도해주세요.")
+                return None
+            try:
+                self._active_posters.append(poster)
+            except Exception:
+                pass
+            # 로그인 창을 화면 안에 적당한 크기로 (전체화면 X)
+            try:
+                poster.driver.set_window_rect(x=80, y=60, width=1180, height=860)
+                poster.driver.execute_script("window.focus();")
+            except Exception:
+                pass
+            if not poster.login():
+                _log("로그인 실패! 캡차/기기인증이면 뜬 창에서 직접 풀고 다시 눌러주세요.")
+                try:
+                    poster.close()
+                except Exception:
+                    pass
+                return None
+            _log("로그인 성공 — 창을 숨깁니다")
+            # 로그인 끝나면 창 숨김 (서로이웃 수락 시에만 잠깐 다시 띄움)
+            try:
+                poster.driver.set_window_position(-32000, -32000)
+            except Exception:
+                try:
+                    poster.driver.minimize_window()
+                except Exception:
+                    pass
+            state["poster"] = poster
+            state["acct_idx"] = idx
+            state["mgr"] = cbm.CommentBuddyManager(poster, log=_log, stop_flag=lambda: state["stop"])
+            return state["mgr"]
+
+        def _run(fn):
+            idx = _cur_acct_idx()
+            if idx is None:
+                QMessageBox.information(dlg, "안내", "명의 아래의 아이디를 선택하세요."); return
+            if _slot_expired(idx):
+                myn = idx // GROUP + 1
+                QMessageBox.warning(
+                    dlg, "요금제 미결제",
+                    f"{myn}명의 {idx % GROUP + 1}.  {_acct_disp(idx)}\n요금제가 만료되었거나\n"
+                    "결제되지 않아 이 기능을 사용할 수 없습니다.\n\n구독 결제 후 이용해주세요.")
+                _log(f"⚠ {myn}명의 요금제 미결제/만료 — 차단됨")
+                return
+            if state["busy"]:
+                _log("이미 작업 중입니다. 잠시만요...")
+                return
+            state["busy"] = True
+            state["stop"] = False
+
+            def _w():
+                try:
+                    mgr = _ensure_mgr()
+                    if mgr is not None:
+                        fn(mgr)
+                except Exception as e:
+                    _log(f"오류: {e}")
+                finally:
+                    state["busy"] = False
+                    q.put(("done",))
+            threading.Thread(target=_w, daemon=True).start()
+
+        def _checked_rows(tbl):
+            return [r for r in range(tbl.rowCount())
+                    if tbl.item(r, 0) is not None and tbl.item(r, 0).checkState() == Qt.Checked]
+
+        def _set_all(tbl, checked):
+            st = Qt.Checked if checked else Qt.Unchecked
+            for r in range(tbl.rowCount()):
+                if tbl.item(r, 0) is not None:
+                    tbl.item(r, 0).setCheckState(st)
+
+        def _mk_check(value):
+            it = QTableWidgetItem()
+            it.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            it.setCheckState(Qt.Unchecked)
+            it.setData(Qt.UserRole, value)
+            return it
+
+        # ── 탭1: 서로이웃 ──
+        t1 = QWidget(); l1 = QVBoxLayout(t1)
+        l1.addWidget(QLabel("받은 서로이웃 신청 — 선택 후 수락/거절"))
+        tbl_b = QTableWidget(0, 5)
+        tbl_b.setHorizontalHeaderLabels(["선택", "신청자(닉네임)", "아이디", "메시지", "신청일"])
+        tbl_b.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        tbl_b.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tbl_b.horizontalHeader().setStretchLastSection(True)
+        l1.addWidget(tbl_b, 1)
+        rb = QHBoxLayout()
+        b_load = QPushButton("목록 불러오기")
+        b_all = QPushButton("전체선택")
+        b_clr = QPushButton("전체해제")
+        b_acc = QPushButton("선택 수락"); b_acc.setStyleSheet("background:#10b981;color:white;padding:6px 12px;border:none;border-radius:6px;")
+        b_rej = QPushButton("선택 거절"); b_rej.setStyleSheet("background:#ef4444;color:white;padding:6px 12px;border:none;border-radius:6px;")
+        rb.addWidget(b_load); rb.addWidget(b_all); rb.addWidget(b_clr); rb.addStretch(); rb.addWidget(b_acc); rb.addWidget(b_rej)
+        l1.addLayout(rb)
+        b_all.clicked.connect(lambda: _set_all(tbl_b, True))
+        b_clr.clicked.connect(lambda: _set_all(tbl_b, False))
+        # '서로이웃 신청' 탭 제거 — 서이추 수락은 '서이추+자동댓글' 버튼으로 일괄 처리
+
+        def _load_buddies():
+            def fn(mgr):
+                data = mgr.list_buddy_requests()
+                q.put(("buddy", data))
+                _log(f"서로이웃 신청 {len(data)}건")
+            _run(fn)
+
+        def _act_buddies(accept):
+            rows = _checked_rows(tbl_b)
+            if not rows:
+                QMessageBox.information(dlg, "안내", "신청을 선택하세요."); return
+            ids = [tbl_b.item(r, 0).data(Qt.UserRole) for r in rows]
+            ids = [x for x in ids if x]
+            def fn(mgr):
+                mgr.act_on_buddies(ids, accept=accept)
+                q.put(("buddy", mgr.list_buddy_requests()))
+            _run(fn)
+        b_load.clicked.connect(_load_buddies)
+        b_acc.clicked.connect(lambda: _act_buddies(True))
+        b_rej.clicked.connect(lambda: _act_buddies(False))
+
+        # ── 탭2: 댓글 목록 + 원글삭제 ──
+        t2 = QWidget(); l2 = QVBoxLayout(t2)
+        l2.addWidget(QLabel("삭제/법적조치 등 키워드가 있는 '삭제요청 의심' 댓글만 표시됩니다 — 선택 후 원글 삭제"))
+        tbl_c = QTableWidget(0, 4)
+        tbl_c.setHorizontalHeaderLabels(["선택", "글 제목", "댓글 내용", "작성자"])
+        tbl_c.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        tbl_c.setSelectionBehavior(QAbstractItemView.SelectRows)
+        tbl_c.horizontalHeader().setStretchLastSection(True)
+        tbl_c.verticalHeader().setDefaultSectionSize(30)
+        tbl_c.setMinimumHeight(210)   # 최소 5행 보이게
+        l2.addWidget(tbl_c, 3)
+
+        l2.addWidget(QLabel("<b>선택한 댓글 상세</b> (행을 클릭 / 원글 주소 클릭하면 브라우저로 열림)"))
+        cmt_detail = QTextBrowser()
+        cmt_detail.setOpenExternalLinks(True)   # 링크 클릭 시 기본 브라우저로 열기
+        cmt_detail.setMinimumHeight(150)
+        cmt_detail.setStyleSheet("background:#f8fafc; font-size:16px; padding:10px;")
+        l2.addWidget(cmt_detail, 2)
+
+        def _show_cmt_detail():
+            r = tbl_c.currentRow()
+            if r < 0 or tbl_c.item(r, 0) is None:
+                return
+            logno = tbl_c.item(r, 0).data(Qt.UserRole) or ""
+            title = tbl_c.item(r, 1).text() if tbl_c.item(r, 1) else ""
+            content = tbl_c.item(r, 2).text() if tbl_c.item(r, 2) else ""
+            writer = tbl_c.item(r, 3).text() if tbl_c.item(r, 3) else ""
+            url = f"https://blog.naver.com/{accounts[(_cur_acct_idx() or 0)].get('blog_id','')}/{logno}" if logno else ""
+            cmt_detail.setHtml(
+                f"<b>글 제목:</b> {title}<br>"
+                f"<b>작성자:</b> {writer}<br>"
+                f"<b>원글 주소:</b> <a href='{url}'>{url}</a><br><hr>"
+                f"<b>댓글 내용</b><br><div style='white-space:pre-wrap'>{content}</div>")
+        tbl_c.itemSelectionChanged.connect(_show_cmt_detail)
+        tbl_c.cellClicked.connect(lambda *_: _show_cmt_detail())
+
+        rc = QHBoxLayout()
+        c_load = QPushButton("댓글 불러오기")
+        c_all = QPushButton("전체선택")
+        c_clr = QPushButton("전체해제")
+        c_open = QPushButton("🔗 원글 열기")
+        c_del = QPushButton("선택한 원글 삭제"); c_del.setStyleSheet("background:#ef4444;color:white;padding:6px 12px;border:none;border-radius:6px;")
+        rc.addWidget(c_load); rc.addWidget(c_all); rc.addWidget(c_clr); rc.addWidget(c_open); rc.addStretch(); rc.addWidget(c_del)
+        l2.addLayout(rc)
+        c_all.clicked.connect(lambda: _set_all(tbl_c, True))
+        c_clr.clicked.connect(lambda: _set_all(tbl_c, False))
+
+        def _open_post():
+            r = tbl_c.currentRow()
+            if r < 0 or tbl_c.item(r, 0) is None:
+                QMessageBox.information(dlg, "안내", "목록에서 글을 먼저 클릭해 선택하세요."); return
+            logno = tbl_c.item(r, 0).data(Qt.UserRole) or ""
+            if not logno:
+                QMessageBox.information(dlg, "안내", "이 항목의 글 주소를 못 찾았습니다."); return
+            bid = accounts[(_cur_acct_idx() or 0)].get("blog_id", "")
+            import webbrowser
+            webbrowser.open(f"https://blog.naver.com/{bid}/{logno}")
+        c_open.clicked.connect(_open_post)
+        tabs.insertTab(0, t2, "🚨 삭제요청 댓글")   # 맨 앞으로
+
+        def _load_cmts():
+            def fn(mgr):
+                # 내가 공감/답글 단 댓글 + 삭제된 글 댓글은 제외하고 불러오기
+                data = mgr.list_comments(exclude_engaged=True, check_deleted=True)
+                q.put(("cmts", data))
+                _log(f"댓글 {len(data)}건")
+            _run(fn)
+
+        def _del_posts():
+            rows = _checked_rows(tbl_c)
+            if not rows:
+                QMessageBox.information(dlg, "안내", "삭제할 댓글(원글)을 선택하세요."); return
+            lognos = [tbl_c.item(r, 0).data(Qt.UserRole) for r in rows]
+            lognos = [x for x in lognos if x]
+            if not lognos:
+                QMessageBox.warning(dlg, "안내", "선택한 항목에서 글 주소를 못 찾았습니다."); return
+            if QMessageBox.question(dlg, "원글 삭제 확인",
+                    f"선택한 {len(lognos)}개 글을 정말 삭제할까요?\n되돌릴 수 없습니다.") != QMessageBox.Yes:
+                return
+            def fn(mgr):
+                n = mgr.delete_posts(lognos)
+                _log(f"원글 {n}개 삭제 완료")
+                q.put(("cmts", mgr.list_comments()))
+            _run(fn)
+        c_load.clicked.connect(_load_cmts)
+        c_del.clicked.connect(_del_posts)
+
+        # ── 탭3: 공감·자동답글 ──
+        t3 = QWidget(); l3 = QVBoxLayout(t3)
+        cb_like = QCheckBox("댓글 공감(좋아요)"); cb_like.setChecked(True)
+        cb_reply = QCheckBox("자동답글 (reply_phrases.json 문구 사용)"); cb_reply.setChecked(True)
+        l3.addWidget(cb_like); l3.addWidget(cb_reply)
+        hb = QHBoxLayout(); hb.addWidget(QLabel("처리할 글 최대 개수:"))
+        sp_max = QSpinBox(); sp_max.setRange(1, 1000); sp_max.setValue(1000)
+        hb.addWidget(sp_max); hb.addStretch()
+        l3.addLayout(hb)
+        e_start = QPushButton("🚀 서이추 수락 + 자동댓글 (한번에)")
+        e_start.setStyleSheet("background:#10b981;color:white;padding:10px 16px;border:none;border-radius:6px;font-weight:bold;font-size:13px;")
+        l3.addWidget(e_start); l3.addStretch()
+        tabs.addTab(t3, "서이추+자동댓글")
+
+        def _start_engage():
+            if not (cb_like.isChecked() or cb_reply.isChecked()):
+                QMessageBox.information(dlg, "안내", "공감/답글 중 하나는 선택하세요."); return
+            phrases = cbm.load_reply_phrases()
+            do_l, do_r, mx = cb_like.isChecked(), cb_reply.isChecked(), sp_max.value()
+            def fn(mgr):
+                # 1) 서로이웃 신청 전체 수락
+                try:
+                    reqs = mgr.list_buddy_requests()
+                    ids = [(r.get("id") or r.get("nick", "")) for r in reqs]
+                    ids = [x for x in ids if x]
+                    if ids:
+                        mgr.act_on_buddies(ids, accept=True)
+                        _log(f"서로이웃 {len(ids)}건 수락 완료")
+                        try:
+                            q.put(("buddy", mgr.list_buddy_requests()))
+                        except Exception:
+                            pass
+                    else:
+                        _log("대기 중인 서로이웃 신청 없음")
+                except Exception as e:
+                    _log(f"서로이웃 수락 실패: {e}")
+                # 2) 자동댓글(공감+답글)
+                _log("공감·답글 시작...")
+                mgr.like_and_reply_comments(phrases, do_like=do_l, do_reply=do_r, max_posts=mx)
+                _log("✅ 서이추 수락 + 자동댓글 완료")
+            _run(fn)
+        e_start.clicked.connect(_start_engage)
+
+        # ── 로그 + 중단/닫기 ──
+        root.addWidget(QLabel("로그"))
+        log_view.setMaximumHeight(90)
+        root.addWidget(log_view, 0)
+        bottom = QHBoxLayout()
+        b_stop = QPushButton("중단")
+        b_close = QPushButton("닫기")
+        bottom.addStretch(); bottom.addWidget(b_stop); bottom.addWidget(b_close)
+        root.addLayout(bottom)
+
+        def _fill_buddy(data):
+            tbl_b.setRowCount(0)
+            for d in data:
+                r = tbl_b.rowCount(); tbl_b.insertRow(r)
+                tbl_b.setItem(r, 0, _mk_check(d.get("id") or d.get("nick", "")))
+                tbl_b.setItem(r, 1, QTableWidgetItem(d.get("nick", "")))
+                tbl_b.setItem(r, 2, QTableWidgetItem(d.get("id", "")))
+                tbl_b.setItem(r, 3, QTableWidgetItem(d.get("msg", "")))
+                tbl_b.setItem(r, 4, QTableWidgetItem(d.get("date", "")))
+            tbl_b.resizeColumnsToContents()
+            tbl_b.horizontalHeader().setStretchLastSection(True)
+            if not data:
+                _log("대기 중인 서로이웃 신청이 없습니다.")
+
+        _DEL_KW = ("삭제", "내려", "지워", "비공개", "권리침해", "초상권", "저작권",
+                   "법적", "고소", "수정부탁", "수정 부탁", "게시중단", "게시 중단",
+                   "내려주", "삭제요청", "삭제 부탁", "삭제부탁", "삭제해", "지워주")
+
+        def _is_del_request(text):
+            t = text or ""
+            return any(k in t for k in _DEL_KW)
+
+        def _fill_cmts(data):
+            from PySide6.QtGui import QColor
+            warn = QColor(255, 210, 210)  # 연한 빨강
+            tbl_c.setRowCount(0)
+            # 삭제/법적조치 등 키워드가 있는 '삭제요청 의심' 댓글만 추려서 표시
+            filtered = [d for d in (data or []) if _is_del_request(d.get("content", ""))]
+            for d in filtered:
+                r = tbl_c.rowCount(); tbl_c.insertRow(r)
+                items = [_mk_check(d.get("logno", "")),
+                         QTableWidgetItem(d.get("title", "")),
+                         QTableWidgetItem(d.get("content", "")),
+                         QTableWidgetItem(d.get("writer", ""))]
+                for ci, it in enumerate(items):
+                    tbl_c.setItem(r, ci, it)
+                    it.setBackground(warn)
+                    it.setToolTip("삭제요청 의심 댓글")
+            tbl_c.resizeColumnsToContents()
+            tbl_c.horizontalHeader().setStretchLastSection(True)
+            if not filtered:
+                _log(f"삭제요청 의심 댓글 없음 (받은 댓글 {len(data or [])}개 확인)")
+            else:
+                _log(f"⚠ 삭제요청 의심 댓글 {len(filtered)}개 추려냄")
+
+        timer = QTimer(dlg)
+
+        def _drain():
+            while not q.empty():
+                try:
+                    item = q.get_nowait()
+                except Exception:
+                    break
+                kind = item[0]
+                if kind == "log":
+                    log_view.append(item[1]); log_view.moveCursor(QTextCursor.End)
+                elif kind == "buddy":
+                    _fill_buddy(item[1])
+                elif kind == "cmts":
+                    _fill_cmts(item[1])
+        timer.timeout.connect(_drain)
+        timer.start(200)
+
+        def _on_acct_changed(_i):
+            # 명의 바꾸면 목록 비우기 (다음 작업 시 그 계정으로 재로그인)
+            tbl_b.setRowCount(0)
+            tbl_c.setRowCount(0)
+            _log(f"명의 선택: {cmb_acct.currentText()} — 작업 누르면 이 계정으로 로그인합니다.")
+        cmb_acct.currentIndexChanged.connect(_on_acct_changed)
+
+        def _on_stop():
+            state["stop"] = True
+            _log("중단 요청됨...")
+
+        def _on_close():
+            state["stop"] = True
+            timer.stop()
+            try:
+                if state["poster"]:
+                    state["poster"].close()
+            except Exception:
+                pass
+            dlg.reject()
+        b_stop.clicked.connect(_on_stop)
+        b_close.clicked.connect(_on_close)
+
+        def _do_login():
+            idx = _cur_acct_idx()
+            if idx is None:
+                QMessageBox.information(dlg, "안내", "명의 아래의 아이디를 선택하세요."); return
+            myn = self._account_slot(idx)
+            pos = idx % GROUP + 1
+            disp = _acct_disp(idx)
+            if _slot_expired(idx):
+                QMessageBox.warning(dlg, "요금제 미결제",
+                    f"{myn}명의 {pos}.  {disp}\n요금제가 만료되었거나 결제되지 않아 로그인할 수 없습니다."); return
+            if QMessageBox.question(dlg, "로그인",
+                    f"{myn}명의 {pos}.  {disp}\n이 아이디로 로그인할까요?") != QMessageBox.Yes:
+                return
+            # 로그인 후 서로이웃 신청·댓글을 '한 작업'으로 자동 불러오기 (순차 busy 충돌 방지)
+            def _after_login(mgr):
+                _log("✅ 로그인 완료 — 서로이웃 신청·댓글 자동 불러오는 중...")
+                try:
+                    b = mgr.list_buddy_requests()
+                    q.put(("buddy", b)); _log(f"서로이웃 신청 {len(b)}건")
+                except Exception as e:
+                    _log(f"서로이웃 불러오기 실패: {e}")
+                try:
+                    c = mgr.list_comments(exclude_engaged=True, check_deleted=True)
+                    q.put(("cmts", c)); _log(f"댓글 {len(c)}건")
+                except Exception as e:
+                    _log(f"댓글 불러오기 실패: {e}")
+            _run(_after_login)
+        b_login.clicked.connect(_do_login)
+
+        dlg.exec()
 
     def _start_crawl(self):
         if self._block_if_expired():
@@ -4132,18 +5249,94 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+    # ── 주간 글쓰기 한도 (공유키 유저: 네이버 아이디당 주 200개, 관리자 제외) ──
+    WEEKLY_GEN_LIMIT = 200
+
+    def _weekly_limit_active(self) -> bool:
+        """이 유저에게 주간 한도를 적용해야 하나 — 관리자 제외, 공용키(shared) 사용 시에만."""
+        user = getattr(self, "current_user", {}) or {}
+        if user.get("role") == "admin":
+            return False
+        try:
+            return bool((self.cfg or {}).get("_has_shared_keys"))
+        except Exception:
+            return False
+
+    def _week_key(self) -> str:
+        """ISO 주(월요일 시작) 식별자 — 예: '2026-W27'."""
+        import datetime as _dt
+        y, w, _ = _dt.date.today().isocalendar()
+        return f"{y}-W{w:02d}"
+
+    def _weekly_count_path(self) -> str:
+        return os.path.join(os.path.dirname(__file__), "weekly_gen_count.json")
+
+    def _load_weekly_counts(self) -> dict:
+        """{week_key: {blog_id: count}} — 이번 주 데이터만 유지."""
+        try:
+            from app_paths import safe_load_json as _slj
+            data = _slj(self._weekly_count_path(), default={}, max_mb=5) or {}
+        except Exception:
+            data = {}
+        wk = self._week_key()
+        return {wk: data.get(wk, {})} if isinstance(data, dict) else {wk: {}}
+
+    def _weekly_used(self, blog_id: str) -> int:
+        return int(self._load_weekly_counts().get(self._week_key(), {}).get(blog_id or "", 0))
+
+    def _weekly_remaining(self, blog_id: str) -> int:
+        return max(0, self.WEEKLY_GEN_LIMIT - self._weekly_used(blog_id))
+
+    def _weekly_add(self, blog_id: str, n: int):
+        """이번 주 blog_id 카운트 n 증가 (원자적, 병렬 안전은 lock으로 감싸 호출)."""
+        if not blog_id or n <= 0:
+            return
+        import json as _json
+        wk = self._week_key()
+        data = self._load_weekly_counts()
+        bucket = data.get(wk, {})
+        bucket[blog_id] = int(bucket.get(blog_id, 0)) + int(n)
+        data[wk] = bucket
+        try:
+            with open(self._weekly_count_path(), "w", encoding="utf-8") as f:
+                _json.dump(data, f, ensure_ascii=False)
+        except Exception:
+            pass
+
     def _load_generated_posts(self) -> list:
         filepath = self._get_posts_file()
-        if os.path.exists(filepath):
+        if not os.path.exists(filepath):
+            return []
+        # ★ 근본 대비: 파일이 비정상적으로 크거나(폭주) 깨졌으면 백업 후 초기화 → 앱이 멈추지 않음
+        try:
+            if os.path.getsize(filepath) > 60 * 1024 * 1024:  # 60MB 초과 = 비정상
+                try:
+                    os.replace(filepath, filepath + ".corrupt.bak")
+                except Exception:
+                    pass
+                try:
+                    self._emit_post_log("⚠ 생성글 파일이 비정상적으로 커서 초기화했습니다 (.corrupt.bak 백업).")
+                except Exception:
+                    pass
+                return []
+        except Exception:
+            pass
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, list) else []
+        except Exception:
+            # 손상된 파일 → 백업 후 초기화 (다음 저장 때 새로 생성)
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                os.replace(filepath, filepath + ".corrupt.bak")
             except Exception:
                 pass
-        return []
+            return []
 
     def _generate_posts(self):
         if self._block_if_expired():
+            return
+        if self._block_if_api_expired():   # API 기간 만료면 글 생성 차단
             return
         if not self._check_api_keys():
             return
@@ -4157,13 +5350,24 @@ class MainWindow(QMainWindow):
             return
 
         cfg = load_config()
-        provider = "GPT"  # GPT 전용 고정
-        api_keys = [k for k in cfg.get("gpt_key_list", []) if k]
-        if not api_keys:
-            QMessageBox.critical(self, "오류", "GPT API 키를 설정해주세요.")
+        provider = "GPT"  # 하위호환 인자
+        gpt_keys = [k for k in cfg.get("gpt_key_list", []) if k]
+        ds_keys = [k for k in cfg.get("deepseek_key_list", []) if k]
+        gm_keys = [k for k in cfg.get("gemini_key_list", []) if k]
+        ai_engine = (cfg.get("ai_engine") or "deepseek").strip().lower()
+        # 선택 엔진의 키가 있는지 확인 → 없으면 안내
+        _engkey = {"deepseek": ds_keys, "gpt": gpt_keys, "gemini": gm_keys}.get(ai_engine, [])
+        if not _engkey:
+            _engname = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}.get(ai_engine, ai_engine)
+            QMessageBox.critical(self, "API 키 필요",
+                f"선택하신 글쓰기 엔진({_engname})의 API 키가 없습니다.\n\n"
+                f"설정 → API 키에서 {_engname} 키를 입력하거나, 다른 엔진을 선택해주세요.")
             return
 
-        api_key = api_keys[0]
+        deepseek_key = ds_keys[0] if ds_keys else None
+        gpt_key = gpt_keys[0] if gpt_keys else None
+        gemini_key = gm_keys[0] if gm_keys else None
+        api_key = (gpt_keys or ds_keys or gm_keys)[0]  # 검색어 추출기용
         # AI 검색어 추출기(gpt-4o-mini)에 키 주입 — 실패/타임아웃 시 하드코딩 폴백
         try:
             import image_handler as _ih
@@ -4179,10 +5383,27 @@ class MainWindow(QMainWindow):
             if fk:
                 keyword = fk.split(",")[0].strip()
                 self._emit_post_log(f"크롤 데이터에서 키워드 복원: '{keyword}'")
+        # ── 주간 한도 적용 (공유키 유저: 네이버 아이디당 주 200개) ──
+        if self._weekly_limit_active():
+            _bid_lim = self._current_blog_id() or self._active_blog_id() or ""
+            _remain = self._weekly_remaining(_bid_lim)
+            if _remain <= 0:
+                QMessageBox.warning(self, "주간 글쓰기 한도",
+                    f"이 아이디는 이번 주 글쓰기 한도({self.WEEKLY_GEN_LIMIT}개)를 모두 사용했습니다.\n"
+                    f"다음 주에 다시 이용하실 수 있습니다.")
+                return
+            if len(selected) > _remain:
+                selected = selected[:_remain]
+                QMessageBox.information(self, "주간 글쓰기 한도",
+                    f"이번 주 남은 글쓰기 한도가 {_remain}개입니다.\n{_remain}개만 생성합니다. (아이디당 주 {self.WEEKLY_GEN_LIMIT}개)")
+
         total = len(selected)
 
         self._emit_status("포스트 생성 중...", "#8b5cf6")
         self._emit_post_log(f"포스트 생성 시작: {total}개 업체")
+        if self._weekly_limit_active():
+            _bidL = self._current_blog_id() or self._active_blog_id() or ""
+            self._emit_post_log(f"(이번 주 사용 {self._weekly_used(_bidL)}/{self.WEEKLY_GEN_LIMIT} · 남음 {self._weekly_remaining(_bidL)})")
 
         self._generating_data = {"selected": selected, "keyword": keyword, "api_key": api_key, "provider": provider}
         self._generated_posts = self._load_generated_posts()
@@ -4211,7 +5432,15 @@ class MainWindow(QMainWindow):
                         keyword=keyword,
                         prompt_override=getattr(self, "_override_prompt_name", None),
                         title_prefix=getattr(self, "_override_title_prefix", None),
+                        deepseek_key=deepseek_key,
+                        gpt_key=gpt_key,
+                        gemini_key=gemini_key,
+                        engine=ai_engine,
                     )
+                    # 제미나이(무료 한도)면 다음 글 전 딜레이 — 분당 호출 제한 회피
+                    if ai_engine == "gemini":
+                        import time as _tgm
+                        _tgm.sleep(5)
                     if self.stop_flag:
                         return
 
@@ -4300,6 +5529,12 @@ class MainWindow(QMainWindow):
                         new_post = {"place": place, "content": content, "posted": False}
                         new_posts.append(new_post)
                         done_count[0] += 1
+                        # 주간 한도 카운트 증가 (공유키 유저만)
+                        if self._weekly_limit_active():
+                            try:
+                                self._weekly_add(self._current_blog_id() or self._active_blog_id() or "", 1)
+                            except Exception:
+                                pass
                         # 1개 생성 완료마다 즉시 디스크 저장 — F8에서 실시간 확인 가능
                         try:
                             _new_key = (place.get("name", ""), place.get("address", "") or place.get("jibun_address", ""))
@@ -4314,11 +5549,26 @@ class MainWindow(QMainWindow):
                         self._emit_status(f"생성 {done_count[0]}/{total}", "#8b5cf6")
                         self._emit_post_count(f"생성 {done_count[0]}/{total}")
                 except Exception as e:
+                    _emsg = str(e)
                     with lock:
                         done_count[0] += 1
                         self._emit_post_log(f"[{done_count[0]}/{total}] '{name}' 생성 실패: {e}")
+                        # API 토큰(잔액) 부족 → 팝업 1회 + 생성 중단 (같은 오류 스팸 방지, 자기키/공용키 공통)
+                        _low = _emsg.lower()
+                        if (("토큰(잔액)이 부족" in _emsg) or "insufficient_quota" in _low
+                                or "insufficient balance" in _low or ("quota" in _low and "exceed" in _low)) \
+                                and not getattr(self, "_balance_err_shown", False):
+                            self._balance_err_shown = True
+                            self.stop_flag = True
+                            try:
+                                from PySide6.QtCore import QMetaObject as _QM
+                                _QM.invokeMethod(self, "_show_api_balance_error", Qt.QueuedConnection)
+                            except Exception:
+                                pass
 
-            max_workers = 5
+            self._balance_err_shown = False  # 이번 생성 세션 잔액오류 팝업 1회 제한 초기화
+            # 제미나이(무료 한도)는 병렬 3 + 글당 딜레이로 분당 호출 제한 회피, 딥시크/GPT는 5
+            max_workers = 3 if ai_engine == "gemini" else 5
             with ThreadPoolExecutor(max_workers=max_workers) as ex:
                 futures = [ex.submit(_gen_one, i, p) for i, p in enumerate(selected, 1)]
                 for f in as_completed(futures):
@@ -4365,6 +5615,16 @@ class MainWindow(QMainWindow):
             QMetaObject.invokeMethod(self, "_show_post_preview", Qt.QueuedConnection)
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    @Slot()
+    def _show_api_balance_error(self):
+        """API 토큰(잔액) 부족 안내 — 메인스레드에서 팝업."""
+        try:
+            QMessageBox.critical(
+                self, "API 잔액 부족",
+                "API 토큰(잔액)이 부족합니다.\n\n사용 중인 API 키에 결제·충전을 하신 뒤 다시 시도해주세요.")
+        except Exception:
+            pass
 
     @Slot()
     def _show_post_preview(self):
@@ -4585,6 +5845,30 @@ class MainWindow(QMainWindow):
             _pl = self._emit_post_log  # 포스팅 로그 → 포스트 현황 패널
             poster = None
             publish_done = [0]
+            # ★ 근본방어: 앱/로그 폴더에 비정상적으로 큰(80MB+) json이 있으면 백업 후 제거 (JSON 파싱 폭주 크래시 원천 차단)
+            try:
+                import os as _os3
+                _dirs = [_os3.path.dirname(__file__)]
+                try: _dirs.append(self._get_logs_dir())
+                except Exception: pass
+                _cleaned = 0
+                for _dd in _dirs:
+                    if not _dd or not _os3.path.isdir(_dd):
+                        continue
+                    for _fn in _os3.listdir(_dd):
+                        if not _fn.endswith(".json"):
+                            continue
+                        _fp = _os3.path.join(_dd, _fn)
+                        try:
+                            if _os3.path.getsize(_fp) > 80 * 1024 * 1024:
+                                _os3.replace(_fp, _fp + ".corrupt.bak")
+                                _cleaned += 1
+                        except Exception:
+                            pass
+                if _cleaned:
+                    _pl(f"⚠ 비정상적으로 큰 데이터 파일 {_cleaned}개 자동 정리(.corrupt.bak 백업).")
+            except Exception:
+                pass
             try:
                 self._emit_status("포스팅 중...", "#8b5cf6")
                 poster = NaverBlogPoster(
@@ -4600,10 +5884,10 @@ class MainWindow(QMainWindow):
                 self._active_posters.append(poster)
                 _pl("브라우저 시작...")
                 poster.start_browser()
-                # 크롬 창을 앞으로
+                # 크롬 창을 앞으로 (적당한 크기, 전체화면 X)
                 try:
                     poster.driver.execute_script("window.focus();")
-                    poster.driver.maximize_window()
+                    poster.driver.set_window_rect(x=80, y=60, width=1180, height=860)
                 except Exception:
                     pass
                 _pl("네이버 로그인 중...")
@@ -4638,11 +5922,19 @@ class MainWindow(QMainWindow):
                         _pl(f"네이버 예약 카운트 보정: 실제 예약 {reserved_count}건 (99 한도 기준)")
                         if reserved_count > 0:
                             first_immediate = False
+                    # 예약 현황 캐시 저장 (계정 옆 라벨에 자동 표시)
+                    try:
+                        _ls = latest.strftime("%Y-%m-%d %H:%M") if existing else ""
+                        self._save_resv_status(self._active_blog_id(), reserved_count, _ls)
+                    except Exception:
+                        pass
                 except Exception as _pe:
                     _pl(f"기존 예약 조회 실패: {_pe} — 첫 글 즉시발행으로 진행")
                     first_immediate = True
 
                 running_dt = base_time
+                last_reserved_str = ""   # 이번 포스팅으로 잡힌 가장 늦은 예약 시간
+                resv_fail_streak = 0     # 예약 발행 연속 실패 수 — 네이버 99 한도 도달 감지용
                 for i, item in enumerate(self.posting_targets, 1):
                     if self.stop_flag:
                         _pl(f"포스팅 중단완료 ({i-1}/{len(self.posting_targets)}개 완료)")
@@ -4696,7 +5988,7 @@ class MainWindow(QMainWindow):
                             _pl(f"이미지 재검색 (업종 '{biz}', 저장본 없음)")
                             img_paths = download_images(
                                 pix_keys[0], biz,
-                                content.get("image_count", 3),
+                                3,  # 무조건 3장 고정
                                 watermark_text=name,
                                 translator=self._translate_ko_to_en,
                             )
@@ -4760,11 +6052,23 @@ class MainWindow(QMainWindow):
                         )
                         msg = "완료!" if success else "실패"
                         _pl(f"[{i}/{total}] '{name}' {msg}")
+                        # 예약 발행 연속 실패 감지 — 네이버 99개 한도에 걸리면 예약이 계속 실패하는데
+                        # 성공 카운트(reserved_count)가 안 올라가 무한 시도됨. 연속 실패면 한도 도달로 보고 종료.
+                        if schedule_time is not None:
+                            if success:
+                                resv_fail_streak = 0
+                            else:
+                                resv_fail_streak += 1
+                                if resv_fail_streak >= 3:
+                                    _pl(f"예약 발행 연속 {resv_fail_streak}회 실패 — 네이버 예약 한도(99개) 도달로 판단하여 포스팅 종료")
+                                    self._emit_status("예약 한도 도달", "#f59e0b")
+                                    break
                         if success:
                             publish_done[0] += 1
                             self._emit_publish_count(f"{publish_done[0]}개")
                             if schedule_time is not None:
                                 reserved_count += 1
+                                last_reserved_str = schedule_time   # 가장 늦은 예약 시간 갱신
                         # 브라우저 세션 확인 — 죽었으면 즉시 중단
                         try:
                             _ = poster.driver.current_url
@@ -4797,14 +6101,46 @@ class MainWindow(QMainWindow):
                             _pl(f"'{place.get('name','')}' 포스팅 완료 → F8에서 [완] 표시로 확인 가능")
                     except Exception as e:
                         _pl(f"'{name}' 오류: {e}")
+                        # 예약 발행이 예외로 실패한 경우도 연속 실패로 집계 — 한도 도달 시 무한 시도 방지
+                        if schedule_time is not None:
+                            resv_fail_streak += 1
+                            if resv_fail_streak >= 3:
+                                _pl(f"예약 발행 연속 {resv_fail_streak}회 실패/오류 — 네이버 예약 한도(99개) 도달로 판단하여 포스팅 종료")
+                                self._emit_status("예약 한도 도달", "#f59e0b")
+                                break
 
                 if not self.stop_flag:
                     _pl(f"전체 포스팅 완료! ({total}개)")
                     self._emit_post_count(f"{total}/{total}")
                 self._emit_status("완료", "#22c55e")
+                # 포스팅 결과로 예약 현황 자동 저장 → 조회 안 해도 라벨에 '며칠까지' 표시
+                try:
+                    if last_reserved_str:
+                        self._save_resv_status(self._active_blog_id(), reserved_count, last_reserved_str)
+                        self.resv_signal.emit()
+                except Exception:
+                    pass
 
             except Exception as e:
                 _pl(f"오류: {e}")
+                # 정확한 발생 위치(파일·줄) 기록 — 원인 추적용
+                try:
+                    import traceback as _tb, os as _os2
+                    _tbs = _tb.extract_tb(e.__traceback__)
+                    # 우리 코드(블로그마스터 .py) 프레임을 우선 표시 — 라이브러리(decoder 등) 말고 진짜 호출 지점
+                    _mine = [fr for fr in _tbs if fr.filename.endswith((".py",)) and
+                             _os2.path.basename(fr.filename) in (
+                                 "main.py","naver_poster.py","image_handler.py","content_generator.py",
+                                 "local_image_store.py","places_crawler.py","comment_buddy_manager.py",
+                                 "naver_crawler.py","config.py","places_api_crawler.py")]
+                    _show = _mine[-1] if _mine else (_tbs[-1] if _tbs else None)
+                    if _show:
+                        _pl(f"  ↳ 위치: {_os2.path.basename(_show.filename)}:{_show.lineno} ({_show.name})")
+                    _crash = _os2.path.join(_os2.path.dirname(__file__), "posting_error.log")
+                    with open(_crash, "a", encoding="utf-8") as _cf:
+                        _cf.write(f"\n--- {e} ---\n{_tb.format_exc()}\n")
+                except Exception:
+                    pass
                 self._emit_status("오류", "#ef4444")
             finally:
                 self.is_posting = False
@@ -4818,15 +6154,25 @@ class MainWindow(QMainWindow):
     # ── 포스팅 업체 선택 ──
     @staticmethod
     def _gu_of_place(p: dict) -> str:
-        """주소에서 '구/군' 추출 — '강남구' 같은 단일 토큰 반환.
-        '서울특별시' 같은 시 토큰은 건너뛰고 구/군 우선."""
+        """지역 그룹 라벨 — 광역시(서울/부산 등)는 '구' 단위, 도(경기 등)는 '시/군' 단위로 묶는다.
+        (효자구가 어느 시인지 몰라도 도 지역은 시로 묶여 찾기 쉽게)"""
         import re as _re
-        addr = (p.get("address", "") or "") + " " + (p.get("jibun_address", "") or "")
-        m = _re.search(r"([가-힣]+[구군])", addr)
-        if m:
-            return m.group(1)
-        m = _re.search(r"([가-힣]+시)", addr)
-        return m.group(1) if m else "지역 미상"
+        addr = ((p.get("address", "") or "") + " " + (p.get("jibun_address", "") or "")).strip()
+        first = addr.split()[0] if addr.split() else ""
+        is_metro = first.endswith(("특별시", "광역시")) or first == "세종특별자치시"
+        m_si = _re.search(r"([가-힣]+시)", addr)
+        m_gu = _re.search(r"([가-힣]+[구군])", addr)
+        if is_metro:
+            # 광역시: 구 단위 (예: 강남구)
+            if m_gu:
+                return m_gu.group(1)
+            return m_si.group(1) if m_si else "지역 미상"
+        # 도 지역: 시 단위 우선 (예: 수원시), 없으면 군, 없으면 구
+        if m_si:
+            return m_si.group(1)
+        if m_gu:
+            return m_gu.group(1)
+        return "지역 미상"
 
     def _load_all_crawl_results(self, mode: str = "") -> dict:
         """현재 계정의 logs 폴더의 모든 크롤링 결과를 (구 × 업종)별로 집계.
@@ -5552,6 +6898,8 @@ class MainWindow(QMainWindow):
         prompt_combo = QComboBox()
         prompt_combo.addItem("(자동 선택)")
         for k in _prompt_keys:
+            if k == "기본":   # 기본은 숨김 — '(자동 선택)'이 폴백 처리
+                continue
             prompt_combo.addItem(k)
         prompt_combo.setStyleSheet("padding: 6px 10px; font-size: 12px;")
         prompt_lbl = QLabel("프롬프트:")
@@ -5577,11 +6925,21 @@ class MainWindow(QMainWindow):
             free_prefix_input.setVisible(prefix_combo.currentData() == "free")
         prefix_combo.currentIndexChanged.connect(_on_prefix_changed)
 
+        # 사진 검색 키워드 (직접 입력 — 비우면 업종 자동 인식)
+        img_kw_lbl = QLabel("사진 검색어:")
+        img_kw_lbl.setStyleSheet("font-size: 12px; color: #475569;")
+        img_kw_input = QLineEdit()
+        img_kw_input.setPlaceholderText("예: 헬스장 (비우면 자동)")
+        img_kw_input.setStyleSheet("padding: 6px 8px; font-size: 12px;")
+        img_kw_input.setFixedWidth(160)
+        img_kw_input.setText((getattr(self, "_override_image_keyword", "") or ""))
+
         btn_ok = QPushButton("포스트 생성")
         btn_ok.setStyleSheet("background: #8b5cf6; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; padding: 10px 25px;")
         btn_ok.setCursor(Qt.PointingHandCursor)
 
         def _on_ok():
+            self._override_image_keyword = img_kw_input.text().strip()
             sel = prompt_combo.currentText()
             self._override_prompt_name = sel if sel and sel != "(자동 선택)" else None
             pdata = prefix_combo.currentData()
@@ -5592,6 +6950,9 @@ class MainWindow(QMainWindow):
             dlg.accept()
         btn_ok.clicked.connect(_on_ok)
 
+        # 맨 좌측에 사진 검색어 → 그다음 기존 위젯들
+        bottom.addWidget(img_kw_lbl)
+        bottom.addWidget(img_kw_input)
         bottom.addWidget(btn_cancel)
         bottom.addWidget(prompt_lbl)
         bottom.addWidget(prompt_combo)
@@ -5645,12 +7006,22 @@ class MainWindow(QMainWindow):
             return
 
         cfg = load_config()
-        provider = "GPT"  # GPT 전용 고정
-        api_keys = [k for k in cfg.get("gpt_key_list", []) if k]
-        if not api_keys:
-            QMessageBox.critical(self, "오류", "GPT API 키를 설정해주세요.")
+        provider = "GPT"  # 하위호환 인자
+        gpt_keys = [k for k in cfg.get("gpt_key_list", []) if k]
+        ds_keys = [k for k in cfg.get("deepseek_key_list", []) if k]
+        gm_keys = [k for k in cfg.get("gemini_key_list", []) if k]
+        ai_engine = (cfg.get("ai_engine") or "deepseek").strip().lower()
+        _engkey = {"deepseek": ds_keys, "gpt": gpt_keys, "gemini": gm_keys}.get(ai_engine, [])
+        if not _engkey:
+            _engname = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}.get(ai_engine, ai_engine)
+            QMessageBox.critical(self, "API 키 필요",
+                f"선택하신 글쓰기 엔진({_engname})의 API 키가 없습니다.\n\n"
+                f"설정 → API 키에서 {_engname} 키를 입력하거나, 다른 엔진을 선택해주세요.")
             return
-        api_key = api_keys[0]
+        deepseek_key = ds_keys[0] if ds_keys else None
+        gpt_key = gpt_keys[0] if gpt_keys else None
+        gemini_key = gm_keys[0] if gm_keys else None
+        api_key = (gpt_keys or ds_keys or gm_keys)[0]  # 검색어 추출기용
         # AI 검색어 추출기(gpt-4o-mini)에 키 주입 — 실패/타임아웃 시 하드코딩 폴백
         try:
             import image_handler as _ih
@@ -5665,24 +7036,10 @@ class MainWindow(QMainWindow):
         if self.is_posting:
             return
 
-        # API 구독 만료 체크 (명의 슬롯별)
+        # API 구독 만료 체크 (명의 슬롯별) — 만료면 "API 기간이 만료되었습니다..." 안내 후 차단
         acc_idx = cfg.get("active_account", 0) + 1
-        try:
-            from users import is_api_expired as _is_api_exp, load_users as _lu_api
-            from config import get_current_user as _gcu_api
-            _api_user = _lu_api().get(_gcu_api() or "", {})
-            if _is_api_exp(_api_user, slot=acc_idx):
-                _reply = QMessageBox.question(
-                    self, "API 구독 필요",
-                    f"[{acc_idx}명의] GPT 글쓰기 API 구독이 만료되었거나 없습니다.\n"
-                    "구독 후 이용 가능합니다.\n\n구독 결제 창을 여시겠습니까?",
-                    QMessageBox.Yes | QMessageBox.No
-                )
-                if _reply == QMessageBox.Yes:
-                    self._open_payment_dialog()
-                return
-        except Exception:
-            pass
+        if self._block_if_api_expired():
+            return
 
         total = len(selected)
         interval_sec = self._get_interval_seconds()
@@ -5721,7 +7078,7 @@ class MainWindow(QMainWindow):
                 poster.start_browser()
                 try:
                     poster.driver.execute_script("window.focus();")
-                    poster.driver.maximize_window()
+                    poster.driver.set_window_rect(x=80, y=60, width=1180, height=860)
                 except Exception:
                     pass
 
@@ -5745,10 +7102,14 @@ class MainWindow(QMainWindow):
 
                     try:
                         content = generate_content(
-                            provider=cfg["ai_provider"],
+                            provider=provider,
                             api_key=api_key,
-                            place=place, keyword=keyword
+                            place=place, keyword=keyword,
+                            deepseek_key=deepseek_key, gpt_key=gpt_key,
+                            gemini_key=gemini_key, engine=ai_engine
                         )
+                        if ai_engine == "gemini":
+                            import time as _tgm2; _tgm2.sleep(5)
                     except Exception as e:
                         self._emit_post_log(f"'{name}' 글 생성 실패: {e}")
                         continue
@@ -5756,14 +7117,17 @@ class MainWindow(QMainWindow):
                     img_paths = []
                     pix_keys = [k for k in cfg.get("pixabay_key_list", []) if k]
                     if pix_keys:
-                        # 완전 자동: download_images 내부 체인(AI→테이블→번역)
-                        biz = self._best_biz_term(place, keyword)
-                        img_paths = download_images(
-                            pix_keys[0], biz,
-                            content.get("image_count", 3),
-                            watermark_text=name,
-                            translator=self._translate_ko_to_en,
-                        )
+                        try:
+                            # 완전 자동: download_images 내부 체인(로컬→픽사베이)
+                            biz = self._best_biz_term(place, keyword)
+                            img_paths = download_images(
+                                pix_keys[0], biz,
+                                3,  # 무조건 3장 고정
+                                watermark_text=name,
+                                translator=self._translate_ko_to_en,
+                            )
+                        except Exception as e:
+                            self._emit_post_log(f"'{name}' 이미지 다운로드 실패(이미지 없이 진행): {e}")
 
                     self._emit_post_log(f"[{i}/{total}] '{name}' 포스팅 중...")
 
@@ -5905,7 +7269,8 @@ class LoginDialog(QDialog):
         self.signup_link = QLabel('<a href="#" style="color:#64748b; text-decoration:none;">회원가입</a>')
         self.signup_link.setStyleSheet("font-size: 11px; color: #64748b;")
         self.signup_link.setCursor(Qt.PointingHandCursor)
-        self.signup_link.linkActivated.connect(lambda: self._open_register())
+        self.signup_link.linkActivated.connect(
+            lambda: __import__('webbrowser').open("https://n-jobs.kr/login.html?tab=signup&trial=blog"))
         signup_row.addWidget(self.signup_link)
         signup_row.addStretch()
         layout.addLayout(signup_row)
@@ -6441,6 +7806,22 @@ class AdminDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("사용자 관리 (아이디 / 역할 / 명의별 만료일, 빈값=무제한)"))
 
+        # 검색 (아이디 · 이름 · 전화번호 · 이메일)
+        search_row = QHBoxLayout()
+        search_row.addWidget(QLabel("🔍 검색:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("아이디 · 이름 · 전화번호 · 이메일로 검색")
+        self.search_edit.setStyleSheet("padding:6px;")
+        self.search_edit.textChanged.connect(self._filter_users)
+        search_row.addWidget(self.search_edit, 1)
+        self.search_count = QLabel("")
+        self.search_count.setStyleSheet("color:#64748b;")
+        search_row.addWidget(self.search_count)
+        btn_clear = QPushButton("전체보기")
+        btn_clear.clicked.connect(lambda: self.search_edit.clear())
+        search_row.addWidget(btn_clear)
+        layout.addLayout(search_row)
+
         self.table = QTableWidget()
         self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels(["아이디", "역할", "명의별 만료일", "API키 부여", "키워드마스터", "네이버ID 초기화", "비밀번호 재설정"])
@@ -6489,6 +7870,35 @@ class AdminDialog(QDialog):
         bottom.addWidget(btn_close)
         layout.addLayout(bottom)
 
+    def _filter_users(self, _text=None):
+        """검색어로 사용자 행 필터 (아이디/이름/전화/이메일/추천인). 더블클릭하면 상세."""
+        from users import load_users
+        q = (self.search_edit.text() or "").strip().lower()
+        users = load_users()
+        qd = q.replace("-", "").replace(" ", "")
+        shown = 0
+        for r in range(self.table.rowCount()):
+            it = self.table.item(r, 0)
+            uid = it.text().strip() if it else ""
+            if not q:
+                self.table.setRowHidden(r, False)
+                shown += 1
+                continue
+            u = users.get(uid, {}) or {}
+            hay = " ".join([
+                uid, str(u.get("name", "")), str(u.get("phone", "")),
+                str(u.get("email", "")), str(u.get("referrer", "")),
+            ]).lower()
+            haed = hay.replace("-", "").replace(" ", "")
+            match = (q in hay) or (qd and qd in haed)
+            self.table.setRowHidden(r, not match)
+            if match:
+                shown += 1
+        try:
+            self.search_count.setText("" if not q else f"{shown}명")
+        except Exception:
+            pass
+
     def _show_user_info(self, row, _col):
         from users import load_users
         uid_item = self.table.item(row, 0)
@@ -6500,7 +7910,7 @@ class AdminDialog(QDialog):
 
         dlg = QDialog(self)
         dlg.setWindowTitle(f"가입 정보 — {uid}")
-        dlg.setFixedWidth(340)
+        dlg.setMinimumWidth(460)
         lay = QVBoxLayout(dlg)
         lay.setSpacing(10)
 
@@ -6536,6 +7946,55 @@ class AdminDialog(QDialog):
         email_lay.addWidget(email_lbl)
         email_lay.addWidget(email_edit, 1)
         lay.addWidget(email_row)
+
+        # ── 명의별 네이버 아이디 + 명의별 초기화 ──
+        from PySide6.QtWidgets import QFrame
+        line = QFrame(); line.setFrameShape(QFrame.HLine); line.setStyleSheet("color:#e2e8f0;")
+        lay.addWidget(line)
+        lay.addWidget(QLabel("<b>네이버 아이디 (명의별)</b>"))
+
+        myeongui_vals = {}
+
+        def _load_user_naver_ids():
+            # 등록 계정은 users[uid].accounts (Firebase) 에 있음. 없으면 로컬 config 폴백.
+            from users import load_users as _lu
+            accs = list((_lu().get(uid) or {}).get("accounts") or [])
+            if not any((a or {}).get("blog_id") or (a or {}).get("naver_id") for a in accs):
+                try:
+                    import json as _json
+                    from config import CONFIG_FILE as _CF
+                    if os.path.exists(_CF):
+                        raw = _json.load(open(_CF, encoding="utf-8"))
+                        accs = list((raw.get("accounts_by_user") or {}).get(uid) or []) or accs
+                except Exception:
+                    pass
+            return accs
+
+        def _refresh_myeongui():
+            uaccs = _load_user_naver_ids()
+            for m in range(3):
+                ids = []
+                for i in range(m * 3, m * 3 + 3):
+                    if i < len(uaccs) and isinstance(uaccs[i], dict):
+                        bid = (uaccs[i].get("blog_id") or "").strip()
+                        nid = (uaccs[i].get("naver_id") or "").strip()
+                        if bid or nid:
+                            ids.append(bid or nid)
+                myeongui_vals[m].setText("   •   ".join(ids) if ids else "(없음)")
+
+        for m in range(3):
+            box = QWidget(); h = QHBoxLayout(box); h.setContentsMargins(0, 2, 0, 2)
+            lbl = QLabel(f"<b>{m+1}명의</b>"); lbl.setFixedWidth(56)
+            val = QLabel("(없음)"); val.setWordWrap(True)
+            val.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            myeongui_vals[m] = val
+            rbtn = QPushButton("초기화")
+            rbtn.setStyleSheet("background:#ef4444;color:white;border:none;border-radius:5px;padding:4px 10px;")
+            rbtn.clicked.connect(
+                lambda _, _m=m: (self._reset_naver_myeongui(uid, _m), _refresh_myeongui()))
+            h.addWidget(lbl); h.addWidget(val, 1); h.addWidget(rbtn)
+            lay.addWidget(box)
+        _refresh_myeongui()
 
         msg_lbl = QLabel("")
         msg_lbl.setStyleSheet("font-size: 11px;")
@@ -6647,6 +8106,52 @@ class AdminDialog(QDialog):
             QMessageBox.information(self, "완료", f"'{uid}' 전체 슬롯 초기화됨 (9개 슬롯 + 잠금 해제).")
         except Exception as e:
             QMessageBox.critical(self, "실패", f"전체 초기화 실패: {e}")
+
+    def _reset_naver_myeongui(self, uid: str, myeongui: int):
+        """관리자: 특정 사용자의 한 명의(아이디 3개) 전체 초기화 + 잠금 해제.
+        myeongui: 0=1명의(슬롯0~2), 1=2명의(슬롯3~5), 2=3명의(슬롯6~8)."""
+        reply = QMessageBox.question(
+            self, f"{myeongui+1}명의 초기화",
+            f"'{uid}'의 {myeongui+1}명의(아이디 3개)를 모두 초기화할까요?\n(잠금도 해제되어 다시 등록 가능)")
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            import json as _json
+            from config import CONFIG_FILE as _CF
+            from users import load_users as _lu, update_user as _upd
+            # 출처: users[uid].accounts (Firebase). 빈 dict 도 보존하며 9슬롯 보장
+            ue = _lu().get(uid, {}) or {}
+            accs = list(ue.get("accounts") or [])
+            while len(accs) < 9:
+                accs.append({"blog_id": "", "naver_id": "", "naver_pw": "", "blog_category": ""})
+            removed = []
+            for slot_idx in range(myeongui * 3, myeongui * 3 + 3):
+                cur = accs[slot_idx] if isinstance(accs[slot_idx], dict) else {}
+                nid = (cur.get("naver_id") or "").strip().lower()
+                if nid:
+                    removed.append(nid)
+                accs[slot_idx] = {"blog_id": "", "naver_id": "", "naver_pw": "", "blog_category": ""}
+            # 1) Firebase users.accounts + 잠금 해제
+            locked = set((s or "").strip().lower() for s in ue.get("locked_naver_ids", []))
+            for nid in removed:
+                locked.discard(nid)
+            _upd(uid, accounts=accs, locked_naver_ids=sorted(locked))
+            # 2) 로컬 config 에도 해당 사용자 항목 있으면 동기화
+            try:
+                raw = {}
+                if os.path.exists(_CF):
+                    raw = _json.load(open(_CF, encoding="utf-8"))
+                abu = dict(raw.get("accounts_by_user") or {})
+                if uid in abu:
+                    abu[uid] = accs
+                    raw["accounts_by_user"] = abu
+                    with open(_CF, "w", encoding="utf-8") as f:
+                        _json.dump(raw, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
+            QMessageBox.information(self, "완료", f"'{uid}' {myeongui+1}명의 초기화 완료.")
+        except Exception as e:
+            QMessageBox.critical(self, "실패", f"초기화 실패: {e}")
 
     def _reset_naver_slot(self, uid: str, slot_idx: int):
         """관리자: 특정 사용자의 특정 슬롯 네이버 ID 데이터 초기화 + 잠금 해제"""
@@ -6804,7 +8309,7 @@ class AdminDialog(QDialog):
         admin_cfg = load_config()
         admin_keys = {
             k: [v for v in admin_cfg.get(k, []) if v]
-            for k in ("gpt_key_list", "gemini_key_list", "pixabay_key_list")
+            for k in ("gpt_key_list", "gemini_key_list", "pixabay_key_list", "deepseek_key_list")
         }
         existing_users = load_users()
         for row in range(self.table.rowCount()):
@@ -6824,10 +8329,13 @@ class AdminDialog(QDialog):
                 role = "user"
             if uid == "admin":
                 shared = None
+                granted = None
             elif api_on:
                 shared = {k: v for k, v in admin_keys.items() if v}
+                granted = True   # 관리자가 직접 부여 → 앱이 공용키를 반영하도록 플래그 ON
             else:
                 shared = {}
+                granted = False
             update_user(
                 uid,
                 password=(new_pw if new_pw else None),
@@ -6836,6 +8344,7 @@ class AdminDialog(QDialog):
                 expires_2=expires_2,
                 expires_3=expires_3,
                 shared_api_keys=shared,
+                shared_api_keys_admin_granted=granted,
                 keywordmaster_enabled=(True if uid != "admin" and km_on else None),
             )
         QMessageBox.information(self, "완료", "저장되었습니다.")
@@ -6933,6 +8442,28 @@ def _check_and_offer_update_pre_login(parent=None):
         if not latest or _ver_tuple(latest) <= _ver_tuple(APP_VERSION):
             _log("up to date, no dialog")
             return
+        # ── 무한루프 방지: 직전에 이 버전으로 자동패치를 시도했는데도 아직 구버전이면
+        #    (= 이 PC에서 자동 업데이트 실패) 자동 재프롬프트를 멈추고 수동설치만 1회 안내 ──
+        try:
+            _cfg = load_config()
+        except Exception:
+            _cfg = {}
+        if _cfg.get("update_attempted_version") == latest:
+            _log("auto-update previously failed for this version -> manual guide, stop loop")
+            try:
+                reply = QMessageBox.question(
+                    parent, "업데이트 안내",
+                    f"새 버전(v{latest})이 있지만, 이 PC에서 자동 업데이트가 완료되지 않았습니다.\n"
+                    "(백신 차단 · 파일 잠김 · 권한 등)\n\n"
+                    "브라우저에서 최신 버전을 직접 설치하시겠습니까?",
+                    QMessageBox.Yes | QMessageBox.No
+                )
+                if reply == QMessageBox.Yes:
+                    import webbrowser
+                    webbrowser.open("https://github.com/kingth0506/BlogMaster/releases/latest")
+            except Exception:
+                pass
+            return
         try:
             reply = QMessageBox.question(
                 parent, "업데이트",
@@ -6946,6 +8477,12 @@ def _check_and_offer_update_pre_login(parent=None):
             _log("user declined")
             return
         _log("user accepted, starting update")
+        # 이 버전으로 자동패치 '시도'했음을 기록 → 실패로 재실행돼도 위 가드가 루프를 끊음
+        try:
+            _cfg["update_attempted_version"] = latest
+            save_config(_cfg)
+        except Exception:
+            pass
         _do_in_app_update()
     except Exception as e:
         _log(f"outer exception: {e}")
@@ -7024,13 +8561,18 @@ def _do_in_app_update():
         f"findstr /I /C:\"{exe_name}\" \"{tl_tmp}\" >nul 2>nul\r\n"
         "if %errorlevel%==0 goto wait\r\n"
         f"del /Q \"{tl_tmp}\" 2>nul\r\n"
-        f"robocopy \"{staging_w}\" \"{install_dir_w}\" /E /R:3 /W:1 /NFL /NDL /NJH /NJS /NC /NS /NP >nul 2>nul\r\n"
-        "if errorlevel 8 (\r\n"
-        f"  echo ROBOCOPY_FAIL errorlevel=%errorlevel% > %LOG%\r\n"
-        "  exit /b 1\r\n"
-        ")\r\n"
+        f"robocopy \"{staging_w}\" \"{install_dir_w}\" /E /R:5 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP >nul 2>nul\r\n"
+        "if not errorlevel 8 goto copyok\r\n"
+        "timeout /t 2 /nobreak >nul 2>nul\r\n"
+        f"robocopy \"{staging_w}\" \"{install_dir_w}\" /E /R:5 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP >nul 2>nul\r\n"
+        "if not errorlevel 8 goto copyok\r\n"
+        "echo ROBOCOPY_FAIL errorlevel %errorlevel% > %LOG%\r\n"
+        f"start \"\" \"{install_dir_w}\\{exe_name}\"\r\n"
+        "del /Q \"%~f0\"\r\n"
+        "exit /b 8\r\n"
+        ":copyok\r\n"
         f"if not exist \"{install_dir_w}\\{exe_name}\" (\r\n"
-        f"  echo MISSING_EXE after_xcopy > %LOG%\r\n"
+        f"  echo MISSING_EXE after_robocopy > %LOG%\r\n"
         "  exit /b 2\r\n"
         ")\r\n"
         f"del /Q \"{install_dir_w}\\NaverBlogAuto.exe\" 2>nul\r\n"
@@ -7043,6 +8585,25 @@ def _do_in_app_update():
     )
     with open(bat_path, "w", encoding="cp949") as f:
         f.write(bat)
+
+    # 설치 폴더 쓰기 권한 확인 — 없으면(관리자로 Program Files 설치 등) UAC 승격으로 bat 실행
+    def _writable(p):
+        try:
+            _t = os.path.join(p, ".upd_wtest")
+            with open(_t, "w") as _wf:
+                _wf.write("x")
+            os.remove(_t)
+            return True
+        except Exception:
+            return False
+
+    if not _writable(install_dir):
+        try:
+            import ctypes as _ct
+            _ct.windll.shell32.ShellExecuteW(None, "runas", "cmd.exe", f'/c ""{bat_path}""', None, 0)
+            sys.exit(0)
+        except Exception:
+            pass  # 승격 실패 시 아래 일반(숨김) 경로로 폴백
 
     # cmd 완전 숨김: VBS 런처로 bat을 hidden(WindowStyle=0) 실행 → 어떤 cmd 창도 안 뜸
     vbs_path = os.path.join(work_dir, "run_hidden.vbs").replace("/", "\\")
