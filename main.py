@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.1"
+APP_VERSION = "2.4.2"
 
 import os
 import sys
@@ -439,6 +439,13 @@ class MainWindow(QMainWindow):
         # 시스템 트레이 아이콘 구성
         self._force_quit = False
         self._init_tray_icon()
+
+        # 키워드마스터 연동 — 시작 직후 핸드오프 파일 있으면 키워드 가져오기
+        try:
+            from PySide6.QtCore import QTimer as _QT_km
+            _QT_km.singleShot(1200, self._import_from_keyword_master)
+        except Exception:
+            pass
 
     def _init_tray_icon(self):
         self.tray = None
@@ -1644,6 +1651,78 @@ class MainWindow(QMainWindow):
         if keyword not in existing:
             self.keyword_input.insertItem(0, keyword)
         self.keyword_input.setCurrentText(keyword)
+
+    # ── 키워드마스터 연동 (핸드오프 수신) ──
+    def _km_handoff_path(self):
+        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, "BlogMaster", "selected_keywords.json")
+
+    def _append_keyword_history_only(self, keyword: str):
+        """히스토리 엑셀에만 추가 (현재 입력칸/드롭다운은 호출부에서 처리)."""
+        try:
+            import openpyxl
+        except Exception:
+            return
+        filepath = self._get_history_file()
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            wb = openpyxl.load_workbook(filepath); ws = wb.active
+        except Exception:
+            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "검색 히스토리"
+            ws.append(["키워드", "검색일시", "수집 결과수"])
+        ws.append([keyword, now, "(키워드마스터)"])
+        wb.save(filepath); wb.close()
+
+    def _import_from_keyword_master(self):
+        """키워드마스터가 남긴 selected_keywords.json → 키워드 드롭다운/히스토리에 반영."""
+        try:
+            import json as _json
+            path = self._km_handoff_path()
+            if not os.path.exists(path):
+                return
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = _json.load(f)
+            except Exception:
+                return
+            kws = [str(k).strip() for k in (data.get("place_keywords") or []) if str(k).strip()]
+            # 파일 소비 — 재처리 방지 (읽자마자 .done 으로 이동)
+            try:
+                done = path + ".done"
+                if os.path.exists(done):
+                    os.remove(done)
+                os.replace(path, done)
+            except Exception:
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+            if not kws:
+                return
+            existing = set(self.keyword_input.itemText(i) for i in range(self.keyword_input.count()))
+            added = 0
+            for kw in kws:
+                if kw not in existing:
+                    self.keyword_input.insertItem(0, kw)
+                    existing.add(kw)
+                    try:
+                        self._append_keyword_history_only(kw)
+                    except Exception:
+                        pass
+                    added += 1
+            self.keyword_input.setCurrentText("")
+            tgt_blog = data.get("target_blog_id") or ""
+            self._emit_log(f"키워드마스터에서 키워드 {added}개 수신" + (f" (대상 명의: {tgt_blog})" if tgt_blog else ""))
+            try:
+                QMessageBox.information(
+                    self, "키워드마스터 연동",
+                    f"키워드마스터에서 키워드 {added}개를 받았습니다."
+                    + (f"\n대상 명의: {tgt_blog}" if tgt_blog else "")
+                    + "\n\n'키워드 입력' 드롭다운에서 골라 크롤을 시작하세요.")
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def _update_history_result_count(self, keyword: str, count: int):
         try:
