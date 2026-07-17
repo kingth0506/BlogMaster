@@ -257,37 +257,53 @@ class NaverBlogPoster:
                 _dlog(f"로그인 폼 대기 실패: {e}")
             self._sleep(0.4)
 
-            # ID/PW JS로 직접 값 설정 (React 호환 setter)
+            # ID/PW 입력 — 정확값 그대로 설정(JS). 오토필/타이핑 오류 방지 위해 먼저 비우고 값 설정 + 이벤트 발생.
             self.driver.execute_script(
-                "const idEl=document.getElementById('id'); const pwEl=document.getElementById('pw');"
-                "const s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
-                "s.call(idEl, arguments[0]); idEl.dispatchEvent(new Event('input',{bubbles:true}));"
-                "s.call(pwEl, arguments[1]); pwEl.dispatchEvent(new Event('input',{bubbles:true}));",
+                "var idEl=document.getElementById('id'); var pwEl=document.getElementById('pw');"
+                "var setter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
+                "function put(el,val){ if(!el) return; el.focus();"
+                "  setter.call(el,''); el.dispatchEvent(new Event('input',{bubbles:true}));"
+                "  setter.call(el,val); el.dispatchEvent(new Event('input',{bubbles:true}));"
+                "  el.dispatchEvent(new Event('change',{bubbles:true})); el.dispatchEvent(new Event('blur',{bubbles:true})); }"
+                "put(idEl, arguments[0]); put(pwEl, arguments[1]);",
                 self.naver_id, self.naver_pw
             )
             _dlog(f"ID/PW 입력 완료 (id={self.naver_id})")
             self._sleep(0.3)
 
-            # 로그인 버튼 클릭 — 네이티브 클릭이 안 먹는 환경 대비해 JS 클릭까지 확실히
-            try:
-                login_btn = WebDriverWait(self.driver, 5).until(
-                    EC.presence_of_element_located((By.ID, "log.login"))
-                )
+            # 로그인 버튼 클릭 — 네이버 로그인 페이지 개편 대응
+            #   구: id="log.login" (type=submit)  →  신: id="loginBtn_row" / "loginBtn_column" (type=button)
+            #   반응형이라 둘 중 화면에 보이는 것을 클릭. 못 찾으면 '로그인' 텍스트 버튼으로 폴백.
+            _LOGIN_BTN_IDS = ["loginBtn_row", "loginBtn_column", "log.login"]
+            _clicked = False
+            for _bid in _LOGIN_BTN_IDS:
                 try:
-                    login_btn.click()
+                    _btn = self.driver.find_element(By.ID, _bid)
+                    if not _btn.is_displayed():
+                        continue
+                    try:
+                        _btn.click()
+                    except Exception:
+                        self.driver.execute_script("arguments[0].click();", _btn)
+                    _clicked = True
+                    _dlog(f"로그인 버튼 클릭: #{_bid}")
+                    break
+                except Exception:
+                    continue
+            if not _clicked:
+                # 폴백: id 못 찾으면 보이는 '로그인' 버튼을 JS로 클릭
+                try:
+                    self.driver.execute_script(
+                        "var b=document.getElementById('loginBtn_row')"
+                        "||document.getElementById('loginBtn_column')"
+                        "||document.getElementById('log.login')"
+                        "||Array.from(document.querySelectorAll('button')).find("
+                        "  function(x){return x.offsetParent && /로그인/.test(x.innerText||'');});"
+                        "if(b){b.click();}"
+                    )
+                    _dlog("로그인 버튼 클릭(폴백 JS)")
                 except Exception:
                     pass
-            except Exception as e:
-                _dlog(f"로그인 버튼 탐색 실패: {e}")
-            # JS로 한 번 더 확실히 클릭(네이버 암호화 onclick 발동)
-            try:
-                self.driver.execute_script(
-                    "var b=document.getElementById('log.login')||document.querySelector('button[type=submit]');"
-                    "if(b){b.click();}"
-                )
-            except Exception:
-                pass
-            _dlog("로그인 버튼 클릭(네이티브+JS)")
             self._sleep(1.5)
             _dlog(f"로그인 후 URL: {self.driver.current_url}")
 
@@ -697,6 +713,18 @@ class NaverBlogPoster:
         MARK = r'(?:\[이미지\]|\[사진\s*\d+\])'
         if n <= 0:
             return _re.sub(r'[ \t]*' + MARK + r'[ \t]*\n?', '', body).strip()
+        # 이미지 배치 방식 — 'top'(사진 먼저 몰기: 수익형 광고클릭 유도) / 'spread'(문단 사이 교차)
+        try:
+            from config import load_config as _lc
+            _layout = (_lc() or {}).get("image_layout", "top")
+        except Exception:
+            _layout = "top"
+        if _layout == "top":
+            _b = _re.sub(r'[ \t]*' + MARK + r'[ \t]*\n?', '', body).strip()
+            _markers = '\n'.join(['[이미지]'] * n)
+            _out = _markers + ('\n\n' + _b if _b else '')
+            _dlog(f"[이미지] 마커 상단 일괄 배치(사진먼저): {n}개")
+            return _re.sub(r'\n{3,}', '\n\n', _out).strip()
         positions = [m.start() for m in _re.finditer(MARK, body)]
         L = max(1, len(body))
         # 마커 수가 정확히 n + 상단~하단 분산 → 형식만 [이미지]로 통일해 유지 (무조건 n장 보장)
