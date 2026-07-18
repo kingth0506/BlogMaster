@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.3"
+APP_VERSION = "2.4.4"
 
 import os
 import sys
@@ -1000,6 +1000,12 @@ class MainWindow(QMainWindow):
         self.btn_acct_check.setStyleSheet("background:#64748b; color:white; border:none; border-radius:6px; padding:5px 10px; font-size:11px; font-weight:bold; margin-left:4px;")
         self.btn_acct_check.clicked.connect(self._check_accounts_status)
         dash_layout.addWidget(self.btn_acct_check)
+        # 날짜별 발행 일정표 (자동 기록된 발행/예약 주제를 날짜별로 조회)
+        self.btn_schedule = QPushButton("🗓️ 발행일정표")
+        self.btn_schedule.setCursor(Qt.PointingHandCursor)
+        self.btn_schedule.setStyleSheet("background:#8b5cf6; color:white; border:none; border-radius:6px; padding:5px 10px; font-size:11px; font-weight:bold; margin-left:4px;")
+        self.btn_schedule.clicked.connect(self._show_schedule_calendar)
+        dash_layout.addWidget(self.btn_schedule)
         self.resv_label = QLabel("📅 예약: -")
         self.resv_label.setStyleSheet("color:#475569; font-size:11px; margin-left:6px;")
         dash_layout.addWidget(self.resv_label)
@@ -1301,6 +1307,110 @@ class MainWindow(QMainWindow):
                 return json.load(f)
         except Exception:
             return {}
+
+    # ── 날짜별 발행 일정표 ──────────────────────────────────────────────────
+    def _schedule_file(self):
+        name = f"posting_schedule_{self._account_key()}.json"
+        try:
+            from app_paths import data_file as _df
+            return _df(name)
+        except Exception:
+            return os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+
+    def _append_schedule_record(self, blog_id, schedule_time, place_name, keyword, title):
+        """발행/예약 1건을 날짜별 일정표 파일에 자동 기록. (기존 발행 로직과 무관, 실패해도 무시)"""
+        try:
+            import datetime as _dt
+            if schedule_time:
+                dt_str, status = schedule_time, "예약"
+            else:
+                dt_str, status = _dt.datetime.now().strftime("%Y-%m-%d %H:%M"), "즉시발행"
+            rec = {"datetime": dt_str, "blog_id": blog_id or "", "keyword": keyword or "",
+                   "place": place_name or "", "title": title or "", "status": status,
+                   "recorded_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
+            path = self._schedule_file()
+            data = []
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f) or []
+                except Exception:
+                    data = []
+            data.append(rec)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=1)
+        except Exception:
+            pass
+
+    def _show_schedule_calendar(self):
+        """발행 일정표 — 기록을 날짜별로 묶어 보여줌."""
+        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget,
+                                       QTreeWidgetItem, QPushButton, QLabel, QComboBox)
+        from collections import defaultdict
+        path = self._schedule_file()
+        data = []
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f) or []
+            except Exception:
+                data = []
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("🗓️ 발행 일정표 (날짜별)")
+        dlg.resize(800, 640)
+        v = QVBoxLayout(dlg)
+
+        top = QHBoxLayout()
+        head = QLabel(f"총 {len(data)}건")
+        head.setStyleSheet("font-weight:bold; font-size:13px;")
+        top.addWidget(head)
+        top.addWidget(QLabel("  명의:"))
+        cmb = QComboBox()
+        ids = ["전체"] + sorted({r.get("blog_id", "") for r in data if r.get("blog_id")})
+        cmb.addItems(ids)
+        top.addWidget(cmb)
+        top.addStretch()
+        v.addLayout(top)
+
+        tree = QTreeWidget()
+        tree.setHeaderLabels(["날짜 / 주제(키워드)", "개수"])
+        tree.setColumnWidth(0, 470)
+        tree.setColumnWidth(1, 90)
+        v.addWidget(tree)
+
+        def rebuild():
+            tree.clear()
+            sel = cmb.currentText()
+            rows = [r for r in data if sel == "전체" or r.get("blog_id") == sel]
+            groups = defaultdict(list)
+            for r in rows:
+                dtv = r.get("datetime", "")
+                groups[dtv[:10] if len(dtv) >= 10 else "미정"].append(r)
+            for date in sorted(groups.keys(), reverse=True):
+                recs = groups[date]
+                # 그 날 주제(키워드)별로 몇 개 올렸는지만 대략 집계
+                by_kw = defaultdict(int)
+                for r in recs:
+                    by_kw[(r.get("keyword", "") or "(주제 없음)")] += 1
+                parent = QTreeWidgetItem([f"📅 {date}", f"총 {len(recs)}개"])
+                fnt = parent.font(0); fnt.setBold(True)
+                parent.setFont(0, fnt); parent.setFont(1, fnt)
+                for kw in sorted(by_kw.keys()):
+                    parent.addChild(QTreeWidgetItem([f"    {kw}", f"{by_kw[kw]}개"]))
+                tree.addTopLevelItem(parent)
+                parent.setExpanded(True)
+
+        cmb.currentIndexChanged.connect(rebuild)
+        rebuild()
+
+        row = QHBoxLayout()
+        row.addStretch()
+        b_close = QPushButton("닫기")
+        b_close.clicked.connect(dlg.accept)
+        row.addWidget(b_close)
+        v.addLayout(row)
+        dlg.exec()
 
     def _save_resv_status(self, blog_id, count, latest_str):
         """예약 현황을 계정별로 파일에 저장(파일만 — 라벨 갱신은 호출부에서 메인스레드로)."""
@@ -6156,6 +6266,13 @@ class MainWindow(QMainWindow):
                             self.stop_flag = True
                             break
                         if success:
+                            # 날짜별 발행 일정표에 자동 기록 (로컬, 조회용)
+                            try:
+                                self._append_schedule_record(
+                                    account.get("blog_id", ""), schedule_time,
+                                    name, keyword, content.get("title", ""))
+                            except Exception:
+                                pass
                             # 포스팅 히스토리 Firestore 저장 (백그라운드)
                             try:
                                 import threading as _th_h
