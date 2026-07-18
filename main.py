@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.4"
+APP_VERSION = "2.4.5"
 
 import os
 import sys
@@ -6087,7 +6087,8 @@ class MainWindow(QMainWindow):
 
                 import datetime as _dt
                 base_time = _dt.datetime.now()
-                # (v1.6.6) 항상 자동: 기존 예약 있으면 이어쓰기, 없으면 첫 글 즉시발행
+                existing_slots = set()   # 기존 예약이 찜한 10분 슬롯 (충돌 회피용)
+                # 예약은 '지금부터' 간격대로 잡되, 이미 찬 시간대만 건너뜀 (맨 뒤로 안 밀림)
                 reserved_count = 0
                 first_immediate = True
                 try:
@@ -6098,10 +6099,12 @@ class MainWindow(QMainWindow):
                         reserved_count = len(existing)
                         latest = max(existing)
                         _pl(f"기존 예약 {reserved_count}개 / 가장 늦은 시간: {latest.strftime('%Y-%m-%d %H:%M')}")
-                        if latest > base_time:
-                            base_time = latest
-                            first_immediate = False
-                            _pl(f"→ 기존 예약 뒤로 이어 예약 ({base_time.strftime('%Y-%m-%d %H:%M')} 이후)")
+                        # 기존 예약이 찜한 10분 슬롯 기록 → 맨 뒤로 밀지 않고 '지금부터' 잡되 이미 찬 슬롯만 건너뜀
+                        for _e in existing:
+                            _es = _e.replace(minute=(_e.minute // 10) * 10, second=0, microsecond=0)
+                            existing_slots.add(_es.strftime("%Y-%m-%d %H:%M"))
+                        first_immediate = False
+                        _pl("→ 지금부터 예약 (이미 찬 시간대는 자동으로 건너뜀)")
                     else:
                         _pl("기존 예약 없음 — 첫 글 즉시발행 + 나머지 예약")
                     # 예약 목록 패널은 가상 스크롤이라 날짜 개수가 실제보다 적게 읽힘.
@@ -6122,6 +6125,7 @@ class MainWindow(QMainWindow):
                     first_immediate = True
 
                 running_dt = base_time
+                used_slots = set()       # 이번 배치에서 잡은 슬롯 (중복 방지)
                 last_reserved_str = ""   # 이번 포스팅으로 잡힌 가장 늦은 예약 시간
                 resv_fail_streak = 0     # 예약 발행 연속 실패 수 — 네이버 99 한도 도달 감지용
                 for i, item in enumerate(self.posting_targets, 1):
@@ -6151,8 +6155,14 @@ class MainWindow(QMainWindow):
                         sched_dt = running_dt
                         if sched_dt <= _dt.datetime.now():
                             sched_dt += _dt.timedelta(minutes=10)
-                            running_dt = sched_dt
-                        schedule_time = sched_dt.strftime("%Y-%m-%d %H:%M")
+                        # 이미 예약된 시간 / 이번에 잡은 시간이면 10분씩 밀어 '빈 시간'을 찾음 (겹침 방지)
+                        _st = sched_dt.strftime("%Y-%m-%d %H:%M")
+                        while _st in existing_slots or _st in used_slots:
+                            sched_dt += _dt.timedelta(minutes=10)
+                            _st = sched_dt.strftime("%Y-%m-%d %H:%M")
+                        running_dt = sched_dt
+                        used_slots.add(_st)
+                        schedule_time = _st
                         _pl(f"[{i}/{total}] 예약 시간: {schedule_time}")
 
                     place = item["place"]
