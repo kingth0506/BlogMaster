@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.5"
+APP_VERSION = "2.4.6"
 
 import os
 import sys
@@ -3906,6 +3906,10 @@ class MainWindow(QMainWindow):
         b_login = QPushButton("로그인")
         b_login.setStyleSheet("background:#2563eb;color:white;border:none;border-radius:6px;padding:6px 18px;font-weight:bold;")
         acct_row.addWidget(b_login)
+        b_sweep = QPushButton("🔁 전체 자동 관리")
+        b_sweep.setToolTip("결제된 모든 아이디를 순서대로 자동 로그인하며\n서이추 수락 · 삭제요청 원글 삭제 · 공감/자동답글을 알아서 처리")
+        b_sweep.setStyleSheet("background:#7c3aed;color:white;border:none;border-radius:6px;padding:6px 18px;font-weight:bold;")
+        acct_row.addWidget(b_sweep)
         root.addLayout(acct_row)
 
         def _cur_acct_idx():
@@ -3943,8 +3947,8 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        def _ensure_mgr():
-            idx = _cur_acct_idx()
+        def _ensure_mgr(force_idx=None):
+            idx = _cur_acct_idx() if force_idx is None else force_idx
             if idx is None:
                 return None
             account = accounts[idx]
@@ -4251,6 +4255,84 @@ class MainWindow(QMainWindow):
                 _log("✅ 서이추 수락 + 자동댓글 완료")
             _run(fn)
         e_start.clicked.connect(_start_engage)
+
+        # ── 전체 자동 관리(sweep): 모든 아이디를 순회하며 알아서 처리 ──
+        def _run_sweep():
+            if state["busy"]:
+                _log("이미 작업 중입니다. 잠시만요..."); return
+            targets = [i for i in range(len(accounts)) if not _slot_expired(i)]
+            if not targets:
+                QMessageBox.information(dlg, "안내", "관리할 수 있는(결제된) 아이디가 없습니다."); return
+            if QMessageBox.question(
+                    dlg, "전체 자동 관리",
+                    f"결제된 아이디 {len(targets)}개를 순서대로 자동 로그인하며\n"
+                    "  ① 서이추 자동 수락\n"
+                    "  ② 삭제요청 의심 댓글의 원글 자동 삭제\n"
+                    "  ③ 공감 · 자동답글\n"
+                    "을 알아서 진행합니다.\n\n"
+                    "⚠ ②에서 '삭제/법적/권리침해' 등 키워드가 달린 글은 자동 삭제되며\n"
+                    "되돌릴 수 없습니다.\n\n계속할까요?") != QMessageBox.Yes:
+                return
+            phrases = cbm.load_reply_phrases()
+            state["busy"] = True
+            state["stop"] = False
+
+            def _sweep():
+                try:
+                    _log(f"🔁 전체 자동 관리 시작 — 대상 아이디 {len(targets)}개")
+                    for n, idx in enumerate(targets, 1):
+                        if state["stop"]:
+                            _log("중단됨 — 관리 종료"); break
+                        _log(f"━━ [{n}/{len(targets)}] {self._account_slot(idx)}명의 "
+                             f"{idx % GROUP + 1}. {_acct_disp(idx)} ━━")
+                        mgr = _ensure_mgr(force_idx=idx)
+                        if mgr is None:
+                            _log("  ⚠ 로그인 실패 — 다음 아이디로 넘어감"); continue
+                        # ① 서이추 자동 수락
+                        try:
+                            reqs = mgr.list_buddy_requests()
+                            ids = [(r.get("id") or r.get("nick", "")) for r in reqs]
+                            ids = [x for x in ids if x]
+                            if ids:
+                                mgr.act_on_buddies(ids, accept=True)
+                                _log(f"  ✓ 서이추 {len(ids)}건 수락")
+                            else:
+                                _log("  · 서이추 신청 없음")
+                        except Exception as e:
+                            _log(f"  · 서이추 실패: {str(e)[:50]}")
+                        if state["stop"]:
+                            break
+                        # ② 삭제요청 의심 댓글 → 원글 자동 삭제
+                        try:
+                            cmts = mgr.list_comments(check_deleted=True)
+                            lognos = list(dict.fromkeys(
+                                c.get("logno") for c in (cmts or [])
+                                if c.get("logno") and _is_del_request(c.get("content", ""))))
+                            if lognos:
+                                _log(f"  🚨 삭제요청 의심 {len(lognos)}건 → 원글 자동 삭제")
+                                nd = mgr.delete_posts(lognos)
+                                _log(f"  ✓ 원글 {nd}건 삭제")
+                            else:
+                                _log("  · 삭제요청 의심 댓글 없음")
+                        except Exception as e:
+                            _log(f"  · 삭제요청 처리 실패: {str(e)[:50]}")
+                        if state["stop"]:
+                            break
+                        # ③ 공감 + 자동답글
+                        try:
+                            _log("  · 공감 · 자동답글 시작")
+                            mgr.like_and_reply_comments(
+                                phrases, do_like=True, do_reply=True, max_posts=1000)
+                        except Exception as e:
+                            _log(f"  · 자동댓글 실패: {str(e)[:50]}")
+                    _log("✅ 전체 자동 관리 완료")
+                except Exception as e:
+                    _log(f"관리 오류: {e}")
+                finally:
+                    state["busy"] = False
+                    q.put(("done",))
+            threading.Thread(target=_sweep, daemon=True).start()
+        b_sweep.clicked.connect(_run_sweep)
 
         # ── 로그 + 중단/닫기 ──
         root.addWidget(QLabel("로그"))
