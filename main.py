@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.7"
+APP_VERSION = "2.4.8"
 
 import os
 import sys
@@ -439,13 +439,6 @@ class MainWindow(QMainWindow):
         # 시스템 트레이 아이콘 구성
         self._force_quit = False
         self._init_tray_icon()
-
-        # 키워드마스터 연동 — 시작 직후 핸드오프 파일 있으면 키워드 가져오기
-        try:
-            from PySide6.QtCore import QTimer as _QT_km
-            _QT_km.singleShot(1200, self._import_from_keyword_master)
-        except Exception:
-            pass
 
     def _init_tray_icon(self):
         self.tray = None
@@ -1762,77 +1755,6 @@ class MainWindow(QMainWindow):
             self.keyword_input.insertItem(0, keyword)
         self.keyword_input.setCurrentText(keyword)
 
-    # ── 키워드마스터 연동 (핸드오프 수신) ──
-    def _km_handoff_path(self):
-        base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA") or os.path.expanduser("~")
-        return os.path.join(base, "BlogMaster", "selected_keywords.json")
-
-    def _append_keyword_history_only(self, keyword: str):
-        """히스토리 엑셀에만 추가 (현재 입력칸/드롭다운은 호출부에서 처리)."""
-        try:
-            import openpyxl
-        except Exception:
-            return
-        filepath = self._get_history_file()
-        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            wb = openpyxl.load_workbook(filepath); ws = wb.active
-        except Exception:
-            wb = openpyxl.Workbook(); ws = wb.active; ws.title = "검색 히스토리"
-            ws.append(["키워드", "검색일시", "수집 결과수"])
-        ws.append([keyword, now, "(키워드마스터)"])
-        wb.save(filepath); wb.close()
-
-    def _import_from_keyword_master(self):
-        """키워드마스터가 남긴 selected_keywords.json → 키워드 드롭다운/히스토리에 반영."""
-        try:
-            import json as _json
-            path = self._km_handoff_path()
-            if not os.path.exists(path):
-                return
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = _json.load(f)
-            except Exception:
-                return
-            kws = [str(k).strip() for k in (data.get("place_keywords") or []) if str(k).strip()]
-            # 파일 소비 — 재처리 방지 (읽자마자 .done 으로 이동)
-            try:
-                done = path + ".done"
-                if os.path.exists(done):
-                    os.remove(done)
-                os.replace(path, done)
-            except Exception:
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
-            if not kws:
-                return
-            existing = set(self.keyword_input.itemText(i) for i in range(self.keyword_input.count()))
-            added = 0
-            for kw in kws:
-                if kw not in existing:
-                    self.keyword_input.insertItem(0, kw)
-                    existing.add(kw)
-                    try:
-                        self._append_keyword_history_only(kw)
-                    except Exception:
-                        pass
-                    added += 1
-            self.keyword_input.setCurrentText("")
-            tgt_blog = data.get("target_blog_id") or ""
-            self._emit_log(f"키워드마스터에서 키워드 {added}개 수신" + (f" (대상 명의: {tgt_blog})" if tgt_blog else ""))
-            try:
-                QMessageBox.information(
-                    self, "키워드마스터 연동",
-                    f"키워드마스터에서 키워드 {added}개를 받았습니다."
-                    + (f"\n대상 명의: {tgt_blog}" if tgt_blog else "")
-                    + "\n\n'키워드 입력' 드롭다운에서 골라 크롤을 시작하세요.")
-            except Exception:
-                pass
-        except Exception:
-            pass
 
     def _update_history_result_count(self, keyword: str, count: int):
         try:
@@ -5003,25 +4925,36 @@ class MainWindow(QMainWindow):
         tab_widget.addTab(tree_r, f"지역기반 ({count_r}개)")
         tab_widget.addTab(tree_k, f"키워드기반 ({count_k}개)")
 
-        # 날짜별 탭 — 생성된 포스트를 생성일(created_at)로 묶어 표시
+        # 날짜별 탭 — 생성 배치(날짜+시간)별로 묶어 표시. 같은 시각 생성분 = 한 묶음. API도 표시.
         def _build_date_tree():
             tw = QTreeWidget()
-            tw.setHeaderLabels(["업체명", "업체주소", "카테고리", "근처역", "앞 키워드", "태그"])
+            tw.setHeaderLabels(["업체명", "업체주소", "카테고리", "근처역", "앞 키워드", "태그", "API"])
             tw.setColumnWidth(0, 260)
             tw.setColumnWidth(1, 240)
             tw.setColumnWidth(2, 100)
             tw.setColumnWidth(3, 100)
             tw.setColumnWidth(4, 160)
+            tw.setColumnWidth(5, 90)
+            tw.setColumnWidth(6, 80)
             tw.setAlternatingRowColors(True)
-            by_date = {}
+            # 생성 배치(created_at = 날짜+시간)별 그룹핑
+            by_batch = {}
             for gp in posts:
-                d = (gp.get("created_at") or "").strip() or "날짜 미상"
-                by_date.setdefault(d, []).append(gp)
+                ts = (gp.get("created_at") or "").strip() or "날짜 미상"
+                by_batch.setdefault(ts, []).append(gp)
             cnt = 0
-            # 최신 날짜 먼저, '날짜 미상'은 맨 뒤
-            for date_str in sorted(by_date.keys(),
-                                   key=lambda d: ("" if d == "날짜 미상" else d), reverse=True):
-                group_posts = by_date[date_str]
+            # 최신 배치 먼저, '날짜 미상'은 맨 뒤
+            for ts in sorted(by_batch.keys(),
+                             key=lambda t: ("" if t == "날짜 미상" else t), reverse=True):
+                group_posts = by_batch[ts]
+                if ts == "날짜 미상":
+                    date_part, time_part = "날짜 미상", ""
+                else:
+                    date_part = ts[:10]
+                    time_part = ts[11:16] if len(ts) >= 16 else ""
+                apis = sorted({(gp.get("api") or "").strip() for gp in group_posts
+                               if (gp.get("api") or "").strip()})
+                api_label = ", ".join(apis) if apis else "-"
                 parent = QTreeWidgetItem(tw)
                 parent.setFlags(parent.flags() | Qt.ItemIsUserCheckable)
                 parent.setCheckState(0, Qt.Unchecked)
@@ -5045,10 +4978,13 @@ class MainWindow(QMainWindow):
                     child.setText(3, pl.get("nearby_station", ""))
                     child.setText(4, pl.get("front_keywords", ""))
                     child.setText(5, pl.get("tags", ""))
+                    child.setText(6, gp.get("api", "") or "-")
                     item_to_post[id(child)] = gp
                     all_children.append((child, pl))
                     cnt += 1
-                parent.setText(0, f"📅  {date_str}   (총 {len(group_posts)}개 · 발행 {posted_n})")
+                _time_txt = f"   🕐 {time_part}" if time_part else ""
+                parent.setText(0, f"📅 {date_part}{_time_txt}   ·  {api_label}"
+                                  f"   (총 {len(group_posts)}개 · 발행 {posted_n})")
                 parent.setForeground(0, QColor("#0284c7"))
             return tw, cnt
 
@@ -5566,6 +5502,7 @@ class MainWindow(QMainWindow):
                 "content": item["content"],
                 "posted": item.get("posted", False),
                 "created_at": item.get("created_at", ""),
+                "api": item.get("api", ""),
             })
         with open(self._get_posts_file(), "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -5730,6 +5667,11 @@ class MainWindow(QMainWindow):
             _bidL = self._current_blog_id() or self._active_blog_id() or ""
             self._emit_post_log(f"(이번 주 사용 {self._weekly_used(_bidL)}/{self.WEEKLY_GEN_LIMIT} · 남음 {self._weekly_remaining(_bidL)})")
 
+        # 이번 생성 배치의 공통 타임스탬프(날짜+시간) + 사용 엔진(API) 이름 —
+        # 같은 배치(동시 생성)는 같은 created_at 을 공유해 '날짜별' 탭에서 한 묶음으로 묶임
+        import datetime as _dt_batch
+        _batch_ts = _dt_batch.datetime.now().strftime("%Y-%m-%d %H:%M")
+        _api_name = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}.get(ai_engine, ai_engine)
         self._generating_data = {"selected": selected, "keyword": keyword, "api_key": api_key, "provider": provider}
         self._generated_posts = self._load_generated_posts()
 
@@ -5851,9 +5793,8 @@ class MainWindow(QMainWindow):
                     content["image_paths"] = img_paths
 
                     with lock:
-                        import datetime as _dt_gen
                         new_post = {"place": place, "content": content, "posted": False,
-                                    "created_at": _dt_gen.date.today().isoformat()}
+                                    "created_at": _batch_ts, "api": _api_name}
                         new_posts.append(new_post)
                         done_count[0] += 1
                         # 주간 한도 카운트 증가 (공유키 유저만)
