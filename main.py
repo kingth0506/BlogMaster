@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.6"
+APP_VERSION = "2.4.7"
 
 import os
 import sys
@@ -5003,6 +5003,59 @@ class MainWindow(QMainWindow):
         tab_widget.addTab(tree_r, f"지역기반 ({count_r}개)")
         tab_widget.addTab(tree_k, f"키워드기반 ({count_k}개)")
 
+        # 날짜별 탭 — 생성된 포스트를 생성일(created_at)로 묶어 표시
+        def _build_date_tree():
+            tw = QTreeWidget()
+            tw.setHeaderLabels(["업체명", "업체주소", "카테고리", "근처역", "앞 키워드", "태그"])
+            tw.setColumnWidth(0, 260)
+            tw.setColumnWidth(1, 240)
+            tw.setColumnWidth(2, 100)
+            tw.setColumnWidth(3, 100)
+            tw.setColumnWidth(4, 160)
+            tw.setAlternatingRowColors(True)
+            by_date = {}
+            for gp in posts:
+                d = (gp.get("created_at") or "").strip() or "날짜 미상"
+                by_date.setdefault(d, []).append(gp)
+            cnt = 0
+            # 최신 날짜 먼저, '날짜 미상'은 맨 뒤
+            for date_str in sorted(by_date.keys(),
+                                   key=lambda d: ("" if d == "날짜 미상" else d), reverse=True):
+                group_posts = by_date[date_str]
+                parent = QTreeWidgetItem(tw)
+                parent.setFlags(parent.flags() | Qt.ItemIsUserCheckable)
+                parent.setCheckState(0, Qt.Unchecked)
+                parent.setExpanded(False)
+                posted_n = 0
+                for num, gp in enumerate(group_posts, 1):
+                    pl = gp.get("place", {})
+                    full_addr = (pl.get("jibun_address", "") or pl.get("address", "")).strip()
+                    child = QTreeWidgetItem(parent)
+                    child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
+                    child.setCheckState(0, Qt.Unchecked)
+                    if gp.get("posted", False):
+                        child.setText(0, f"[완] {num}. {pl.get('name', '')}")
+                        child.setForeground(0, QColor("#3b82f6"))
+                        posted_n += 1
+                    else:
+                        child.setText(0, f"● {num}. {pl.get('name', '')}")
+                        child.setForeground(0, QColor("#22c55e"))
+                    child.setText(1, full_addr)
+                    child.setText(2, pl.get("category", ""))
+                    child.setText(3, pl.get("nearby_station", ""))
+                    child.setText(4, pl.get("front_keywords", ""))
+                    child.setText(5, pl.get("tags", ""))
+                    item_to_post[id(child)] = gp
+                    all_children.append((child, pl))
+                    cnt += 1
+                parent.setText(0, f"📅  {date_str}   (총 {len(group_posts)}개 · 발행 {posted_n})")
+                parent.setForeground(0, QColor("#0284c7"))
+            return tw, cnt
+
+        tree_d, count_d = _build_date_tree()
+        all_trees.append(tree_d)
+        tab_widget.addTab(tree_d, f"날짜별 ({count_d}개)")
+
         layout.addWidget(tab_widget)
 
         # 호환성을 위해 tree 참조는 현재 활성 탭의 트리로 유지
@@ -5512,6 +5565,7 @@ class MainWindow(QMainWindow):
                 "place": item["place"],
                 "content": item["content"],
                 "posted": item.get("posted", False),
+                "created_at": item.get("created_at", ""),
             })
         with open(self._get_posts_file(), "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -5797,7 +5851,9 @@ class MainWindow(QMainWindow):
                     content["image_paths"] = img_paths
 
                     with lock:
-                        new_post = {"place": place, "content": content, "posted": False}
+                        import datetime as _dt_gen
+                        new_post = {"place": place, "content": content, "posted": False,
+                                    "created_at": _dt_gen.date.today().isoformat()}
                         new_posts.append(new_post)
                         done_count[0] += 1
                         # 주간 한도 카운트 증가 (공유키 유저만)

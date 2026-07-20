@@ -584,13 +584,13 @@ def _build_full_title(place: dict, keyword: str, suffix: str) -> str:
         blacklist = _title_blacklist(place, keyword)
         clean = _clean_suffix(suffix, blacklist)
         if clean and len(clean) >= 3:
-            # 제목 형식 랜덤 — ★지역+업종(prefix)은 '무조건 맨 앞'. 뒤 배열(업체명/문구)만 다양화
+            # 제목 형식 — ★순서 고정: 주요키워드(지역+업종) → 업체명 → 수식어(마무리 문구).
+            # 구분 기호만 랜덤으로 다양화 (업체명/수식어 순서는 절대 뒤바뀌지 않음)
             templates = [
                 "{p} {n} {c}",
                 "{p} {n} - {c}",
-                "{p} {c}, {n}",
-                "{p} {c} {n}",
                 "{p}, {n} {c}",
+                "{p} {n}, {c}",
             ]
             return random.choice(templates).format(p=prefix, n=name, c=clean).strip()
 
