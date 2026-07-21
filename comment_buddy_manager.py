@@ -453,7 +453,8 @@ class CommentBuddyManager:
         for page in range(1, 100):  # 안전 상한 (페이지당 20개)
             if self.stop_flag():
                 break
-            self._go(SEL["cmt_page_url"].format(bid=self.bid, page=page))
+            # d.get은 로드 완료까지 블록하므로 고정 2.5초 대기 제거 → enter_frame이 필요한 만큼만 폴링
+            self.d.get(SEL["cmt_page_url"].format(bid=self.bid, page=page))
             self._enter_frame_with(SEL["cmt_list_frame"], timeout=8)
             page_rows = self._scrape_comment_page()
             if not page_rows:
@@ -587,7 +588,7 @@ class CommentBuddyManager:
         self._sleep(0.6)
         sb = self._visible(SEL["cmt_submit"]) or self._visible(SEL["cmt_submit_any"]) or sb
         self._click(sb)
-        self._sleep(1.3)
+        self._sleep(0.9)
         self._accept_alert()
         return True
 
@@ -611,13 +612,18 @@ class CommentBuddyManager:
     def _engage_post(self, logno, phrases, do_like, do_reply, seen):
         from selenium.webdriver.common.by import By
         self.d.switch_to.default_content()
-        self._go(SEL["post_mobile_url"].format(bid=self.bid, logno=logno))
-        try:
-            self.d.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        except Exception:
-            pass
-        self._sleep(2.0)
-        items = self._find(SEL["cmt_item"])
+        self.d.get(SEL["post_mobile_url"].format(bid=self.bid, logno=logno))
+        # 고정 대기(2.5+2.0초) 제거 → 댓글 목록이 뜨면 즉시 진행 (속도↑)
+        items = []
+        for _ in range(16):
+            self._sleep(0.2)
+            try:
+                self.d.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            except Exception:
+                pass
+            items = self._find(SEL["cmt_item"])
+            if items:
+                break
         if not items:
             return 0
         cnt = 0
@@ -648,7 +654,7 @@ class CommentBuddyManager:
                          li.find_elements(By.XPATH, ".//a[contains(.,'답글')]")
                     if rb:
                         self._click(rb[0])
-                        self._sleep(1.0)
+                        self._sleep(0.6)
                         phrase = random.choice(phrases)
                         if self._write_reply(phrase):
                             cnt += 1

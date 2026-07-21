@@ -1,6 +1,6 @@
 ; Inno Setup Script — 블로그마스터
 #define MyAppName "블로그마스터"
-#define MyAppVersion "2.5.2"
+#define MyAppVersion "2.5.3"
 #define MyAppPublisher "kingth0506"
 #define MyAppExeName "BlogMaster.exe"
 

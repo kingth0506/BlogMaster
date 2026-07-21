@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.2"
+APP_VERSION = "2.5.3"
 
 import os
 import sys
@@ -4258,7 +4258,8 @@ class MainWindow(QMainWindow):
 
         # ── 로그 + 중단/닫기 ──
         root.addWidget(QLabel("로그"))
-        log_view.setMaximumHeight(90)
+        log_view.setMinimumHeight(240)      # 위아래로 크게 — 로그 많이 보이게 (기존 90 → 240)
+        log_view.setMaximumHeight(360)
         root.addWidget(log_view, 0)
         bottom = QHBoxLayout()
         b_stop = QPushButton("중단")
