@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.5.2"
 
 import os
 import sys
@@ -4418,6 +4418,10 @@ class MainWindow(QMainWindow):
         log_dir = self._get_logs_dir()
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.result_file = os.path.join(log_dir, f"places_{timestamp}.json")
+        # 이 크롤 세션 공통 시각 — 세션의 모든 키워드가 같은 crawled_at을 써서
+        # '한 번에 크롤한 것'이 목록에서 한 그룹으로 묶임 (places_{ts} 파일명 시각과 동일)
+        self._crawl_session_at = (f"{timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]} "
+                                  f"{timestamp[9:11]}:{timestamp[11:13]}:{timestamp[13:15]}")
 
         existing_for_resume = []
 
@@ -4460,7 +4464,8 @@ class MainWindow(QMainWindow):
                             pass
 
                 # 업체 1개 크롤 끝날 때마다 즉시 저장 (logs/{account}/{kw}.json)
-                _crawl_start_times = {}  # kw → 첫 저장 시각
+                _session_at = getattr(self, "_crawl_session_at", None) or \
+                    datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 def _on_item(place, items_so_far, kw):
                     try:
                         import re as _re
@@ -4468,10 +4473,9 @@ class MainWindow(QMainWindow):
                         _dir = self._get_logs_dir()
                         os.makedirs(_dir, exist_ok=True)
                         _fp = os.path.join(_dir, f"{_safe}.json")
-                        if kw not in _crawl_start_times:
-                            _crawl_start_times[kw] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        # 세션 공통 시각 사용 → 같은 크롤의 키워드들이 한 그룹으로 묶임
                         with open(_fp, "w", encoding="utf-8") as _f:
-                            json.dump({"keyword": kw, "crawled_at": _crawl_start_times[kw], "crawl_mode": getattr(self, "_current_crawl_mode", ""), "items": list(items_so_far)}, _f, ensure_ascii=False, indent=2)
+                            json.dump({"keyword": kw, "crawled_at": _session_at, "crawl_mode": getattr(self, "_current_crawl_mode", ""), "items": list(items_so_far)}, _f, ensure_ascii=False, indent=2)
                         pass
                     except Exception as _e:
                         self._emit_log(f"업체별 저장 실패: {_e}")
@@ -4867,24 +4871,15 @@ class MainWindow(QMainWindow):
             tw.setColumnWidth(5, 90)
             tw.setColumnWidth(6, 80)
             tw.setAlternatingRowColors(True)
-            # 그룹 라벨 " · YYYY-MM-DD HH:MM" 에서 날짜+시간 추출 → 날짜 → 시간 2단으로 묶기
-            date_map = {}   # date -> {time -> [(group_name, places)]}
-            for group_name, places in groups_dict.items():
-                if not places:
-                    continue
-                _date_key, _time_key = "기타", ""
-                if " · " in group_name:
-                    _ts = group_name.split(" · ", 1)[1].strip()
-                    _date_key = _ts[:10] if len(_ts) >= 10 else _ts
-                    _time_key = _ts[11:16] if len(_ts) >= 16 else ""
-                date_map.setdefault(_date_key, {}).setdefault(_time_key, []).append((group_name, places))
-            sorted_dates = sorted(date_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
+            # 같은 크롤(세션)끼리 묶기 — 날짜 → 세션(가까운 시각 클러스터) → 그룹 → 업체
+            sess_map = self._cluster_time_sessions(groups_dict)
+            sorted_dates = sorted(sess_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
             date_font = _QF(); date_font.setBold(True); date_font.setPointSize(10)
             time_font = _QF(); time_font.setBold(True)
             tab_count = 0
             for date_str in sorted_dates:
-                time_map = date_map[date_str]
-                total_date = sum(len(pl) for tl in time_map.values() for _, pl in tl)
+                sessions = sess_map[date_str]
+                total_date = sum(len(pl) for _, gl in sessions for _, pl in gl)
                 date_display = date_str[5:] if len(date_str) >= 10 else date_str
                 date_item = QTreeWidgetItem(tw)
                 date_item.setText(0, f"📅 {date_display}  ({total_date}개)")
@@ -4894,12 +4889,11 @@ class MainWindow(QMainWindow):
                 date_item.setFont(0, date_font)
                 date_item.setForeground(0, QColor("#1e40af"))
                 date_item.setBackground(0, QColor("#eff6ff"))
-                # 시간 최신 먼저, 시간 미상('')은 맨 뒤
-                for time_str in sorted(time_map.keys(), reverse=True):
-                    groups_in_time = time_map[time_str]
+                # 세션 최신 먼저 (헬퍼가 이미 정렬)
+                for start_time, groups_in_time in sessions:
                     total_time = sum(len(pl) for _, pl in groups_in_time)
                     time_item = QTreeWidgetItem(date_item)
-                    _tlabel = f"🕐 {time_str}" if time_str else "🕐 시간 미상"
+                    _tlabel = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
                     time_item.setText(0, f"{_tlabel}  ({total_time}개)")
                     time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
                     time_item.setCheckState(0, Qt.Unchecked)
@@ -6442,6 +6436,47 @@ class MainWindow(QMainWindow):
             return m_gu.group(1)
         return "지역 미상"
 
+    @staticmethod
+    def _cluster_time_sessions(groups_dict, window_min: int = 30):
+        """groups_dict(라벨→places)를 날짜 → 크롤세션으로 정리.
+        같은 크롤(가까운 시각, 기본 30분 이내)끼리 한 세션으로 묶는다.
+        반환: {date_str: [ (start_time, [(group_name, places)...]), ... ]}  (세션은 최신 먼저)."""
+        from collections import defaultdict as _dd
+
+        def _to_min(hhmm):
+            try:
+                h, m = hhmm.split(":")
+                return int(h) * 60 + int(m)
+            except Exception:
+                return -1
+
+        per_date = _dd(list)   # date -> [(tmin, time_str, group_name, places)]
+        for group_name, places in groups_dict.items():
+            if not places:
+                continue
+            date_key, time_key = "기타", ""
+            if " · " in group_name:
+                _ts = group_name.split(" · ", 1)[1].strip()
+                date_key = _ts[:10] if len(_ts) >= 10 else _ts
+                time_key = _ts[11:16] if len(_ts) >= 16 else ""
+            per_date[date_key].append((_to_min(time_key), time_key, group_name, places))
+
+        out = {}
+        for date_key, entries in per_date.items():
+            entries.sort(key=lambda e: (e[0] < 0, e[0]))   # 시각 오름차순, 미상은 뒤
+            sessions = []   # [start_time, [(group_name, places)...]]
+            cur, cur_last = None, None
+            for tmin, tstr, gname, places in entries:
+                if cur is None or tmin < 0 or cur_last is None or (tmin - cur_last) > window_min:
+                    cur = [tstr, []]
+                    sessions.append(cur)
+                cur[1].append((gname, places))
+                if tmin >= 0:
+                    cur_last = tmin
+            sessions.reverse()   # 최신 세션 먼저
+            out[date_key] = [(s[0], s[1]) for s in sessions]
+        return out
+
     def _load_all_crawl_results(self, mode: str = "") -> dict:
         """현재 계정의 logs 폴더의 모든 크롤링 결과를 (구 × 업종)별로 집계.
         mode: 'region' 또는 'keyword' 지정 시 해당 모드만 로드. 빈 문자열이면 전체.
@@ -6603,20 +6638,11 @@ class MainWindow(QMainWindow):
             """)
             container_layout.addWidget(tw)
 
-            # 그룹 라벨 " · YYYY-MM-DD HH:MM" 에서 날짜+시간 추출 → 날짜 → 시간 2단으로 묶기
-            date_map = {}  # date_str -> {time_str -> [(group_name, places)]}
-            for group_name, places in groups_dict.items():
-                if not places:
-                    continue
-                _date_key, _time_key = "기타", ""
-                if " · " in group_name:
-                    _ts = group_name.split(" · ", 1)[1].strip()
-                    _date_key = _ts[:10] if len(_ts) >= 10 else _ts
-                    _time_key = _ts[11:16] if len(_ts) >= 16 else ""
-                date_map.setdefault(_date_key, {}).setdefault(_time_key, []).append((group_name, places))
+            # 같은 크롤(세션)끼리 묶기 — 날짜 → 세션(가까운 시각 클러스터) → 그룹 → 업체
+            sess_map = self._cluster_time_sessions(groups_dict)
 
             # 최신 날짜 먼저, "기타" 맨 뒤
-            sorted_dates = sorted(date_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
+            sorted_dates = sorted(sess_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
 
             date_font = QFont()
             date_font.setBold(True)
@@ -6626,8 +6652,8 @@ class MainWindow(QMainWindow):
 
             tab_items = []
             for date_str in sorted_dates:
-                time_map = date_map[date_str]
-                total_date = sum(len(pl) for tl in time_map.values() for _, pl in tl)
+                sessions = sess_map[date_str]
+                total_date = sum(len(pl) for _, gl in sessions for _, pl in gl)
 
                 # 날짜 헤더 (1단계, 접힘)
                 date_display = date_str[5:] if len(date_str) >= 10 else date_str
@@ -6640,13 +6666,12 @@ class MainWindow(QMainWindow):
                 date_item.setForeground(0, QColor("#1e40af"))
                 date_item.setBackground(0, QColor("#eff6ff"))
 
-                # 시간 최신 먼저, 시간 미상('')은 맨 뒤
-                for time_str in sorted(time_map.keys(), reverse=True):
-                    groups_in_time = time_map[time_str]
+                # 세션 최신 먼저 (헬퍼가 이미 정렬)
+                for start_time, groups_in_time in sessions:
                     total_time = sum(len(pl) for _, pl in groups_in_time)
-                    # 시간 헤더 (2단계, 접힘)
+                    # 세션(시간) 헤더 (2단계, 접힘)
                     time_item = QTreeWidgetItem(date_item)
-                    _tlabel = f"🕐 {time_str}" if time_str else "🕐 시간 미상"
+                    _tlabel = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
                     time_item.setText(0, f"{_tlabel}  ({total_time}개)")
                     time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
                     time_item.setCheckState(0, Qt.Unchecked)
