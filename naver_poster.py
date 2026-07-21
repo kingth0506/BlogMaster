@@ -1369,31 +1369,45 @@ class NaverBlogPoster:
             _dlog(f"예약 총수(N건 라벨): {self.reservation_total}")
             if not (isinstance(click_res, dict) and click_res.get("ok")):
                 return []
-            # 2) 모달/리스트 뜰 때까지 Python 폴링 — 각 span의 부모 컨텍스트도 같이 캡처
-            dates_with_context = []
+            # 2) 목록 뜰 때까지 대기 후, 가상 스크롤 목록을 끝까지 내리며 모든 예약 날짜 수집.
+            #    (예약 패널이 가상 스크롤이라 한 화면에 다 안 보임 → 스크롤하며 누적해야 전부 읽힘)
             for _ in range(20):
                 self._sleep(0.15)
-                dates_with_context = self.driver.execute_script(r"""
-                    const out = [];
-                    document.querySelectorAll('span[class*="date__"]').forEach(el => {
-                        const t = (el.textContent || '').trim();
-                        if (!t) return;
-                        // 부모 체인 4단계 클래스
-                        const parents = [];
-                        let cur = el.parentElement;
-                        for (let i = 0; i < 4 && cur; i++) {
-                            parents.push((cur.className || '').toString().slice(0, 80));
+                if self.driver.execute_script(
+                        r"""return document.querySelectorAll('span[class*="date__"]').length;"""):
+                    break
+            dates = []
+            _seen = set()
+            for _scroll_i in range(80):   # 예약 최대 99개 대비 넉넉히
+                batch = self.driver.execute_script(r"""
+                    const spans = document.querySelectorAll('span[class*="date__"]');
+                    const texts = [];
+                    spans.forEach(el => { const t=(el.textContent||'').trim(); if(t) texts.push(t); });
+                    // 날짜 span의 스크롤 가능한 조상 컨테이너 탐색
+                    let sc = null;
+                    if (spans.length) {
+                        let cur = spans[spans.length-1].parentElement;
+                        for (let i=0; i<8 && cur; i++) {
+                            if (cur.scrollHeight > cur.clientHeight + 5) { sc = cur; break; }
                             cur = cur.parentElement;
                         }
-                        out.push({text: t, parents: parents});
-                    });
-                    return out;
-                """)
-                if dates_with_context:
+                    }
+                    let atBottom = true;
+                    if (sc) {
+                        const before = sc.scrollTop;
+                        sc.scrollTop = before + sc.clientHeight;
+                        atBottom = (sc.scrollTop <= before + 2);
+                    }
+                    return {texts: texts, atBottom: atBottom, hasContainer: !!sc};
+                """) or {}
+                for _t in (batch.get("texts") or []):
+                    if _t not in _seen:
+                        _seen.add(_t)
+                        dates.append(_t)
+                self._sleep(0.12)
+                if batch.get("atBottom") or not batch.get("hasContainer"):
                     break
-            _dlog(f"예약 날짜 raw (상세): {dates_with_context}")
-            dates = [d.get("text") for d in (dates_with_context or [])]
-            _dlog(f"예약 날짜 텍스트만: {dates}")
+            _dlog(f"예약 날짜 수집(스크롤 누적): {len(dates)}개 — {dates}")
             # 3) 파싱: "2026.05.05 22:40" 형식
             parsed = []
             for s in (dates or []):

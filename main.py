@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.4.9"
+APP_VERSION = "2.5.0"
 
 import os
 import sys
@@ -4854,7 +4854,7 @@ class MainWindow(QMainWindow):
         all_children = []  # (child_item, place) — 전체 선택/삭제용
         all_trees = []     # 탭별 QTreeWidget 목록
 
-        # 3단 트리: 📅 날짜 → [구]업종 그룹 → 업체 (F7 '포스팅할 업체 선택'과 동일 구조)
+        # 4단 트리: 📅 날짜 → 🕐 시간 → [구]업종 그룹 → 업체
         def _build_tree(groups_dict):
             from PySide6.QtGui import QFont as _QF
             tw = QTreeWidget()
@@ -4867,77 +4867,91 @@ class MainWindow(QMainWindow):
             tw.setColumnWidth(5, 90)
             tw.setColumnWidth(6, 80)
             tw.setAlternatingRowColors(True)
-            # 그룹 라벨 " · YYYY-MM-DD ..." 에서 수집 날짜 추출 → 날짜별로 묶기
-            date_map = {}
+            # 그룹 라벨 " · YYYY-MM-DD HH:MM" 에서 날짜+시간 추출 → 날짜 → 시간 2단으로 묶기
+            date_map = {}   # date -> {time -> [(group_name, places)]}
             for group_name, places in groups_dict.items():
                 if not places:
                     continue
-                _date_key = "기타"
+                _date_key, _time_key = "기타", ""
                 if " · " in group_name:
                     _ts = group_name.split(" · ", 1)[1].strip()
                     _date_key = _ts[:10] if len(_ts) >= 10 else _ts
-                date_map.setdefault(_date_key, []).append((group_name, places))
+                    _time_key = _ts[11:16] if len(_ts) >= 16 else ""
+                date_map.setdefault(_date_key, {}).setdefault(_time_key, []).append((group_name, places))
             sorted_dates = sorted(date_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
             date_font = _QF(); date_font.setBold(True); date_font.setPointSize(10)
+            time_font = _QF(); time_font.setBold(True)
             tab_count = 0
             for date_str in sorted_dates:
-                groups_in_date = date_map[date_str]
-                total_places = sum(len(pl) for _, pl in groups_in_date)
+                time_map = date_map[date_str]
+                total_date = sum(len(pl) for tl in time_map.values() for _, pl in tl)
                 date_display = date_str[5:] if len(date_str) >= 10 else date_str
                 date_item = QTreeWidgetItem(tw)
-                date_item.setText(0, f"📅 {date_display}  ({total_places}개)")
+                date_item.setText(0, f"📅 {date_display}  ({total_date}개)")
                 date_item.setFlags(date_item.flags() | Qt.ItemIsUserCheckable)
                 date_item.setCheckState(0, Qt.Unchecked)
                 date_item.setExpanded(False)
                 date_item.setFont(0, date_font)
                 date_item.setForeground(0, QColor("#1e40af"))
                 date_item.setBackground(0, QColor("#eff6ff"))
-                for group_name, places in groups_in_date:
-                    clean_name = group_name.split(" · ")[0].strip() if " · " in group_name else group_name
-                    parent = QTreeWidgetItem(date_item)
-                    parent.setFlags(parent.flags() | Qt.ItemIsUserCheckable)
-                    parent.setCheckState(0, Qt.Unchecked)
-                    parent.setExpanded(False)
-                    gen_count = 0
-                    for num, p in enumerate(places, 1):
-                        addr = p.get("address", "")
-                        jibun = p.get("jibun_address", "")
-                        full_addr = (jibun or addr).strip()
-                        key = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
-                        generated_post = post_map.get(key)
-                        child = QTreeWidgetItem(parent)
-                        child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
-                        child.setCheckState(0, Qt.Unchecked)
-                        is_posted = bool(generated_post and generated_post.get("posted", False))
-                        if is_posted:
-                            child.setText(0, f"[완] {num}. {p.get('name', '')}")
-                            child.setForeground(0, QColor("#3b82f6"))
-                            gen_count += 1
-                            item_to_post[id(child)] = generated_post
-                        elif generated_post:
-                            child.setText(0, f"● {num}. {p.get('name', '')}")
-                            child.setForeground(0, QColor("#22c55e"))
-                            gen_count += 1
-                            item_to_post[id(child)] = generated_post
-                        else:
-                            child.setText(0, f"● {num}. {p.get('name', '')}")
-                            child.setForeground(0, QColor("#ef4444"))
-                        child.setText(1, full_addr)
-                        child.setText(2, p.get("category", ""))
-                        child.setText(3, p.get("nearby_station", ""))
-                        child.setText(4, p.get("front_keywords", ""))
-                        child.setText(5, p.get("tags", ""))
-                        child.setText(6, (generated_post or {}).get("api", "") or "-")
-                        all_children.append((child, p))
-                        tab_count += 1
-                    if len(places) > 0:
-                        if gen_count == len(places):
-                            parent.setForeground(0, QColor("#22c55e"))
-                        elif gen_count == 0:
-                            parent.setForeground(0, QColor("#ef4444"))
-                        else:
-                            parent.setForeground(0, QColor("#f59e0b"))
-                        parent.setText(0, f"●  {clean_name}  ({gen_count}/{len(places)} 생성)")
+                # 시간 최신 먼저, 시간 미상('')은 맨 뒤
+                for time_str in sorted(time_map.keys(), reverse=True):
+                    groups_in_time = time_map[time_str]
+                    total_time = sum(len(pl) for _, pl in groups_in_time)
+                    time_item = QTreeWidgetItem(date_item)
+                    _tlabel = f"🕐 {time_str}" if time_str else "🕐 시간 미상"
+                    time_item.setText(0, f"{_tlabel}  ({total_time}개)")
+                    time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
+                    time_item.setCheckState(0, Qt.Unchecked)
+                    time_item.setExpanded(False)
+                    time_item.setFont(0, time_font)
+                    time_item.setForeground(0, QColor("#0369a1"))
+                    for group_name, places in groups_in_time:
+                        clean_name = group_name.split(" · ")[0].strip() if " · " in group_name else group_name
+                        parent = QTreeWidgetItem(time_item)
+                        parent.setFlags(parent.flags() | Qt.ItemIsUserCheckable)
+                        parent.setCheckState(0, Qt.Unchecked)
+                        parent.setExpanded(False)
+                        gen_count = 0
+                        for num, p in enumerate(places, 1):
+                            addr = p.get("address", "")
+                            jibun = p.get("jibun_address", "")
+                            full_addr = (jibun or addr).strip()
+                            key = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
+                            generated_post = post_map.get(key)
+                            child = QTreeWidgetItem(parent)
+                            child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
+                            child.setCheckState(0, Qt.Unchecked)
+                            is_posted = bool(generated_post and generated_post.get("posted", False))
+                            if is_posted:
+                                child.setText(0, f"[완] {num}. {p.get('name', '')}")
+                                child.setForeground(0, QColor("#3b82f6"))
+                                gen_count += 1
+                                item_to_post[id(child)] = generated_post
+                            elif generated_post:
+                                child.setText(0, f"● {num}. {p.get('name', '')}")
+                                child.setForeground(0, QColor("#22c55e"))
+                                gen_count += 1
+                                item_to_post[id(child)] = generated_post
+                            else:
+                                child.setText(0, f"● {num}. {p.get('name', '')}")
+                                child.setForeground(0, QColor("#ef4444"))
+                            child.setText(1, full_addr)
+                            child.setText(2, p.get("category", ""))
+                            child.setText(3, p.get("nearby_station", ""))
+                            child.setText(4, p.get("front_keywords", ""))
+                            child.setText(5, p.get("tags", ""))
+                            child.setText(6, (generated_post or {}).get("api", "") or "-")
+                            all_children.append((child, p))
+                            tab_count += 1
+                        if len(places) > 0:
+                            if gen_count == len(places):
+                                parent.setForeground(0, QColor("#22c55e"))
+                            elif gen_count == 0:
+                                parent.setForeground(0, QColor("#ef4444"))
+                            else:
+                                parent.setForeground(0, QColor("#f59e0b"))
+                            parent.setText(0, f"●  {clean_name}  ({gen_count}/{len(places)} 생성)")
             return tw, tab_count
 
         tree_r, count_r = _build_tree(groups_region)
@@ -5010,18 +5024,16 @@ class MainWindow(QMainWindow):
             dlg.accept()
 
         def _set_tree_checked(cur_tree, state):
-            # 3단(날짜→그룹→업체) 전부 체크/해제
+            # 트리 전체 체크/해제 — 깊이 무관 재귀 (날짜→시간→그룹→업체)
             if cur_tree is None:
                 return
             cur_tree.blockSignals(True)
+            def _rec(item):
+                item.setCheckState(0, state)
+                for i in range(item.childCount()):
+                    _rec(item.child(i))
             for i in range(cur_tree.topLevelItemCount()):
-                d = cur_tree.topLevelItem(i)
-                d.setCheckState(0, state)
-                for j in range(d.childCount()):
-                    g = d.child(j)
-                    g.setCheckState(0, state)
-                    for k in range(g.childCount()):
-                        g.child(k).setCheckState(0, state)
+                _rec(cur_tree.topLevelItem(i))
             cur_tree.blockSignals(False)
 
         def select_all_f8():
@@ -5053,17 +5065,12 @@ class MainWindow(QMainWindow):
         def post_selected():
             targets = []
             # 모든 탭의 체크된 항목 모음
-            for _tw in all_trees:
-                for i in range(_tw.topLevelItemCount()):
-                    date_item = _tw.topLevelItem(i)
-                    for j in range(date_item.childCount()):
-                        grp = date_item.child(j)
-                        for k in range(grp.childCount()):
-                            child = grp.child(k)
-                            if child.checkState(0) == Qt.Checked:
-                                post = item_to_post.get(id(child))
-                                if post:
-                                    targets.append(post)
+            # 리프(업체) 플랫 리스트에서 체크된 것만 수집 — 트리 깊이 무관
+            for child, _place in all_children:
+                if child.checkState(0) == Qt.Checked:
+                    post = item_to_post.get(id(child))
+                    if post:
+                        targets.append(post)
             if not targets:
                 QMessageBox.information(dlg, "안내", "포스팅할 생성된 포스트를 선택해주세요.")
                 return
@@ -6122,6 +6129,7 @@ class MainWindow(QMainWindow):
                 import datetime as _dt
                 base_time = _dt.datetime.now()
                 existing_slots = set()   # 기존 예약이 찜한 10분 슬롯 (충돌 회피용)
+                occupied_dts = []        # 기존+이번 예약의 실제 시각(분단위) — 최소 간격 판정용
                 # 예약은 '지금부터' 간격대로 잡되, 이미 찬 시간대만 건너뜀 (맨 뒤로 안 밀림)
                 reserved_count = 0
                 first_immediate = True
@@ -6137,6 +6145,7 @@ class MainWindow(QMainWindow):
                         for _e in existing:
                             _es = _e.replace(minute=(_e.minute // 10) * 10, second=0, microsecond=0)
                             existing_slots.add(_es.strftime("%Y-%m-%d %H:%M"))
+                            occupied_dts.append(_e.replace(second=0, microsecond=0))
                         first_immediate = False
                         _pl("→ 지금부터 예약 (이미 찬 시간대는 자동으로 건너뜀)")
                     else:
@@ -6162,6 +6171,13 @@ class MainWindow(QMainWindow):
                 used_slots = set()       # 이번 배치에서 잡은 슬롯 (중복 방지)
                 last_reserved_str = ""   # 이번 포스팅으로 잡힌 가장 늦은 예약 시간
                 resv_fail_streak = 0     # 예약 발행 연속 실패 수 — 네이버 99 한도 도달 감지용
+                # 최소 허용 간격 = 기준 간격 - 20분(랜덤 하한). 새 예약이 기존/이번 예약과 이보다 붙지 않게 함.
+                try:
+                    _base_iv = max(600, int(self.interval_hour.currentText()) * 3600
+                                        + int(self.interval_min.currentText()) * 60)
+                except Exception:
+                    _base_iv = 7200
+                min_gap_sec = max(600, _base_iv - 1200)
                 for i, item in enumerate(self.posting_targets, 1):
                     if self.stop_flag:
                         _pl(f"포스팅 중단완료 ({i-1}/{len(self.posting_targets)}개 완료)")
@@ -6181,21 +6197,33 @@ class MainWindow(QMainWindow):
                     if i == 1 and first_immediate:
                         schedule_time = None  # 즉시 발행
                     else:
-                        # 매 포스트마다 _get_interval_seconds() 호출 → 랜덤 모드면 매번 다른 간격
-                        running_dt = running_dt + _dt.timedelta(seconds=self._get_interval_seconds())
-                        # 네이버 예약은 10분 단위만 허용 → 항상 10분 단위 정렬 (누적 드리프트/패턴 방지)
-                        minute = (running_dt.minute // 10) * 10
-                        running_dt = running_dt.replace(minute=minute, second=0, microsecond=0)
-                        sched_dt = running_dt
-                        if sched_dt <= _dt.datetime.now():
-                            sched_dt += _dt.timedelta(minutes=10)
-                        # 이미 예약된 시간 / 이번에 잡은 시간이면 10분씩 밀어 '빈 시간'을 찾음 (겹침 방지)
-                        _st = sched_dt.strftime("%Y-%m-%d %H:%M")
-                        while _st in existing_slots or _st in used_slots:
-                            sched_dt += _dt.timedelta(minutes=10)
-                            _st = sched_dt.strftime("%Y-%m-%d %H:%M")
-                        running_dt = sched_dt
+                        # 매 포스트마다 간격 계산 (랜덤 모드면 매번 다름)
+                        iv = self._get_interval_seconds()
+                        cand = running_dt + _dt.timedelta(seconds=iv)
+                        # 네이버 예약은 10분 단위만 허용 → 10분 단위 정렬
+                        cand = cand.replace(minute=(cand.minute // 10) * 10, second=0, microsecond=0)
+                        _now = _dt.datetime.now()
+                        if cand <= _now:
+                            cand = (_now + _dt.timedelta(minutes=10)).replace(second=0, microsecond=0)
+                            cand = cand.replace(minute=(cand.minute // 10) * 10)
+                        # ★기존+이번 예약을 모두 보고, 어떤 예약과도 min_gap(간격-20분) 미만으로 붙지 않게 밀기.
+                        #  충돌하면 그 예약 '간격 뒤'로 점프 → 기존 예약 사이 좁은 틈에 끼어들지 않음.
+                        _occ = sorted(occupied_dts)
+                        _guard = 0
+                        while _guard < 1000:
+                            _hit = None
+                            for _o in _occ:
+                                if abs((cand - _o).total_seconds()) < min_gap_sec:
+                                    _hit = _o   # 정렬돼 있으니 마지막 매칭 = 가장 늦은 충돌
+                            if _hit is None:
+                                break
+                            cand = (_hit + _dt.timedelta(seconds=iv)).replace(second=0, microsecond=0)
+                            cand = cand.replace(minute=(cand.minute // 10) * 10)
+                            _guard += 1
+                        _st = cand.strftime("%Y-%m-%d %H:%M")
+                        running_dt = cand
                         used_slots.add(_st)
+                        occupied_dts.append(cand)
                         schedule_time = _st
                         _pl(f"[{i}/{total}] 예약 시간: {schedule_time}")
 
