@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.5.1"
 
 import os
 import sys
@@ -6603,16 +6603,17 @@ class MainWindow(QMainWindow):
             """)
             container_layout.addWidget(tw)
 
-            # 날짜별 그룹 묶기 — 그룹 라벨 " · YYYY-MM-DD ..." 에서 날짜 추출
-            date_map = {}  # date_str -> [(group_name, places)]
+            # 그룹 라벨 " · YYYY-MM-DD HH:MM" 에서 날짜+시간 추출 → 날짜 → 시간 2단으로 묶기
+            date_map = {}  # date_str -> {time_str -> [(group_name, places)]}
             for group_name, places in groups_dict.items():
                 if not places:
                     continue
-                _date_key = "기타"
+                _date_key, _time_key = "기타", ""
                 if " · " in group_name:
                     _ts = group_name.split(" · ", 1)[1].strip()
                     _date_key = _ts[:10] if len(_ts) >= 10 else _ts
-                date_map.setdefault(_date_key, []).append((group_name, places))
+                    _time_key = _ts[11:16] if len(_ts) >= 16 else ""
+                date_map.setdefault(_date_key, {}).setdefault(_time_key, []).append((group_name, places))
 
             # 최신 날짜 먼저, "기타" 맨 뒤
             sorted_dates = sorted(date_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
@@ -6620,16 +6621,18 @@ class MainWindow(QMainWindow):
             date_font = QFont()
             date_font.setBold(True)
             date_font.setPointSize(10)
+            time_font = QFont()
+            time_font.setBold(True)
 
             tab_items = []
             for date_str in sorted_dates:
-                groups_in_date = date_map[date_str]
-                total_places = sum(len(pl) for _, pl in groups_in_date)
+                time_map = date_map[date_str]
+                total_date = sum(len(pl) for tl in time_map.values() for _, pl in tl)
 
                 # 날짜 헤더 (1단계, 접힘)
                 date_display = date_str[5:] if len(date_str) >= 10 else date_str
                 date_item = QTreeWidgetItem(tw)
-                date_item.setText(0, f"📅 {date_display}  ({total_places}개)")
+                date_item.setText(0, f"📅 {date_display}  ({total_date}개)")
                 date_item.setFlags(date_item.flags() | Qt.ItemIsUserCheckable)
                 date_item.setCheckState(0, Qt.Unchecked)
                 date_item.setExpanded(False)
@@ -6637,73 +6640,87 @@ class MainWindow(QMainWindow):
                 date_item.setForeground(0, QColor("#1e40af"))
                 date_item.setBackground(0, QColor("#eff6ff"))
 
-                for group_name, places in groups_in_date:
-                    # " · 날짜" 제거한 깨끗한 이름
-                    clean_name = group_name.split(" · ")[0].strip() if " · " in group_name else group_name
+                # 시간 최신 먼저, 시간 미상('')은 맨 뒤
+                for time_str in sorted(time_map.keys(), reverse=True):
+                    groups_in_time = time_map[time_str]
+                    total_time = sum(len(pl) for _, pl in groups_in_time)
+                    # 시간 헤더 (2단계, 접힘)
+                    time_item = QTreeWidgetItem(date_item)
+                    _tlabel = f"🕐 {time_str}" if time_str else "🕐 시간 미상"
+                    time_item.setText(0, f"{_tlabel}  ({total_time}개)")
+                    time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
+                    time_item.setCheckState(0, Qt.Unchecked)
+                    time_item.setExpanded(False)
+                    time_item.setFont(0, time_font)
+                    time_item.setForeground(0, QColor("#0369a1"))
 
-                    # 그룹 아이템 (2단계, 접힘)
-                    parent = QTreeWidgetItem(date_item)
-                    parent.setFlags(parent.flags() | Qt.ItemIsUserCheckable)
-                    parent.setCheckState(0, Qt.Unchecked)
-                    parent.setExpanded(False)
+                    for group_name, places in groups_in_time:
+                        # " · 날짜" 제거한 깨끗한 이름
+                        clean_name = group_name.split(" · ")[0].strip() if " · " in group_name else group_name
 
-                    posted_count = 0
-                    child_count = 0
+                        # 그룹 아이템 (3단계, 접힘)
+                        parent = QTreeWidgetItem(time_item)
+                        parent.setFlags(parent.flags() | Qt.ItemIsUserCheckable)
+                        parent.setCheckState(0, Qt.Unchecked)
+                        parent.setExpanded(False)
 
-                    for p in places:
-                        addr = p.get("address", "")
-                        jibun = p.get("jibun_address", "")
-                        full_addr = (jibun or addr).strip()  # jibun이 행정동+지번 완전주소라 중복 방지
+                        posted_count = 0
+                        child_count = 0
 
-                        child = QTreeWidgetItem(parent)
-                        child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
-                        child.setCheckState(0, Qt.Unchecked)
+                        for p in places:
+                            addr = p.get("address", "")
+                            jibun = p.get("jibun_address", "")
+                            full_addr = (jibun or addr).strip()  # jibun이 행정동+지번 완전주소라 중복 방지
 
-                        _k = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
-                        _gp = _post_map.get(_k)
-                        is_done = bool(_gp and _gp.get("posted", False))
-                        if is_done:
-                            child.setText(0, "[완] " + p.get("name", ""))
-                            child.setForeground(0, QColor("#3b82f6"))
-                            posted_count += 1
-                        elif _gp is not None:
-                            child.setText(0, "●  " + p.get("name", ""))
-                            child.setForeground(0, QColor("#22c55e"))
-                            posted_count += 1
-                        else:
-                            child.setText(0, "●  " + p.get("name", ""))
-                            child.setForeground(0, QColor("#ef4444"))
+                            child = QTreeWidgetItem(parent)
+                            child.setFlags(child.flags() | Qt.ItemIsUserCheckable)
+                            child.setCheckState(0, Qt.Unchecked)
 
-                        child.setText(1, full_addr)
-                        child.setText(2, p.get("category", ""))
-                        child.setText(3, p.get("nearby_station", ""))
-                        child.setText(4, p.get("front_keywords", ""))
-                        child.setText(5, p.get("tags", ""))
-                        child.setText(6, p.get("pixabay_keywords", ""))
-                        child.setFlags(child.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
+                            _k = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
+                            _gp = _post_map.get(_k)
+                            is_done = bool(_gp and _gp.get("posted", False))
+                            if is_done:
+                                child.setText(0, "[완] " + p.get("name", ""))
+                                child.setForeground(0, QColor("#3b82f6"))
+                                posted_count += 1
+                            elif _gp is not None:
+                                child.setText(0, "●  " + p.get("name", ""))
+                                child.setForeground(0, QColor("#22c55e"))
+                                posted_count += 1
+                            else:
+                                child.setText(0, "●  " + p.get("name", ""))
+                                child.setForeground(0, QColor("#ef4444"))
 
-                        _pkey = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
-                        if _pkey in _preserved_checks:
-                            child.setCheckState(0, Qt.Checked)
-                        _e = _preserved_edits.get(_pkey)
-                        if _e:
-                            if "front_keywords" in _e: child.setText(4, _e["front_keywords"])
-                            if "tags" in _e: child.setText(5, _e["tags"])
-                            if "pixabay_keywords" in _e: child.setText(6, _e["pixabay_keywords"])
+                            child.setText(1, full_addr)
+                            child.setText(2, p.get("category", ""))
+                            child.setText(3, p.get("nearby_station", ""))
+                            child.setText(4, p.get("front_keywords", ""))
+                            child.setText(5, p.get("tags", ""))
+                            child.setText(6, p.get("pixabay_keywords", ""))
+                            child.setFlags(child.flags() | Qt.ItemIsEditable | Qt.ItemIsUserCheckable)
 
-                        tab_items.append((child, p))
-                        child_count += 1
+                            _pkey = (p.get("name", ""), p.get("address", "") or p.get("jibun_address", ""))
+                            if _pkey in _preserved_checks:
+                                child.setCheckState(0, Qt.Checked)
+                            _e = _preserved_edits.get(_pkey)
+                            if _e:
+                                if "front_keywords" in _e: child.setText(4, _e["front_keywords"])
+                                if "tags" in _e: child.setText(5, _e["tags"])
+                                if "pixabay_keywords" in _e: child.setText(6, _e["pixabay_keywords"])
 
-                    if child_count > 0:
-                        if posted_count == child_count:
-                            parent.setForeground(0, QColor("#22c55e"))
-                            parent.setText(0, "●  " + clean_name)
-                        elif posted_count == 0:
-                            parent.setForeground(0, QColor("#ef4444"))
-                            parent.setText(0, "●  " + clean_name)
-                        else:
-                            parent.setForeground(0, QColor("#f59e0b"))
-                            parent.setText(0, "●  " + clean_name)
+                            tab_items.append((child, p))
+                            child_count += 1
+
+                        if child_count > 0:
+                            if posted_count == child_count:
+                                parent.setForeground(0, QColor("#22c55e"))
+                                parent.setText(0, "●  " + clean_name)
+                            elif posted_count == 0:
+                                parent.setForeground(0, QColor("#ef4444"))
+                                parent.setText(0, "●  " + clean_name)
+                            else:
+                                parent.setForeground(0, QColor("#f59e0b"))
+                                parent.setText(0, "●  " + clean_name)
 
             return container, tw, tab_items
 
@@ -6719,6 +6736,65 @@ class MainWindow(QMainWindow):
 
         tab_widget.addTab(container_r, f"지역기반 ({len(items_r)}개)")
         tab_widget.addTab(container_k, f"키워드기반 ({len(items_k)}개)")
+
+        # ── 트리 깊이 무관 공용 헬퍼 (날짜→시간→그룹→업체 4단 대응) ──
+        def _set_all_checked(tw, state):
+            def _rec(it):
+                it.setCheckState(0, state)
+                for i in range(it.childCount()):
+                    _rec(it.child(i))
+            tw.blockSignals(True)
+            for i in range(tw.topLevelItemCount()):
+                _rec(tw.topLevelItem(i))
+            tw.blockSignals(False)
+
+        def _sync_containers(tw):
+            # 리프(업체) 체크 기준으로 모든 상위 컨테이너 체크상태 갱신 (후위순회)
+            tw.blockSignals(True)
+            try:
+                def _rec(it):
+                    if it.childCount() == 0:
+                        return it.checkState(0) == Qt.Checked
+                    allc = True
+                    for i in range(it.childCount()):
+                        allc = _rec(it.child(i)) and allc
+                    it.setCheckState(0, Qt.Checked if allc else Qt.Unchecked)
+                    return allc
+                for i in range(tw.topLevelItemCount()):
+                    _rec(tw.topLevelItem(i))
+            finally:
+                tw.blockSignals(False)
+
+        def _hide_empty(tw):
+            # 리프 hidden 상태 기준으로 빈 컨테이너 숨김 (후위순회)
+            def _rec(it):
+                if it.childCount() == 0:
+                    return not it.isHidden()
+                anyvis = False
+                for i in range(it.childCount()):
+                    anyvis = _rec(it.child(i)) or anyvis
+                it.setHidden(not anyvis)
+                return anyvis
+            for i in range(tw.topLevelItemCount()):
+                _rec(tw.topLevelItem(i))
+
+        def _prune_removed(tw, remove_ids):
+            # remove_ids 리프 제거 + 빈 컨테이너 재귀 정리
+            def _rec(it):
+                for i in range(it.childCount() - 1, -1, -1):
+                    ch = it.child(i)
+                    if ch.childCount() == 0:
+                        if id(ch) in remove_ids:
+                            it.removeChild(ch)
+                    else:
+                        _rec(ch)
+                        if ch.childCount() == 0:
+                            it.removeChild(ch)
+            for i in range(tw.topLevelItemCount() - 1, -1, -1):
+                top = tw.topLevelItem(i)
+                _rec(top)
+                if top.childCount() == 0:
+                    tw.takeTopLevelItem(i)
 
         def update_count():
             cnt = sum(1 for item, _ in all_items if item.checkState(0) == Qt.Checked)
@@ -6757,31 +6833,11 @@ class MainWindow(QMainWindow):
             return _tree_map.get(id(w), w)
 
         def select_all():
-            tw = current_tree()
-            tw.blockSignals(True)
-            for i in range(tw.topLevelItemCount()):
-                date_item = tw.topLevelItem(i)
-                date_item.setCheckState(0, Qt.Checked)
-                for j in range(date_item.childCount()):
-                    grp = date_item.child(j)
-                    grp.setCheckState(0, Qt.Checked)
-                    for k in range(grp.childCount()):
-                        grp.child(k).setCheckState(0, Qt.Checked)
-            tw.blockSignals(False)
+            _set_all_checked(current_tree(), Qt.Checked)
             update_count()
 
         def select_none():
-            tw = current_tree()
-            tw.blockSignals(True)
-            for i in range(tw.topLevelItemCount()):
-                date_item = tw.topLevelItem(i)
-                date_item.setCheckState(0, Qt.Unchecked)
-                for j in range(date_item.childCount()):
-                    grp = date_item.child(j)
-                    grp.setCheckState(0, Qt.Unchecked)
-                    for k in range(grp.childCount()):
-                        grp.child(k).setCheckState(0, Qt.Unchecked)
-            tw.blockSignals(False)
+            _set_all_checked(current_tree(), Qt.Unchecked)
             update_count()
 
         btn_all.clicked.connect(select_all)
@@ -6873,34 +6929,8 @@ class MainWindow(QMainWindow):
             btn_cancel.clicked.connect(fdlg.reject)
 
             def _sync_parents(tw):
-                """place 체크 변경 후 group/date 부모 체크 상태 동기화."""
-                tw.blockSignals(True)
-                try:
-                    for i in range(tw.topLevelItemCount()):
-                        date_item = tw.topLevelItem(i)
-                        all_date_checked = True
-                        any_date_checked = False
-                        for j in range(date_item.childCount()):
-                            grp = date_item.child(j)
-                            n = grp.childCount()
-                            n_checked = sum(1 for k in range(n) if grp.child(k).checkState(0) == Qt.Checked)
-                            if n > 0 and n_checked == n:
-                                grp.setCheckState(0, Qt.Checked)
-                                any_date_checked = True
-                            else:
-                                grp.setCheckState(0, Qt.Unchecked)
-                                all_date_checked = False
-                                if n_checked > 0:
-                                    any_date_checked = True
-                        n_grps = date_item.childCount()
-                        if n_grps > 0 and all_date_checked:
-                            date_item.setCheckState(0, Qt.Checked)
-                        elif any_date_checked:
-                            date_item.setCheckState(0, Qt.Unchecked)
-                        else:
-                            date_item.setCheckState(0, Qt.Unchecked)
-                finally:
-                    tw.blockSignals(False)
+                """place 체크 변경 후 상위 컨테이너(그룹/시간/날짜) 체크상태 동기화."""
+                _sync_containers(tw)
 
             def _apply_filter():
                 # 체크된 카테고리 → 그 업체들 체크, 해제된 → 체크 해제
@@ -6916,22 +6946,11 @@ class MainWindow(QMainWindow):
                         _tw.blockSignals(False)
                 for _tw in all_trees:
                     _sync_parents(_tw)
-                # 선택(체크)된 업체만 목록에 표시, 나머지 + 빈 그룹/날짜는 숨김
+                # 선택(체크)된 업체만 목록에 표시 — 리프 hidden 설정 후 빈 컨테이너 숨김
+                for _it, _ in all_items:
+                    _it.setHidden(_it.checkState(0) != Qt.Checked)
                 for _tw in all_trees:
-                    for i in range(_tw.topLevelItemCount()):
-                        date_item = _tw.topLevelItem(i)
-                        date_vis = False
-                        for j in range(date_item.childCount()):
-                            grp = date_item.child(j)
-                            grp_vis = False
-                            for k in range(grp.childCount()):
-                                leaf = grp.child(k)
-                                show = leaf.checkState(0) == Qt.Checked
-                                leaf.setHidden(not show)
-                                grp_vis = grp_vis or show
-                            grp.setHidden(not grp_vis)
-                            date_vis = date_vis or grp_vis
-                        date_item.setHidden(not date_vis)
+                    _hide_empty(_tw)
                 update_count()
                 fdlg.accept()
             btn_apply.clicked.connect(_apply_filter)
@@ -6955,26 +6974,14 @@ class MainWindow(QMainWindow):
                 )
                 if reply != QMessageBox.Yes:
                     return
-                # 트리에서 제거
+                # 트리에서 제거 (리프 삭제 + 빈 컨테이너 재귀 정리)
                 del_ids = set(id(_it) for _it in to_delete_items)
                 for _tw in all_trees:
                     _tw.blockSignals(True)
                 try:
-                    for _it in to_delete_items:
-                        _par = _it.parent()
-                        if _par:
-                            _par.removeChild(_it)
-                    all_items[:] = [(_it, _p) for _it, _p in all_items if id(_it) not in del_ids]
-                    # 빈 그룹/날짜 정리
                     for _tw in all_trees:
-                        for i in range(_tw.topLevelItemCount() - 1, -1, -1):
-                            date_item = _tw.topLevelItem(i)
-                            for j in range(date_item.childCount() - 1, -1, -1):
-                                grp = date_item.child(j)
-                                if grp.childCount() == 0:
-                                    date_item.removeChild(grp)
-                            if date_item.childCount() == 0:
-                                _tw.takeTopLevelItem(i)
+                        _prune_removed(_tw, del_ids)
+                    all_items[:] = [(_it, _p) for _it, _p in all_items if id(_it) not in del_ids]
                 finally:
                     for _tw in all_trees:
                         _tw.blockSignals(False)
@@ -7036,18 +7043,7 @@ class MainWindow(QMainWindow):
             for tw in all_trees:
                 tw.blockSignals(True)
                 try:
-                    for i in range(tw.topLevelItemCount() - 1, -1, -1):
-                        date_item = tw.topLevelItem(i)
-                        for j in range(date_item.childCount() - 1, -1, -1):
-                            grp = date_item.child(j)
-                            for k in range(grp.childCount() - 1, -1, -1):
-                                place_item = grp.child(k)
-                                if id(place_item) in done_item_ids:
-                                    grp.removeChild(place_item)
-                            if grp.childCount() == 0:
-                                date_item.removeChild(grp)
-                        if date_item.childCount() == 0:
-                            tw.takeTopLevelItem(i)
+                    _prune_removed(tw, done_item_ids)
                 finally:
                     tw.blockSignals(False)
             all_items[:] = [(it, p) for it, p in all_items if id(it) not in done_item_ids]
@@ -7069,23 +7065,12 @@ class MainWindow(QMainWindow):
             if reply != QMessageBox.Yes:
                 return
             _persist_delete(checked_places)
-            # UI에서 제거 (3단계 트리: 날짜→그룹→업체)
+            # UI에서 제거 (리프 삭제 + 빈 컨테이너 재귀 정리 — 깊이 무관)
             checked_ids = set(id(it) for it, _ in all_items if it.checkState(0) == Qt.Checked)
             for tw in all_trees:
                 tw.blockSignals(True)
                 try:
-                    for i in range(tw.topLevelItemCount() - 1, -1, -1):
-                        date_item = tw.topLevelItem(i)
-                        for j in range(date_item.childCount() - 1, -1, -1):
-                            grp = date_item.child(j)
-                            for k in range(grp.childCount() - 1, -1, -1):
-                                place_item = grp.child(k)
-                                if id(place_item) in checked_ids:
-                                    grp.removeChild(place_item)
-                            if grp.childCount() == 0:
-                                date_item.removeChild(grp)
-                        if date_item.childCount() == 0:
-                            tw.takeTopLevelItem(i)
+                    _prune_removed(tw, checked_ids)
                 finally:
                     tw.blockSignals(False)
             all_items[:] = [(it, p) for it, p in all_items if id(it) not in checked_ids]
