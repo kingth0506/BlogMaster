@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.3"
+APP_VERSION = "2.5.4"
 
 import os
 import sys
@@ -4894,7 +4894,9 @@ class MainWindow(QMainWindow):
                 for start_time, groups_in_time in sessions:
                     total_time = sum(len(pl) for _, pl in groups_in_time)
                     time_item = QTreeWidgetItem(date_item)
-                    _tlabel = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
+                    _kwlab = self._session_kw_label(groups_in_time)
+                    _base = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
+                    _tlabel = f"{_base}  ·  {_kwlab}" if _kwlab else _base
                     time_item.setText(0, f"{_tlabel}  ({total_time}개)")
                     time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
                     time_item.setCheckState(0, Qt.Unchecked)
@@ -6478,6 +6480,25 @@ class MainWindow(QMainWindow):
             out[date_key] = [(s[0], s[1]) for s in sessions]
         return out
 
+    @staticmethod
+    def _session_kw_label(groups_in_time, maxn: int = 4) -> str:
+        """세션(시간) 안의 검색어(업종) 목록을 라벨용 문자열로.
+        그룹명 '[지역] 업종 (N개)'에서 업종(검색어)만 중복 없이 추출."""
+        import re as _re
+        kws = []
+        for gname, _pl in groups_in_time:
+            cn = gname.split(" · ")[0].strip()
+            m = _re.match(r"^\[[^\]]*\]\s*(.*?)\s*\(\d+개\)\s*$", cn)
+            biz = (m.group(1).strip() if m else cn).strip()
+            if biz and biz not in kws:
+                kws.append(biz)
+        if not kws:
+            return ""
+        lab = ", ".join(kws[:maxn])
+        if len(kws) > maxn:
+            lab += f" 외 {len(kws) - maxn}"
+        return lab
+
     def _load_all_crawl_results(self, mode: str = "") -> dict:
         """현재 계정의 logs 폴더의 모든 크롤링 결과를 (구 × 업종)별로 집계.
         mode: 'region' 또는 'keyword' 지정 시 해당 모드만 로드. 빈 문자열이면 전체.
@@ -6672,7 +6693,9 @@ class MainWindow(QMainWindow):
                     total_time = sum(len(pl) for _, pl in groups_in_time)
                     # 세션(시간) 헤더 (2단계, 접힘)
                     time_item = QTreeWidgetItem(date_item)
-                    _tlabel = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
+                    _kwlab = self._session_kw_label(groups_in_time)
+                    _base = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
+                    _tlabel = f"{_base}  ·  {_kwlab}" if _kwlab else _base
                     time_item.setText(0, f"{_tlabel}  ({total_time}개)")
                     time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
                     time_item.setCheckState(0, Qt.Unchecked)
