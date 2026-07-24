@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.4"
+APP_VERSION = "2.5.5"
 
 import os
 import sys
@@ -5620,17 +5620,18 @@ class MainWindow(QMainWindow):
 
         total = len(selected)
 
-        self._emit_status("포스트 생성 중...", "#8b5cf6")
-        self._emit_post_log(f"포스트 생성 시작: {total}개 업체")
-        if self._weekly_limit_active():
-            _bidL = self._current_blog_id() or self._active_blog_id() or ""
-            self._emit_post_log(f"(이번 주 사용 {self._weekly_used(_bidL)}/{self.WEEKLY_GEN_LIMIT} · 남음 {self._weekly_remaining(_bidL)})")
-
         # 이번 생성 배치의 공통 타임스탬프(날짜+시간) + 사용 엔진(API) 이름 —
         # 같은 배치(동시 생성)는 같은 created_at 을 공유해 '날짜별' 탭에서 한 묶음으로 묶임
         import datetime as _dt_batch
         _batch_ts = _dt_batch.datetime.now().strftime("%Y-%m-%d %H:%M")
         _api_name = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}.get(ai_engine, ai_engine)
+
+        self._emit_status(f"포스트 생성 중... ({_api_name})", "#8b5cf6")
+        self._emit_post_log(f"📝 포스트 생성 시작: {total}개 업체  ·  글쓰기 API: {_api_name}")
+        if self._weekly_limit_active():
+            _bidL = self._current_blog_id() or self._active_blog_id() or ""
+            self._emit_post_log(f"(이번 주 사용 {self._weekly_used(_bidL)}/{self.WEEKLY_GEN_LIMIT} · 남음 {self._weekly_remaining(_bidL)})")
+
         self._generating_data = {"selected": selected, "keyword": keyword, "api_key": api_key, "provider": provider}
         self._generated_posts = self._load_generated_posts()
 
