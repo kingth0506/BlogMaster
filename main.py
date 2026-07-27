@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.7"
+APP_VERSION = "2.5.8"
 
 import os
 import sys
@@ -5574,7 +5574,10 @@ class MainWindow(QMainWindow):
         gpt_keys = [k for k in cfg.get("gpt_key_list", []) if k]
         ds_keys = [k for k in cfg.get("deepseek_key_list", []) if k]
         gm_keys = [k for k in cfg.get("gemini_key_list", []) if k]
-        ai_engine = (cfg.get("ai_engine") or "deepseek").strip().lower()
+        ai_engine = (cfg.get("ai_engine") or "").strip().lower()
+        if ai_engine not in ("deepseek", "gpt", "gemini"):
+            # 사용자가 엔진을 안 정했으면 키 있는 것 중 제미나이 우선 → 챗GPT → 딥시크
+            ai_engine = "gemini" if gm_keys else ("gpt" if gpt_keys else "deepseek")
         # 선택 엔진의 키가 있는지 확인 → 없으면 안내
         _engkey = {"deepseek": ds_keys, "gpt": gpt_keys, "gemini": gm_keys}.get(ai_engine, [])
         if not _engkey:
@@ -5651,20 +5654,34 @@ class MainWindow(QMainWindow):
                     return
                 name = place.get("name", "")
                 try:
-                    content = generate_content(
-                        provider=provider,
-                        api_key=api_key,
-                        place=place,
-                        keyword=keyword,
-                        prompt_override=getattr(self, "_override_prompt_name", None),
-                        title_prefix=getattr(self, "_override_title_prefix", None),
-                        deepseek_key=deepseek_key,
-                        gpt_key=gpt_key,
-                        gemini_key=gemini_key,
-                        engine=ai_engine,
-                    )
+                    # 폴백 체인(제미나이→딥시크→챗GPT)으로 순서대로 시도, 실패 시 다음 API
+                    content = None
+                    used_engine = None
+                    _last_err = None
+                    for _eng in _engine_chain:
+                        try:
+                            content = generate_content(
+                                provider=provider,
+                                api_key=api_key,
+                                place=place,
+                                keyword=keyword,
+                                prompt_override=getattr(self, "_override_prompt_name", None),
+                                title_prefix=getattr(self, "_override_title_prefix", None),
+                                deepseek_key=deepseek_key,
+                                gpt_key=gpt_key,
+                                gemini_key=gemini_key,
+                                engine=_eng,
+                            )
+                            used_engine = _eng
+                            break
+                        except Exception as _ge:
+                            _last_err = _ge
+                            self._emit_post_log(f"  ⚠ {_ENG_KR.get(_eng, _eng)} 실패 → 다음 API 시도 ({name}): {str(_ge)[:60]}")
+                            continue
+                    if content is None:
+                        raise (_last_err or RuntimeError("모든 글쓰기 API 실패"))
                     # 제미나이(무료 한도)면 다음 글 전 딜레이 — 분당 호출 제한 회피
-                    if ai_engine == "gemini":
+                    if used_engine == "gemini":
                         import time as _tgm
                         _tgm.sleep(5)
                     if self.stop_flag:
@@ -5753,7 +5770,7 @@ class MainWindow(QMainWindow):
 
                     with lock:
                         new_post = {"place": place, "content": content, "posted": False,
-                                    "created_at": _batch_ts, "api": _api_name}
+                                    "created_at": _batch_ts, "api": _ENG_KR.get(used_engine, used_engine or _api_name)}
                         new_posts.append(new_post)
                         done_count[0] += 1
                         # 주간 한도 카운트 증가 (공유키 유저만)
@@ -6472,25 +6489,6 @@ class MainWindow(QMainWindow):
             out[date_key] = [(tk[0], tk[1], tkmap[tk]) for tk in keys]
         return out
 
-    @staticmethod
-    def _session_kw_label(groups_in_time, maxn: int = 4) -> str:
-        """세션(시간) 안의 검색어(업종) 목록을 라벨용 문자열로.
-        그룹명 '[지역] 업종 (N개)'에서 업종(검색어)만 중복 없이 추출."""
-        import re as _re
-        kws = []
-        for gname, _pl in groups_in_time:
-            cn = gname.split(" · ")[0].strip()
-            m = _re.match(r"^\[[^\]]*\]\s*(.*?)\s*\(\d+개\)\s*$", cn)
-            biz = (m.group(1).strip() if m else cn).strip()
-            if biz and biz not in kws:
-                kws.append(biz)
-        if not kws:
-            return ""
-        lab = ", ".join(kws[:maxn])
-        if len(kws) > maxn:
-            lab += f" 외 {len(kws) - maxn}"
-        return lab
-
     def _load_all_crawl_results(self, mode: str = "") -> dict:
         """현재 계정의 logs 폴더의 모든 크롤링 결과를 (구 × 업종)별로 집계.
         mode: 'region' 또는 'keyword' 지정 시 해당 모드만 로드. 빈 문자열이면 전체.
@@ -6518,7 +6516,7 @@ class MainWindow(QMainWindow):
                     file_mode = (raw.get("crawl_mode") or "region").strip()
                     if file_mode != mode:
                         continue
-                # crawled_at 필드 우선, 없으면 파일명에서 추출
+                # crawled_at 필드 우선, 없으면 파일명에서 추출, 그래도 없으면 파일 수정시각
                 date_part = (raw.get("crawled_at") or "").strip()
                 if not date_part:
                     date_raw = f.replace("places_", "").replace(".json", "")
@@ -6527,6 +6525,14 @@ class MainWindow(QMainWindow):
                             date_part = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:8]} {date_raw[9:11]}:{date_raw[11:13]}"
                         else:
                             date_part = ""
+                    except Exception:
+                        date_part = ""
+                if not date_part:
+                    # 타임스탬프 없는 옛 파일 → 파일 수정시각으로 대체 ('기타' 방지)
+                    try:
+                        import datetime as _dtm
+                        _mt = os.path.getmtime(os.path.join(log_dir, f))
+                        date_part = _dtm.datetime.fromtimestamp(_mt).strftime("%Y-%m-%d %H:%M")
                     except Exception:
                         date_part = ""
                 # 업종명 정규화 — 지역 토큰 제거 (앞쪽)
@@ -6681,13 +6687,12 @@ class MainWindow(QMainWindow):
                 date_item.setBackground(0, QColor("#eff6ff"))
 
                 # 세션 최신 먼저 (헬퍼가 이미 정렬)
-                for start_time, groups_in_time in sessions:
+                for start_time, kw_str, groups_in_time in sessions:
                     total_time = sum(len(pl) for _, pl in groups_in_time)
-                    # 세션(시간) 헤더 (2단계, 접힘)
+                    # 세션(크롤시각·검색어) 헤더 (2단계, 접힘)
                     time_item = QTreeWidgetItem(date_item)
-                    _kwlab = self._session_kw_label(groups_in_time)
                     _base = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
-                    _tlabel = f"{_base}  ·  {_kwlab}" if _kwlab else _base
+                    _tlabel = f"{_base}  ·  {kw_str}" if kw_str else _base
                     time_item.setText(0, f"{_tlabel}  ({total_time}개)")
                     time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
                     time_item.setCheckState(0, Qt.Unchecked)
@@ -7304,14 +7309,15 @@ class MainWindow(QMainWindow):
         gpt_keys = [k for k in cfg.get("gpt_key_list", []) if k]
         ds_keys = [k for k in cfg.get("deepseek_key_list", []) if k]
         gm_keys = [k for k in cfg.get("gemini_key_list", []) if k]
-        ai_engine = (cfg.get("ai_engine") or "deepseek").strip().lower()
-        _engkey = {"deepseek": ds_keys, "gpt": gpt_keys, "gemini": gm_keys}.get(ai_engine, [])
-        if not _engkey:
-            _engname = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}.get(ai_engine, ai_engine)
+        # 글쓰기 API 폴백 순서: 제미나이 → 딥시크 → 챗GPT (키 있는 것만). 실패 시 자동으로 다음 API 시도.
+        _ENG_KR = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}
+        _keys_by_eng = {"gemini": gm_keys, "deepseek": ds_keys, "gpt": gpt_keys}
+        _engine_chain = [e for e in ("gemini", "deepseek", "gpt") if _keys_by_eng[e]]
+        if not _engine_chain:
             QMessageBox.critical(self, "API 키 필요",
-                f"선택하신 글쓰기 엔진({_engname})의 API 키가 없습니다.\n\n"
-                f"설정 → API 키에서 {_engname} 키를 입력하거나, 다른 엔진을 선택해주세요.")
+                "글쓰기 API 키가 없습니다.\n\n설정 → API 키에서 제미나이·딥시크·챗GPT 중 하나 이상을 입력해주세요.")
             return
+        ai_engine = _engine_chain[0]   # 표시·딜레이·동시성 기준 (첫 번째 = 제미나이 우선)
         deepseek_key = ds_keys[0] if ds_keys else None
         gpt_key = gpt_keys[0] if gpt_keys else None
         gemini_key = gm_keys[0] if gm_keys else None
@@ -7394,19 +7400,28 @@ class MainWindow(QMainWindow):
                     self._emit_status(f"포스팅 {i}/{total}", "#8b5cf6")
                     self._emit_post_count(f"포스팅 {i}/{total}")
 
-                    try:
-                        content = generate_content(
-                            provider=provider,
-                            api_key=api_key,
-                            place=place, keyword=keyword,
-                            deepseek_key=deepseek_key, gpt_key=gpt_key,
-                            gemini_key=gemini_key, engine=ai_engine
-                        )
-                        if ai_engine == "gemini":
-                            import time as _tgm2; _tgm2.sleep(5)
-                    except Exception as e:
-                        self._emit_post_log(f"'{name}' 글 생성 실패: {e}")
+                    # 폴백 체인(제미나이→딥시크→챗GPT) 순서대로 시도
+                    content = None
+                    _used = None
+                    for _eng in _engine_chain:
+                        try:
+                            content = generate_content(
+                                provider=provider,
+                                api_key=api_key,
+                                place=place, keyword=keyword,
+                                deepseek_key=deepseek_key, gpt_key=gpt_key,
+                                gemini_key=gemini_key, engine=_eng
+                            )
+                            _used = _eng
+                            break
+                        except Exception as e:
+                            self._emit_post_log(f"  ⚠ {_ENG_KR.get(_eng, _eng)} 실패 → 다음 API ({name}): {str(e)[:60]}")
+                            continue
+                    if content is None:
+                        self._emit_post_log(f"'{name}' 글 생성 실패 (모든 API)")
                         continue
+                    if _used == "gemini":
+                        import time as _tgm2; _tgm2.sleep(5)
 
                     img_paths = []
                     pix_keys = [k for k in cfg.get("pixabay_key_list", []) if k]
