@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.6"
+APP_VERSION = "2.5.7"
 
 import os
 import sys
@@ -4872,7 +4872,7 @@ class MainWindow(QMainWindow):
             tw.setColumnWidth(5, 90)
             tw.setColumnWidth(6, 80)
             tw.setAlternatingRowColors(True)
-            # 같은 크롤(세션)끼리 묶기 — 날짜 → 세션(가까운 시각 클러스터) → 그룹 → 업체
+            # 크롤 단위로 묶기 — 날짜 → (크롤시각·검색어) → 지역그룹 → 업체 (키워드 한 번 크롤 = 드롭다운 하나)
             sess_map = self._cluster_time_sessions(groups_dict)
             sorted_dates = sorted(sess_map.keys(), key=lambda d: (d == "기타", d), reverse=True)
             date_font = _QF(); date_font.setBold(True); date_font.setPointSize(10)
@@ -4891,12 +4891,11 @@ class MainWindow(QMainWindow):
                 date_item.setForeground(0, QColor("#1e40af"))
                 date_item.setBackground(0, QColor("#eff6ff"))
                 # 세션 최신 먼저 (헬퍼가 이미 정렬)
-                for start_time, groups_in_time in sessions:
+                for start_time, kw_str, groups_in_time in sessions:
                     total_time = sum(len(pl) for _, pl in groups_in_time)
                     time_item = QTreeWidgetItem(date_item)
-                    _kwlab = self._session_kw_label(groups_in_time)
                     _base = f"🕐 {start_time}" if start_time else "🕐 시간 미상"
-                    _tlabel = f"{_base}  ·  {_kwlab}" if _kwlab else _base
+                    _tlabel = f"{_base}  ·  {kw_str}" if kw_str else _base
                     time_item.setText(0, f"{_tlabel}  ({total_time}개)")
                     time_item.setFlags(time_item.flags() | Qt.ItemIsUserCheckable)
                     time_item.setCheckState(0, Qt.Unchecked)
@@ -6441,20 +6440,21 @@ class MainWindow(QMainWindow):
         return "지역 미상"
 
     @staticmethod
-    def _cluster_time_sessions(groups_dict, window_min: int = 30):
-        """groups_dict(라벨→places)를 날짜 → 크롤세션으로 정리.
-        같은 크롤(가까운 시각, 기본 30분 이내)끼리 한 세션으로 묶는다.
-        반환: {date_str: [ (start_time, [(group_name, places)...]), ... ]}  (세션은 최신 먼저)."""
+    def _cluster_time_sessions(groups_dict):
+        """groups_dict(라벨→places)를 날짜 → (크롤시각 + 검색어)별 그룹으로 정리.
+        '한 번 크롤한 키워드' = 드롭다운 하나. (크롤 시각, 검색어) 단위로 묶는다.
+        (임의 시간창 묶음 없음 — 같은 크롤(같은 시각·같은 검색어)만 한 묶음.)
+        반환: {date_str: [ (time_str, keyword, [(group_name, places)...]), ... ]}  (최신 먼저)."""
+        import re as _re
         from collections import defaultdict as _dd
 
-        def _to_min(hhmm):
-            try:
-                h, m = hhmm.split(":")
-                return int(h) * 60 + int(m)
-            except Exception:
-                return -1
+        def _biz_of(gname):
+            cn = gname.split(" · ")[0].strip()
+            m = _re.match(r"^\[[^\]]*\]\s*(.*?)\s*\(\d+개\)\s*$", cn)
+            return (m.group(1).strip() if m else cn).strip()
 
-        per_date = _dd(list)   # date -> [(tmin, time_str, group_name, places)]
+        # date -> (time_str, keyword) -> [(group_name, places)]
+        buckets = _dd(lambda: _dd(list))
         for group_name, places in groups_dict.items():
             if not places:
                 continue
@@ -6463,22 +6463,13 @@ class MainWindow(QMainWindow):
                 _ts = group_name.split(" · ", 1)[1].strip()
                 date_key = _ts[:10] if len(_ts) >= 10 else _ts
                 time_key = _ts[11:16] if len(_ts) >= 16 else ""
-            per_date[date_key].append((_to_min(time_key), time_key, group_name, places))
+            buckets[date_key][(time_key, _biz_of(group_name))].append((group_name, places))
 
         out = {}
-        for date_key, entries in per_date.items():
-            entries.sort(key=lambda e: (e[0] < 0, e[0]))   # 시각 오름차순, 미상은 뒤
-            sessions = []   # [start_time, [(group_name, places)...]]
-            cur, cur_last = None, None
-            for tmin, tstr, gname, places in entries:
-                if cur is None or tmin < 0 or cur_last is None or (tmin - cur_last) > window_min:
-                    cur = [tstr, []]
-                    sessions.append(cur)
-                cur[1].append((gname, places))
-                if tmin >= 0:
-                    cur_last = tmin
-            sessions.reverse()   # 최신 세션 먼저
-            out[date_key] = [(s[0], s[1]) for s in sessions]
+        for date_key, tkmap in buckets.items():
+            # 시각 최신 먼저 (빈 시각은 맨 뒤), 같은 시각이면 검색어순
+            keys = sorted(tkmap.keys(), key=lambda tk: (tk[0], tk[1]), reverse=True)
+            out[date_key] = [(tk[0], tk[1], tkmap[tk]) for tk in keys]
         return out
 
     @staticmethod
@@ -6661,7 +6652,7 @@ class MainWindow(QMainWindow):
             """)
             container_layout.addWidget(tw)
 
-            # 같은 크롤(세션)끼리 묶기 — 날짜 → 세션(가까운 시각 클러스터) → 그룹 → 업체
+            # 크롤 단위로 묶기 — 날짜 → (크롤시각·검색어) → 지역그룹 → 업체 (키워드 한 번 크롤 = 드롭다운 하나)
             sess_map = self._cluster_time_sessions(groups_dict)
 
             # 최신 날짜 먼저, "기타" 맨 뒤
