@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.10"
+APP_VERSION = "2.5.11"
 
 import os
 import sys
@@ -424,6 +424,7 @@ class MainWindow(QMainWindow):
         self.acct_status_signal.connect(self._show_acct_status)
         self._app_quit_signal.connect(lambda: __import__('PySide6.QtWidgets', fromlist=['QApplication']).QApplication.instance().quit())
 
+        self._migrate_data_to_exe_root()   # _internal 안 데이터를 exe 실행 폴더로 이동 (UI/데이터 접근 전)
         self._build_ui()
         self._migrate_legacy_logs()
 
@@ -1283,7 +1284,7 @@ class MainWindow(QMainWindow):
     # ── 계정 선택 ──
     # ── 예약 발행 현황 (계정별 캐시 + 실시간 조회) ──
     def _resv_cache_file(self):
-        return os.path.join(os.path.dirname(__file__), "reservation_status.json")
+        return os.path.join(self._data_root(), "reservation_status.json")
 
     def _active_blog_id(self):
         try:
@@ -1703,7 +1704,7 @@ class MainWindow(QMainWindow):
     # ── 키워드 히스토리 (엑셀 저장, 계정별) ──
     def _get_history_file(self):
         # app_user 기준 단일 파일 — 같은 로그인 사용자의 모든 네이버 슬롯 공유
-        return os.path.join(os.path.dirname(__file__), f"search_history_{self._account_key()}.xlsx")
+        return os.path.join(self._data_root(), f"search_history_{self._account_key()}.xlsx")
 
     def _load_keyword_history(self):
         try:
@@ -2106,7 +2107,7 @@ class MainWindow(QMainWindow):
                 continue
             pkey = self._place_key(place)
             safe = "".join(c for c in (pkey[0] + "_" + pkey[1]) if c.isalnum() or c in "-_")[:80] or "unknown"
-            pdir = os.path.join(os.path.dirname(__file__), "saved_images",
+            pdir = os.path.join(self._data_root(), "saved_images",
                                 self._account_key(), safe)
             if not os.path.isdir(pdir):
                 continue
@@ -2563,7 +2564,7 @@ class MainWindow(QMainWindow):
 
         scroll.verticalScrollBar().valueChanged.connect(lambda _: load_visible())
 
-        base = os.path.join(os.path.dirname(__file__), "saved_images", self._account_key())
+        base = os.path.join(self._data_root(), "saved_images", self._account_key())
         if not os.path.isdir(base):
             info_label.setText("저장된 이미지 폴더 없음")
             dlg.exec()
@@ -2653,7 +2654,7 @@ class MainWindow(QMainWindow):
     def _cleanup_orphan_image_folders(self):
         """saved_images/{user}/ 아래 폴더 중 현재 generated_posts에 없는 건 삭제 + macOS 메타파일 정리"""
         import shutil as _shutil
-        base = os.path.join(os.path.dirname(__file__), "saved_images", self._account_key())
+        base = os.path.join(self._data_root(), "saved_images", self._account_key())
         if not os.path.isdir(base):
             return
         # 현재 유효한 place_key → 폴더명 매핑
@@ -3182,7 +3183,7 @@ class MainWindow(QMainWindow):
 
     # ── 한영 번역 캐시 (Pixabay 검색어용) ──
     def _get_translation_cache_file(self):
-        return os.path.join(os.path.dirname(__file__), "translation_cache.json")
+        return os.path.join(self._data_root(), "translation_cache.json")
 
     def _load_translation_cache(self) -> dict:
         fp = self._get_translation_cache_file()
@@ -5274,17 +5275,59 @@ class MainWindow(QMainWindow):
         # 라벨에 숫자 표시 안 함 — 실시간 로그는 아래 crawl_log/post_log에서 보임
         pass
 
-    def _get_crawled_file(self):
-        app_user = self._account_key()
+    def _data_root(self):
+        """사용자 데이터(수집·글·이미지) 저장 루트 — 설치본은 exe가 있는 실행 폴더,
+        개발은 소스 폴더. (_internal 안이 아니라 exe 옆에 저장 → 직관적 + 업데이트/재설치 안전)"""
+        import sys as _sys
+        if getattr(_sys, "frozen", False):
+            return os.path.dirname(os.path.abspath(_sys.executable))
+        return os.path.dirname(os.path.abspath(__file__))
+
+    def _migrate_data_to_exe_root(self):
+        """구버전이 _internal 안에 저장한 데이터를 exe 실행 폴더로 1회 이동."""
+        import sys as _sys, shutil
+        if not getattr(_sys, "frozen", False):
+            return
+        old = os.path.dirname(os.path.abspath(__file__))   # frozen: _internal
+        new = self._data_root()                            # exe 폴더
+        if os.path.normcase(os.path.normpath(old)) == os.path.normcase(os.path.normpath(new)):
+            return
         try:
-            idx = self.cfg.get("active_account", 0)
-            bid = (self.cfg.get("accounts", [{}])[idx].get("blog_id", "") or "").strip()
-            bid = "".join(c for c in bid if c.isalnum() or c in "-_")
-            if not bid:
-                bid = f"acc{idx}"
+            names = os.listdir(old)
         except Exception:
-            bid = "default"
-        return os.path.join(os.path.dirname(__file__), f"crawled_{app_user}_{bid}.json")
+            return
+        for name in names:
+            is_data = (name in ("logs", "saved_images", "reservation_status.json",
+                                "translation_cache.json", "weekly_gen_count.json",
+                                "engaged_comments.json", "config.json", "generated_posts.json")
+                       or name.startswith("crawled_")
+                       or name.startswith("generated_posts_")
+                       or name.startswith("search_history_")
+                       or name.startswith("posting_schedule_"))
+            if not is_data:
+                continue
+            src, dst = os.path.join(old, name), os.path.join(new, name)
+            if os.path.exists(dst):
+                continue   # 새 위치에 이미 있으면 건너뜀 (덮어쓰지 않음)
+            try:
+                shutil.move(src, dst)
+            except Exception:
+                pass
+
+    def _get_crawled_file(self):
+        # 데이터는 app_user(계정키)만으로 저장됨 (generated_posts와 동일 스킴). _bid 붙이지 않음.
+        app_user = self._account_key()
+        d = self._data_root()
+        f = os.path.join(d, f"crawled_{app_user}.json")
+        if not os.path.exists(f):
+            # 구버전이 crawled_{app_user}_{bid}.json 로 저장했으면 그걸 사용 (데이터 유실 방지)
+            try:
+                for name in os.listdir(d):
+                    if name.startswith(f"crawled_{app_user}_") and name.endswith(".json"):
+                        return os.path.join(d, name)
+            except Exception:
+                pass
+        return f
 
     def _save_crawled(self, items: list, keyword: str = ""):
         mode = getattr(self, "_current_crawl_mode", "")
@@ -5394,8 +5437,8 @@ class MainWindow(QMainWindow):
 
     def _get_posts_file(self):
         # 계정별로 분리 저장
-        per_acc = os.path.join(os.path.dirname(__file__), f"generated_posts_{self._account_key()}.json")
-        legacy = os.path.join(os.path.dirname(__file__), "generated_posts.json")
+        per_acc = os.path.join(self._data_root(), f"generated_posts_{self._account_key()}.json")
+        legacy = os.path.join(self._data_root(), "generated_posts.json")
         # 최초 전환 시 공용 파일 → 현재 계정 파일로 자동 승격 (1회)
         if not os.path.exists(per_acc) and os.path.exists(legacy):
             try:
@@ -5406,23 +5449,27 @@ class MainWindow(QMainWindow):
         return per_acc
 
     def _get_logs_dir(self) -> str:
+        # 크롤 로그도 app_user(계정키)만으로 저장/조회 (posts/crawled와 동일 스킴). _bid 붙이지 않음.
         app_user = self._account_key()
-        try:
-            idx = self.cfg.get("active_account", 0)
-            bid = (self.cfg.get("accounts", [{}])[idx].get("blog_id", "") or "").strip()
-            bid = "".join(c for c in bid if c.isalnum() or c in "-_")
-            if not bid:
-                bid = f"acc{idx}"
-        except Exception:
-            bid = "default"
-        d = os.path.join(os.path.dirname(__file__), "logs", f"{app_user}_{bid}")
+        base = os.path.join(self._data_root(), "logs")
+        d = os.path.join(base, app_user)
+        if not (os.path.isdir(d) and any(x.endswith(".json") for x in os.listdir(d))):
+            # 구버전이 logs/{app_user}_{bid} 로 저장했으면 그 폴더 사용 (데이터 유실 방지)
+            try:
+                for name in os.listdir(base):
+                    p = os.path.join(base, name)
+                    if (name.startswith(app_user + "_") and os.path.isdir(p)
+                            and any(x.endswith(".json") for x in os.listdir(p))):
+                        return p
+            except Exception:
+                pass
         os.makedirs(d, exist_ok=True)
         return d
 
     def _migrate_legacy_logs(self):
         """logs/*.json 을 1번 계정 폴더로 1회 이동 (구버전 데이터 복구용)"""
         import shutil
-        base = os.path.join(os.path.dirname(__file__), "logs")
+        base = os.path.join(self._data_root(), "logs")
         if not os.path.isdir(base):
             return
         legacy = [f for f in os.listdir(base) if f.endswith(".json") and not f.startswith("._") and os.path.isfile(os.path.join(base, f))]
@@ -5489,7 +5536,7 @@ class MainWindow(QMainWindow):
         return f"{y}-W{w:02d}"
 
     def _weekly_count_path(self) -> str:
-        return os.path.join(os.path.dirname(__file__), "weekly_gen_count.json")
+        return os.path.join(self._data_root(), "weekly_gen_count.json")
 
     def _load_weekly_counts(self) -> dict:
         """{week_key: {blog_id: count}} — 이번 주 데이터만 유지."""
@@ -5694,7 +5741,7 @@ class MainWindow(QMainWindow):
                             pkey = self._place_key(place)
                             safe_name = "".join(c for c in (pkey[0] + "_" + pkey[1]) if c.isalnum() or c in "-_")[:80] or "unknown"
                             persist_dir = os.path.join(
-                                os.path.dirname(__file__), "saved_images",
+                                self._data_root(), "saved_images",
                                 self._account_key(), safe_name
                             )
                             os.makedirs(persist_dir, exist_ok=True)
@@ -5742,7 +5789,7 @@ class MainWindow(QMainWindow):
                                 try:
                                     import image_handler as _ih
                                     _used_file = os.path.join(
-                                        os.path.dirname(__file__), "saved_images",
+                                        self._data_root(), "saved_images",
                                         self._account_key(), "used_pixabay_ids.json",
                                     )
                                     _ih.configure_used_ids_file(_used_file)
