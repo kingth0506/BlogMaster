@@ -1,6 +1,6 @@
 ; Inno Setup Script — 블로그마스터
 #define MyAppName "블로그마스터"
-#define MyAppVersion "2.5.8"
+#define MyAppVersion "2.5.9"
 #define MyAppPublisher "kingth0506"
 #define MyAppExeName "BlogMaster.exe"
 
@@ -30,7 +30,8 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 Name: "desktopicon"; Description: "바탕화면 아이콘 생성"; GroupDescription: "추가 아이콘:"
 
 [InstallDelete]
-Type: filesandordirs; Name: "{app}\_internal"
+; ⚠ _internal 통째 삭제 금지 — 사용자 데이터(generated_posts_*.json / logs / saved_images / crawled_*.json)가
+;   _internal 안에 저장되므로, 재설치 시 덮어쓰기만 하고 데이터는 보존한다. (자동업데이트 robocopy /E 와 동일)
 Type: files; Name: "{app}\NaverBlogAuto.exe"
 Type: files; Name: "{userdesktop}\NaverBlogAuto.lnk"
 Type: files; Name: "{commondesktop}\NaverBlogAuto.lnk"
