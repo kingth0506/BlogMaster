@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.9"
+APP_VERSION = "2.5.10"
 
 import os
 import sys
@@ -5574,18 +5574,15 @@ class MainWindow(QMainWindow):
         gpt_keys = [k for k in cfg.get("gpt_key_list", []) if k]
         ds_keys = [k for k in cfg.get("deepseek_key_list", []) if k]
         gm_keys = [k for k in cfg.get("gemini_key_list", []) if k]
-        ai_engine = (cfg.get("ai_engine") or "").strip().lower()
-        if ai_engine not in ("deepseek", "gpt", "gemini"):
-            # 사용자가 엔진을 안 정했으면 키 있는 것 중 제미나이 우선 → 챗GPT → 딥시크
-            ai_engine = "gemini" if gm_keys else ("gpt" if gpt_keys else "deepseek")
-        # 선택 엔진의 키가 있는지 확인 → 없으면 안내
-        _engkey = {"deepseek": ds_keys, "gpt": gpt_keys, "gemini": gm_keys}.get(ai_engine, [])
-        if not _engkey:
-            _engname = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}.get(ai_engine, ai_engine)
+        # 글쓰기 API 폴백 순서: 제미나이 → 딥시크 → 챗GPT (키 있는 것만). 실패 시 자동으로 다음 API 시도.
+        _ENG_KR = {"deepseek": "딥시크", "gpt": "챗GPT", "gemini": "제미나이"}
+        _keys_by_eng = {"gemini": gm_keys, "deepseek": ds_keys, "gpt": gpt_keys}
+        _engine_chain = [e for e in ("gemini", "deepseek", "gpt") if _keys_by_eng[e]]
+        if not _engine_chain:
             QMessageBox.critical(self, "API 키 필요",
-                f"선택하신 글쓰기 엔진({_engname})의 API 키가 없습니다.\n\n"
-                f"설정 → API 키에서 {_engname} 키를 입력하거나, 다른 엔진을 선택해주세요.")
+                "글쓰기 API 키가 없습니다.\n\n설정 → API 키에서 제미나이·딥시크·챗GPT 중 하나 이상을 입력해주세요.")
             return
+        ai_engine = _engine_chain[0]   # 표시·딜레이·동시성 기준 (첫 번째 = 제미나이 우선)
 
         deepseek_key = ds_keys[0] if ds_keys else None
         gpt_key = gpt_keys[0] if gpt_keys else None
