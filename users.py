@@ -18,6 +18,76 @@ COLLECTION = "users"
 _db = None
 _firebase_error = None
 
+# ── 읽기 캐시 (Firestore 할당량 절약) ──
+# load_users()가 버튼마다 호출되며 매번 전체 유저를 stream()(유저당 읽기 1회) 하던 탓에
+# 무료 할당량(하루 5만 읽기)이 금방 소진돼 429가 나던 문제 → 짧은 TTL 캐시로 반복 읽기 제거.
+_users_cache = None
+_users_cache_ts = 0.0
+_USERS_TTL = 60.0   # 초
+
+
+def _now() -> float:
+    import time as _t
+    return _t.time()
+
+
+def invalidate_users_cache():
+    global _users_cache, _users_cache_ts
+    _users_cache = None
+    _users_cache_ts = 0.0
+
+
+def _map_user(data: dict) -> dict:
+    data = data or {}
+    return {
+        "pw": data.get("pw", ""),
+        "role": data.get("role", "user"),
+        "expires": data.get("expires", ""),
+        "expires_2": data.get("expires_2", ""),
+        "expires_3": data.get("expires_3", ""),
+        "api_expires": data.get("api_expires", ""),
+        "api_expires_2": data.get("api_expires_2", ""),
+        "api_expires_3": data.get("api_expires_3", ""),
+        "max_accounts": int(data.get("max_accounts", 3)),
+        "name": data.get("name", ""),
+        "birth": data.get("birth", ""),
+        "phone": data.get("phone", ""),
+        "referrer": data.get("referrer", ""),
+        "email": data.get("email", ""),
+        "shared_api_keys": data.get("shared_api_keys", {}),
+        "shared_api_keys_admin_granted": data.get("shared_api_keys_admin_granted", False),
+        "shared_api_grace_until": data.get("shared_api_grace_until", ""),
+        "api_keys": data.get("api_keys", {}),
+        "accounts": data.get("accounts", []),
+        "locked_naver_ids": data.get("locked_naver_ids", []),
+        "prompts": data.get("prompts", {}),
+        "keywordmaster_enabled": data.get("keywordmaster_enabled", False),
+        "privacy_consent": data.get("privacy_consent", False),
+        "privacy_consent_date": data.get("privacy_consent_date", ""),
+    }
+
+
+def load_user(username: str) -> dict | None:
+    """단일 유저만 읽기(Firestore 읽기 1회). 로그인·기간확인 등 '한 명'만 필요할 때 사용.
+    캐시가 살아있으면 캐시에서 반환(읽기 0회)."""
+    if not username:
+        return None
+    if _users_cache is not None and (_now() - _users_cache_ts) < _USERS_TTL:
+        u = _users_cache.get(username)
+        if u is not None:
+            return dict(u)
+    db = _init_firebase()
+    if db is None:
+        return _load_local().get(username)
+    try:
+        doc = db.collection(COLLECTION).document(username).get()
+        if not doc.exists:
+            return None
+        return _map_user(doc.to_dict())
+    except Exception as e:
+        globals()["_firebase_error"] = str(e)
+        return _load_local().get(username)
+
 
 def _init_firebase():
     """Firestore 클라이언트 1회 초기화. 실패 시 로컬 fallback 사용."""
@@ -81,7 +151,11 @@ def _save_local(users: dict):
 
 
 # ── Firestore CRUD ──
-def load_users() -> dict:
+def load_users(force: bool = False) -> dict:
+    global _users_cache, _users_cache_ts
+    # 캐시 유효하면 재사용 (읽기 0회) — 버튼마다 전체 stream() 하던 할당량 낭비 제거
+    if not force and _users_cache is not None and (_now() - _users_cache_ts) < _USERS_TTL:
+        return _users_cache
     db = _init_firebase()
     if db is None:
         return _load_local()
@@ -89,33 +163,7 @@ def load_users() -> dict:
         docs = db.collection(COLLECTION).stream()
         users = {}
         for d in docs:
-            data = d.to_dict() or {}
-            users[d.id] = {
-                "pw": data.get("pw", ""),
-                "role": data.get("role", "user"),
-                "expires": data.get("expires", ""),
-                "expires_2": data.get("expires_2", ""),
-                "expires_3": data.get("expires_3", ""),
-                "api_expires": data.get("api_expires", ""),
-                "api_expires_2": data.get("api_expires_2", ""),
-                "api_expires_3": data.get("api_expires_3", ""),
-                "max_accounts": int(data.get("max_accounts", 3)),
-                "name": data.get("name", ""),
-                "birth": data.get("birth", ""),
-                "phone": data.get("phone", ""),
-                "referrer": data.get("referrer", ""),
-                "email": data.get("email", ""),
-                "shared_api_keys": data.get("shared_api_keys", {}),
-                "shared_api_keys_admin_granted": data.get("shared_api_keys_admin_granted", False),
-                "shared_api_grace_until": data.get("shared_api_grace_until", ""),
-                "api_keys": data.get("api_keys", {}),
-                "accounts": data.get("accounts", []),
-                "locked_naver_ids": data.get("locked_naver_ids", []),
-                "prompts": data.get("prompts", {}),
-                "keywordmaster_enabled": data.get("keywordmaster_enabled", False),
-                "privacy_consent": data.get("privacy_consent", False),
-                "privacy_consent_date": data.get("privacy_consent_date", ""),
-            }
+            users[d.id] = _map_user(d.to_dict())
         # 최초 1회: 비어있으면 admin 생성
         if not users:
             default = _default_users()
@@ -123,6 +171,8 @@ def load_users() -> dict:
                 db.collection(COLLECTION).document(uid).set(u)
             users = default
         _save_local(users)
+        globals()["_users_cache"] = users
+        globals()["_users_cache_ts"] = _now()
         return users
     except Exception as e:
         globals()["_firebase_error"] = str(e)
@@ -170,8 +220,8 @@ def save_users(users: dict):
 
 
 def verify(username: str, password: str):
-    users = load_users()
-    u = users.get(username)
+    # 단일 문서만 읽음(읽기 1회) — 예전엔 load_users()로 전체를 읽어 할당량을 태웠음
+    u = load_user(username)
     if not u:
         return None
     if u.get("pw") != _hash(password):
@@ -218,6 +268,7 @@ def create_user(username: str, password: str, role: str = "user", expires: str =
             print(f"[users.create_user] Firebase 쓰기 실패 ({username}): {e}", file=sys.stderr)
     users[username] = entry
     _save_local(users)
+    invalidate_users_cache()
     return True
 
 
@@ -280,6 +331,7 @@ def update_user(username: str, password=None, role=None, expires=None, expires_2
             import sys
             print(f"[users.update_user] Firebase 쓰기 실패 ({username}): {e}", file=sys.stderr)
     _save_local(users)
+    invalidate_users_cache()
     return True
 
 
@@ -314,6 +366,7 @@ def delete_user(username: str) -> bool:
             import sys
             print(f"[users.delete_user] Firebase 삭제 실패 ({username}): {e}", file=sys.stderr)
     _save_local(users)
+    invalidate_users_cache()
     return True
 
 
@@ -386,17 +439,17 @@ def clear_session(username: str, session_id: str):
 
 
 def heartbeat_session(username: str, session_id: str):
-    """5분마다 호출해서 세션 유지."""
+    """5분마다 호출해서 세션 유지. (읽기 없이 바로 갱신 — 할당량 절약)"""
     db = _init_firebase()
     if db is None:
         return
     try:
         from firebase_admin import firestore as _fs
-        doc = db.collection(COLLECTION).document(username).get()
-        if doc.exists and (doc.to_dict() or {}).get("session_id") == session_id:
-            db.collection(COLLECTION).document(username).update({
-                "session_heartbeat": _fs.SERVER_TIMESTAMP,
-            })
+        # 예전엔 get()으로 세션 확인 후 update(읽기1+쓰기1) 했으나, 다중 로그인 허용이라
+        # 확인이 무의미 → 읽기 없이 바로 update (쓰기1만). 할당량 절약.
+        db.collection(COLLECTION).document(username).update({
+            "session_heartbeat": _fs.SERVER_TIMESTAMP,
+        })
     except Exception:
         pass
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.12"
+APP_VERSION = "2.5.13"
 
 import os
 import sys
@@ -29,6 +29,16 @@ try:
     sys.excepthook = _handle_exception
 except Exception:
     pass
+
+
+def _diag(msg):
+    """글쓰기 등 '왜 안 되는지' 추적용 진단 로그 (crash_log.txt에 한 줄)."""
+    try:
+        _p = os.path.join(_log_dir, 'crash_log.txt')
+        with open(_p, 'a', encoding='utf-8') as _f:
+            _f.write(f"[DIAG {datetime.now():%m-%d %H:%M:%S}] {msg}\n")
+    except Exception:
+        pass
 
 if sys.platform == "win32":
     os.environ["PYTHONUTF8"] = "1"
@@ -2007,11 +2017,11 @@ class MainWindow(QMainWindow):
         """활성 명의의 API(GPT 글쓰기) 구독이 만료면 안내 후 True(차단). 정상이면 False.
         단, 자기(본인) API 키를 쓰는 유저는 공용키 구독과 무관하므로 만료로 차단하지 않는다."""
         try:
-            from users import is_api_expired as _is_api_exp, load_users as _lu
+            from users import is_api_expired as _is_api_exp, load_user as _luser
             from config import get_current_user as _gcu, load_config as _lc
             cfg = _lc() or {}
             uname = _gcu() or ""
-            user = _lu().get(uname, {})
+            user = _luser(uname) or {}   # 전체명단 대신 본인 1명만 읽기 (할당량 절약)
             # 자기 API 키 사용자 → 만료 차단 안 함 (본인이 API 결제 주체)
             def _own(src):
                 return any(any(k for k in ((src or {}).get(f) or [])) for f in ("gpt_key_list", "gemini_key_list", "deepseek_key_list"))
@@ -5645,12 +5655,17 @@ class MainWindow(QMainWindow):
             return []
 
     def _generate_posts(self):
+        _diag("글쓰기 버튼 눌림 → _generate_posts 진입")
         if self._block_if_expired():
+            _diag("차단: 이용기간 만료(_block_if_expired)")
             return
         if self._block_if_api_expired():   # API 기간 만료면 글 생성 차단
+            _diag("차단: API 기간 만료(_block_if_api_expired)")
             return
         if not self._check_api_keys():
+            _diag("차단: API 키 없음(_check_api_keys)")
             return
+        _diag("가드 통과 → 크롤 스냅샷 로드 후 업체선택 다이얼로그")
         # 크롤 결과 파일에서 스냅샷 로드 (크롤이 동시에 돌아도 안 꼬이게)
         snap = self._load_crawled()
         if snap:
