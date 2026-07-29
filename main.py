@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.15"
+APP_VERSION = "2.5.16"
 
 import os
 import sys
@@ -15,7 +15,7 @@ try:
     os.makedirs(_log_dir, exist_ok=True)
     _crash_log = os.path.join(_log_dir, 'crash_log.txt')
     _crash_file = open(_crash_log, 'a', encoding='utf-8')
-    _crash_file.write(f"\n--- App Started v{APP_VERSION} at {datetime.now()} ---\n")
+    _crash_file.write(f"\n--- App Started v{APP_VERSION} at {__import__('datetime').datetime.now()} ---\n")
     _crash_file.flush()
     faulthandler.enable(file=_crash_file)
 
@@ -24,7 +24,7 @@ try:
             sys.__excepthook__(exc_type, exc_value, exc_tb)
             return
         with open(_crash_log, 'a', encoding='utf-8') as _f:
-            _f.write(f"\n--- Uncaught Exception at {datetime.now()} ---\n")
+            _f.write(f"\n--- Uncaught Exception at {__import__('datetime').datetime.now()} ---\n")
             traceback.print_exception(exc_type, exc_value, exc_tb, file=_f)
     sys.excepthook = _handle_exception
 except Exception:
@@ -36,7 +36,7 @@ def _diag(msg):
     try:
         _p = os.path.join(_log_dir, 'crash_log.txt')
         with open(_p, 'a', encoding='utf-8') as _f:
-            _f.write(f"[DIAG {datetime.now():%m-%d %H:%M:%S}] {msg}\n")
+            _f.write(f"[DIAG {__import__('datetime').datetime.now():%m-%d %H:%M:%S}] {msg}\n")
     except Exception:
         pass
 
@@ -4906,7 +4906,8 @@ class MainWindow(QMainWindow):
             tab_count = 0
             for date_str in sorted_dates:
                 sessions = sess_map[date_str]
-                total_date = sum(len(pl) for _, gl in sessions for _, pl in gl)
+                # sessions 원소 = (start_time, kw_str, groups_in_time), groups_in_time 원소 = (group_name, places)
+                total_date = sum(len(pl) for _, _, gl in sessions for _, pl in gl)
                 date_display = date_str[5:] if len(date_str) >= 10 else date_str
                 date_item = QTreeWidgetItem(tw)
                 date_item.setText(0, f"📅 {date_display}  ({total_date}개)")
@@ -6834,7 +6835,8 @@ class MainWindow(QMainWindow):
             tab_items = []
             for date_str in sorted_dates:
                 sessions = sess_map[date_str]
-                total_date = sum(len(pl) for _, gl in sessions for _, pl in gl)
+                # sessions 원소 = (start_time, kw_str, groups_in_time), groups_in_time 원소 = (group_name, places)
+                total_date = sum(len(pl) for _, _, gl in sessions for _, pl in gl)
 
                 # 날짜 헤더 (1단계, 접힘)
                 date_display = date_str[5:] if len(date_str) >= 10 else date_str
