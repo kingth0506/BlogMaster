@@ -1,0 +1,608 @@
+<html lang="ko"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Script-Type" content="text/javascript">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<title>네이버 블로그 관리</title>
+<link rel="stylesheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//css/admin/blogadmin_content-498c980_https.css" type="text/css">
+<link rel="stylesheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/css/nblog_readonly-a7f7a34_https.css" type="text/css">
+<script async="" src="https://ntm.pstatic.net/ex/nlog-v2.js"></script><script async="" src="https://ntm.pstatic.net/ex/nlog.js"></script><script async="" src="https://ntm.pstatic.net/scripts/ntm_d26044233161.js"></script><script type="text/javaScript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jindo/1.2.0/jindo.min-77a2482_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jindo/agent.ie11/agent.ie11-6694cec_https.js"></script>
+<script type="text/javaScript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/LayerManager-ff5f25a_https.js"></script>
+
+<!-- Execution Code -->
+
+
+
+
+<script>
+	// Message
+     var GMSG = {
+    	ACTION_MESSAGE : {
+	        VALIDE_ERROR: [
+	        	"등록할 내용을 입력해 주세요.",
+	        	"ID형식이 올바르지 않습니다.",
+	        	"IP형식이 올바르지 않습니다.",
+	        	"URL형식이 올바르지 않습니다.",
+	        	"키워드 형식이 올바르지 않습니다.\n한글 1~80자이거나 영어 2자~80자까지 입력할 수 있습니다.",
+	        	"",
+	        	"블로그명 형식이 올바르지 않습니다.\n한글 1~25자이거나 영어 2자~50자까지 입력할 수 있습니다."
+	        ],
+	        CONFIRM_DELETE_ALL:["",
+	        	"ID 차단함을 모두 삭제 하시겠습니까?",
+	        	"등록된 내용을 모두 삭제하시겠습니까?",
+	        	"URL 차단함을 모두 삭제 하시겠습니까?",
+	        	"키워드 차단함을 모두 삭제 하시겠습니까?"
+	        ],
+			RESTORE : "선택한 글을 모두 복구 합니다.",
+			GUESTBOOK_RESTORE : "선택한 안부글을 모두 복구 합니다.",
+			RESTORE_ADD_WHITELIST : "선택한 댓글을 복구하며, 앞으로는 차단되지 않도록 화이트 리스트에 추가합니다.",
+			DELETE_ADD_BLACKLIST : "선택한 댓글을 삭제하며, 앞으로는 차단되도록 블랙 리스트에 추가합니다.",
+			DELETE : "정말 삭제하시겠습니까? 삭제한 글은 복구할 수 없습니다.",
+			GUESTBOOK_DELETE : "정말 삭제하시겠습니까? 삭제한 안부글은 복구할 수 없습니다.",
+			MOVE_TO_TRASH : "댓글을 삭제하겠습니까? 삭제한 댓글은 복구하실 수 없습니다.",
+            BLOCK_AND_DELETE : '선택한 댓글을 작성한 사용자를 차단 후 댓글을 삭제하시겠습니까?\n\n이 사용자의 모든 콘텐츠가 보이지 않고 회원님에게 공감, 댓글, 안부글을 남길 수 없으며 이웃이 취소됩니다.',
+			EMPTY_SEARCH : '검색할  값이 비어 있습니다.',
+			CONFIRM_BLOCK_ID : '이 ID가 남긴 댓글은 자동으로 차단합니다.',
+			LIMIT_BLOCK_MYBLOG : '내 아이디는 차단할 수 없습니다.',
+			CONFIRM_GUESTBOOK_BLOCK_ID : '이 ID가 남긴 안부글은 자동으로 차단합니다.',
+			CONFIRM_RELAY_BLOCK_ID : '이 ID가 남긴 엮인글은 자동으로 차단합니다.',
+			CONFIRM_GUESTBOOK_BLOCK_IP : '이 IP에서 남기는 댓글은 자동으로 차단합니다.',
+			CONFIRM_RELAY_BLOCK_IP : '이 IP에서 남기는 엮인글은 자동으로 차단합니다.',
+			CONFIRM_RELAY_BLOCK_BLOGNAME : '이 블로그명으로 남기는 엮인글은 자동으로 차단합니다.',
+			BOTHBUDDYINVITE_RESTORE: "선택한 서로이웃 신청을 모두 복구 합니다",
+			BOTHBUDDYINVITE_DELETE: "정말 삭제하시겠습니까? 삭제한 서로이웃신청은 복구할 수 없습니다.",
+			CONFIRM_BOTHBUDDYINVITE_BLOCK_ID: '이 ID의 서로이웃신청은 자동으로 차단합니다.',
+			CONFIRM_BOTHBUDDYINVITE_BLOCK_IP : '이 IP의 서로이웃신청은 자동으로 차단합니다.'
+	    },
+	    SERVER_MESSAGE : {
+	        SERVER_ERROR: "일시적인 서버 장애가 발생하였습니다.",
+	        ERROR: "실패하였습니다.",
+	        SUCCESS: "등록되었습니다.",
+	        OVERCOUNT: [
+	        	["",
+	        		"차단 ID는  5000개까지 등록이 가능합니다.",
+	        		"",
+	        		"차단 URL은 500개까지 등록이 가능합니다.",
+	        		"차단 키워드는 600개까지 등록이 가능합니다.",
+	        		"차단 키워드는 600개까지 등록이 가능합니다.",
+	        		"차단 블로그명은 개까지 등록이 가능합니다."
+	        	]
+	        ],
+	        BLACKLIST: [
+	        	["",
+		        	"이미 차단된 ID 입니다.",
+		        	"이미 차단된 IP 입니다",
+	    	    	"이미 차단된 URL입니다",
+	        		"이미 차단된 키워드입니다",
+	        		"이미 차단된 키워드입니다",
+	        		"이미 차단된 블로그명입니다",
+	        	]
+	        ],
+            ID_BLOCK_CONFIRM : "이 사용자를 차단하면 회원님에게 공감, 댓글, 안부글 쓰기를 할 수 없으며 이웃이 끊어집니다. 이 사용자를 차단하시겠습니까?",
+	        UNKNOWNLIST: "블랙리스트인지 화이트리스트인지 지정되지 않았습니다.",
+	        UNKNOWNITEM: "분류가 지정되지 않았습니다.",
+	        EMPTY: "등록할 내용을 입력해 주세요.",
+	        SELFID: [
+	        	"내 아이디는 차단할 수 없습니다.", // BLACK
+	        	"본인의 ID는 등록하지 않아도 차단되지 않습니다.", // WHITE
+	        	"본인의 ID는 등록되지 않습니다. "
+	        ],
+	        NEIGHBORID: [
+	        	"나의 이웃은 블랙리스트에 등록할 수 없습니다. 이웃을 해제한 후에 차단해 주세요.",
+		        "이웃 ID는 등록하지 않아도 차단되지 않습니다."
+		    ],
+		    EACH_NEIGHBORID: "이웃은 이미 화이트리스트로 인식되고 있습니다.",
+		    WAIT_BOTH_NEIGHBOR: [
+		    	"상대방에게 서로이웃 신청을 하신 상태입니다.\n서로이웃 신청을 취소하신 후, 블랙리스트 추가가 가능합니다.",
+		    	"상대방에게 서로이웃 신청을 하신 상태입니다.\n서로이웃 신청을 취소하신 후, 화이트리스트 추가가 가능합니다."
+		    ],
+			SUCCESS_REGIST : "등록되었습니다.",
+			BEFORE_REGIST : "이미 등록되어 있습니다.",
+			ERROR_REGIST_NEIGHBOR : "이웃은 차단 할 수 없습니다. 이웃을 해제한 후 차단하실 수 있습니다.",
+			TRANSFER_SUCCESS: "성공적으로 반영되었습니다.",
+            INVALID_CONTENT_ID: "아이디가 정상적이지 않습니다."
+	    },
+	    RESULT_CODE : { // Result Code
+	        ERROR: 0,
+	        SUCCESS: 1,
+	        OVERCOUNT: 2,
+	        BLACKLIST: 3,
+	        WHITELIST: 4,
+	        UNKNOWNLIST: 5,
+	        UNKNOWNITEM: 6,
+	        EMPTY: 7,
+	        SELFID: 8,
+	        NEIGHBORID: 9,
+	        EACH_NEIGHBORID: 10,
+	        WAIT_BOTH_NEIGHBOR: 11,
+            INVALID_CONTENT_ID:13
+	    },
+	    FILTER : { // Server Filter Code
+	        ID: 1,
+	        IP: 2,
+	        DOMAIN: 3,
+	        KEYWORD: 4,
+	        BLOG_NAME: 6,
+	        BLACK: 0,
+	        WHITE: 1,
+	        NOT_USE: 0,
+	        LOWER: 1,
+	        HIGH: 2
+	    },
+	    METHOD : {
+	        ADD_CONTENT: "addContent",
+	        DELETE: "remove",
+	        DELETE_ALL: "removeItem",
+	        SPAMSET: "spamfilter"
+	    },
+	    URL : {
+            FILTER_UPDATE: "/AdminUserFilterUpdate.naver",
+	    	COMMENT_FILTERED_MODIFY :"/AdminCommentFilteredModify.naver",
+	    	COMMENT_MANAGE_MODIFY :"/AdminCommentManageModify.naver",
+	    	NEIGHBOR_RELATION : "/AdminNeighborRelation.naver",
+	    	GUESTBOOK_FILTERED_MODIFY :"/GuestBookFilteredModify.naver"
+        }
+    };
+
+    /**
+     * 파라미터가 동적으로 변함
+     */
+    var G_ajaxHandler = function(){
+        var fHandler, oResponse, whtData, elTextBox;
+
+        for (var i = 0, size = arguments.length; i < size; i++) {
+            if ((typeof(arguments[i])).toLowerCase() == "function") {
+                fHandler = arguments[i];
+            } else if(arguments[i] instanceof $H ){
+            	whtData = arguments[i];
+            } else if(arguments[i].nodeType == 1){ // HTMLElement
+            	elTextBox = arguments[i];
+            }else {
+                oResponse = arguments[i];
+            }
+        }
+
+        if (oResponse == null) {
+            alert(GMSG.SERVER_MESSAGE.SERVER_ERROR);
+            return false;
+        }
+
+        var nResultCode = parseInt(oResponse.text(), 10);
+        switch (nResultCode) {
+            case GMSG.RESULT_CODE.ERROR:
+                alert(GMSG.SERVER_MESSAGE.ERROR);
+                break;
+            case GMSG.RESULT_CODE.SUCCESS:
+                if (fHandler) {fHandler.call();}
+                return;
+                break;
+            case GMSG.RESULT_CODE.OVERCOUNT:
+                alert(GMSG.SERVER_MESSAGE.OVERCOUNT[whtData.$('userFilter.blockType')][whtData.$('userFilter.item')]);
+                break;
+            case GMSG.RESULT_CODE.BLACKLIST:
+                alert(GMSG.SERVER_MESSAGE.BLACKLIST[whtData.$('userFilter.blockType')][whtData.$('userFilter.item')]);
+                break;
+            case GMSG.RESULT_CODE.WHITELIST:
+                alert(GMSG.SERVER_MESSAGE.WHITELIST[whtData.$('userFilter.blockType')][whtData.$('userFilter.item')]);
+                break;
+            case GMSG.RESULT_CODE.UNKNOWNLIST:
+                alert(GMSG.SERVER_MESSAGE.UNKNOWNLIST);
+                break;
+            case GMSG.RESULT_CODE.UNKNOWNITEM:
+                alert(GMSG.SERVER_MESSAGE.UNKNOWNITEM);
+                break;
+            case GMSG.RESULT_CODE.EMPTY:
+                alert(GMSG.SERVER_MESSAGE.EMPTY);
+                break;
+            case GMSG.RESULT_CODE.SELFID:
+                alert(GMSG.SERVER_MESSAGE.SELFID[whtData.$('userFilter.blockType')]);
+                break;
+            case GMSG.RESULT_CODE.NEIGHBORID:
+                alert(GMSG.SERVER_MESSAGE.NEIGHBORID[whtData.$('userFilter.blockType')]);
+                break;
+            case GMSG.RESULT_CODE.EACH_NEIGHBORID:
+                alert(GMSG.SERVER_MESSAGE.EACH_NEIGHBORID);
+                break;
+            case GMSG.RESULT_CODE.WAIT_BOTH_NEIGHBOR:
+                alert(GMSG.SERVER_MESSAGE.WAIT_BOTH_NEIGHBOR[whtData.$('userFilter.blockType')]);
+                break;
+            case GMSG.RESULT_CODE.INVALID_CONTENT_ID:
+                alert(GMSG.SERVER_MESSAGE.INVALID_CONTENT_ID);
+                break;
+        }
+        if(elTextBox){
+        	elTextBox.select();
+        }
+    };
+
+</script>
+<script type="text/javascript">
+var gsAdminURL = 'https://admin.blog.naver.com';
+var gsBlogURL = 'https://blog.naver.com';
+
+var blogId = 'todayisgood77' || 'todayisgood77';
+var isCommentReadOnly =false;
+var sCommentReadOnlyBlockSubmit = '죄송합니다. 블로그 댓글, 답글 서비스 점검 중에는 이용이 제한됩니다.';
+</script>
+<script type="text/javaScript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/CommentContentsManager-22c7c55_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/lcslog-f705898_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/util-eb5b6d2_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/CookieHolder-b65cc19_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/readonly-e558bd3_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/mylog/CommentReadOnlyNoticeModel-47b6493_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+	jQuery.noConflict();
+</script>
+</head>
+
+
+<body>
+<form id="searchFrm" name="searchFrm" action="/AdminCommentFilteredView.naver" method="post">
+<input type="hidden" name="paging.currentPage" value="1">
+<input type="hidden" name="blogId" value="todayisgood77">
+<input type="hidden" name="m">
+
+<div id="wrap">
+	
+    <h1 class="content-title"><span class="blind">환경설정 &gt; </span>차단된 글목록</h1>
+
+	<p class="top_desc_1">
+	키워드를 통해 등록이 차단된 댓글을 확인하고 삭제할 수 있습니다.<br>
+	차단된 댓글은 3개월간 보관됩니다.
+	</p>
+
+	<ul class="tab1">
+	<li class="on"><a href="#" class="_nclk(bas_bloc.reply)">댓글</a></li>
+	<li><a href="/GuestBookFilteredList.naver?blogId=todayisgood77" class="_nclk(bas_bloc.guest)">안부글</a></li>
+	</ul>
+
+	<div class="action2 restrictlist">
+		<div class="action2_r">
+			<span class="btn btn2"><button type="button" class="_btnSubmit _delete _commentRosButton" onclick="sendClickNlog('bas_bloc.rdel','');">삭제</button></span>
+		</div>
+	</div>
+
+	<table cellspacing="0" class="table3">
+	<colgroup><col class="col1">
+	<col class="col2">
+	<col>
+	<col class="col5">
+	</colgroup><thead>
+	<tr>
+	<th scope="col" class="check1"><input type="checkbox" class="input_check _chSelectAll _nclk(bas_bloc.rlistall)" title="전체선택"></th>
+	<th scope="col" class="l">작성자</th>
+	<th scope="col">내용</th>
+	<th scope="col">차단사유</th>
+	</tr>
+	</thead>
+	<tbody id="tableListById">
+
+	
+		
+		
+
+			
+			<tr class="f">
+			<td class="check1"><input type="checkbox" class="input_check _nclk(bas_bloc.rlistindi)" name="filteredNo" value="167976723_201_224272928835|892740538132857104|"></td>
+			<td>
+				<span class="nickname">브마캐자비</span>
+				<span class="blogid">osxmzkl7</span>
+
+                
+                    
+                        <span class="_writerNickname" style="display:none;">브마캐자비</span>
+                    
+                    
+                
+				<span class="_writerId" style="display:none;">osxmzkl7</span>
+			</td>
+			<td>
+                <a href="https://blog.naver.com/todayisgood77/224272928835" target="_blank" class="link">
+                    <span class="_titleContents"><b>[글] 수유동 요양원 해드림방문요양센터 안전한 공간, 믿을 수 있는</b></span>
+                </a>
+				<p class="desc1"><span class="hand _replyContents">꼬링꼬링님, 글 내용이 아까워서 한마디 남겨요...</span><span class="_replyRealContents" style="display:none;">꼬링꼬링님, 글 내용이 아까워서 한마디 남겨요. 
+
+요즘 네이버 AI는 '글자 수'보다 '사람 냄새'를 더 본대요. 
+
+상호작용 점수 안전하게 올리는 법인데, 사장님 블로그에 딱 필요해 보입니다. 👉 https://blog.naver.com/cplxpkokzkz/224277082229</span></p>
+				<p class="desc1">26.05.07. 09:36</p>
+			</td>
+			<td>스팸 필터 차단</td>
+			</tr>
+
+			
+			<tr>
+			<td class="check1"><input type="checkbox" class="input_check _nclk(bas_bloc.rlistindi)" name="filteredNo" value="167976723_201_224272915367|892349133132660755|"></td>
+			<td>
+				<span class="nickname">마캬브</span>
+				<span class="blogid">xiodjqlaz158</span>
+
+                
+                    
+                        <span class="_writerNickname" style="display:none;">마캬브</span>
+                    
+                    
+                
+				<span class="_writerId" style="display:none;">xiodjqlaz158</span>
+			</td>
+			<td>
+                <a href="https://blog.naver.com/todayisgood77/224272915367" target="_blank" class="link">
+                    <span class="_titleContents"><b>[글] 강동 요양원 맞춤프로그램강사협의회 믿고 맡기는 선택</b></span>
+                </a>
+				<p class="desc1"><span class="hand _replyContents">꼬링꼬링님, 글은 너무 좋은데... 혹시 영혼 없는...</span><span class="_replyRealContents" style="display:none;">꼬링꼬링님, 글은 너무 좋은데... 혹시 영혼 없는 '품앗이' 계속하고 계신 건 아니죠? 
+
+그거 요즘 어뷰징으로 걸리기 딱 좋대요. 안전하게 찐이웃 늘리는 방법 여기 정리되어 있으니 꼭 보세요. 👉 https://vo.la/iFCZOvV</span></p>
+				<p class="desc1">26.05.03. 04:21</p>
+			</td>
+			<td>스팸 필터 차단</td>
+			</tr>
+
+			
+			<tr>
+			<td class="check1"><input type="checkbox" class="input_check _nclk(bas_bloc.rlistindi)" name="filteredNo" value="167976723_201_224184805931|885308157457334284|"></td>
+			<td>
+				<span class="nickname">비케냐브</span>
+				<span class="blogid">xmmzkalpqi</span>
+
+                
+                    
+                        <span class="_writerNickname" style="display:none;">비케냐브</span>
+                    
+                    
+                
+				<span class="_writerId" style="display:none;">xmmzkalpqi</span>
+			</td>
+			<td>
+                <a href="https://blog.naver.com/todayisgood77/224184805931" target="_blank" class="link">
+                    <span class="_titleContents"><b>[글] 성수동요양원 서울효사랑요양병원 전문가가 운영하는 요양병원</b></span>
+                </a>
+				<p class="desc1"><span class="hand _replyContents">포스팅 잘 봤습니다! 근데 꼬링꼬링님, 혹시 블로...</span><span class="_replyRealContents" style="display:none;">포스팅 잘 봤습니다! 근데 꼬링꼬링님, 혹시 블로그 지수 확인해보셨나요? 
+
+열심히 하는데 방문자가 안 늘면 '죽은 이웃' 때문일 확률이 90%입니다. 저도 최근에 싹 정리하고 방문자 2배 늘었습니다. 
+
+안전하게 관리하는 법 확인해보세요. 👉 https://vo.la/22OKbwb</span></p>
+				<p class="desc1">26.02.16. 06:51</p>
+			</td>
+			<td>스팸 필터 차단</td>
+			</tr>
+
+			
+
+		
+	
+
+	</tbody>
+	</table>
+
+
+	<div class="action2">
+		<p class="action2_l"><input type="checkbox" class="input_check _chSelectAll _nclk(bas_bloc.rlistall2)"> <label>전체선택</label></p>
+		<div class="action2_r">
+			<span class="btn btn2"><button type="button" class="_btnSubmit _delete _commentRosButton" onclick="sendClickNlog('bas_bloc.rdel2','');">삭제</button></span>
+		</div>
+
+	</div>
+
+	<div class="paginate pp1">
+		<div class="paginate_re">
+				<strong>1</strong>
+</div>
+	</div>
+
+	<div class="tip1">
+		<dl>
+		<dt><img src="https://blogimgs.pstatic.net/nblog/admin50/h_tip.gif" alt="블로그 이용 Tip" width="92" height="16"></dt>
+		<dd><a href="https://blog.naver.com/blogpeople/150084398105" target="_blank">정상 엮인글이 스팸으로 잘못 차단되었다면?</a></dd>
+		</dl>
+		<p class="more"><a href="https://blog.naver.com/blogpeople/tag/%EC%8A%A4%ED%8C%B8%EC%B0%A8%EB%8B%A8" target="_blank">더 많은 안내보기</a></p>
+	</div>
+
+
+</div>
+</form>
+
+
+
+
+
+
+<div class="template" style="display:none;">
+
+	<div id="writeLayerById" class="reply_sublayer" style="width:92px;">
+		<!-- PNG Gradation -->
+			<div class="border_type2">
+				<!-- 콘텐트 -->
+				<div class="content2">
+					<ul class="ul_submnu">
+						<li><a href="#" class="_blockId">ID 차단</a></li>
+						<li><a href="#" class="_openBlog">블로그 보기</a></li>
+					</ul>
+				</div>
+				<!-- //콘텐트 -->
+			</div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="guestLayerById" class="reply_sublayer" style="width:102px;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type2">
+				<!-- 콘텐트 -->
+				<div class="content2">
+					<ul class="ul_submnu">
+						<li><a href="#" class="_searchBlogName">블로그명 검색</a></li>
+						<li><a href="#" class="_blockBlogName">블로그명 차단</a></li>
+					</ul>
+				</div>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="replyLayerById" class="reply_sublayer" style="width:288px; background: white;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type">
+				<!-- 콘텐트 -->
+				<h4 class="header"><b></b></h4>
+				<div class="content">
+					<div class="memo_disp">
+					</div>
+					<div class="btns">
+						<a href="#" class="_btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close_preview.gif" width="40" height="23" alt="닫기"></a>
+					</div>
+				</div>
+				<a href="#BtnCLose" class="closelayer _btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close2.gif" alt="닫기" width="15" height="14"></a>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="guestBookLayerById" class="reply_sublayer" style="width:288px; background: white;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type">
+				<!-- 콘텐트 -->
+				<div class="content">
+					<div class="memo_disp">
+					</div>
+					<div class="btns">
+						<a href="#" class="_btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close_preview.gif" width="40" height="23" alt="닫기"></a>
+					</div>
+				</div>
+				<a href="#BtnCLose" class="closelayer _btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close2.gif" alt="닫기" width="15" height="14"></a>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="bothBuddyInviteLayerById" class="reply_sublayer" style="width:288px; background: white;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type">
+				<!-- 콘텐트 -->
+				<div class="content">
+					<div class="memo_disp">
+					</div>
+					<div class="btns">
+						<a href="#" class="_btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close_preview.gif" width="40" height="23" alt="닫기"></a>
+					</div>
+				</div>
+				<a href="#BtnCLose" class="closelayer _btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close2.gif" alt="닫기" width="15" height="14"></a>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+</div>
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/nclk_v0.8.1-bdc5c05_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/nlog_click-5941a74_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/global/AdminNclickHandler-615c111_https.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+    jQuery.noConflict();
+</script>
+
+
+
+    <script src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/ntm/ntm-blog-web-c326aba_https.js"></script>
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/NtmBaLog-913861719_https.js" charset="UTF-8"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/Nlog2-489749992_https.js" charset="UTF-8"></script>
+
+
+<script>
+    var baParams = {};
+    // [BA] 공통
+    baParams.baUrl = "https://scv-blog.io.naver.com/jackpotlog/v1/logs";
+    baParams.baSceneId = 'blog_admin';
+    
+    baParams.baUserKey = '34d15dabde56e6927c3af1bb4922490d4646336559fe297fc97da596e9374f10';
+    baParams.trackingCode = '';
+    
+
+    // [BA] post_end, blog_home, category
+    
+    baParams.blogNo = '167976723';
+    
+
+    // [BA] post_end, comment
+    
+
+    // [BA] blog_home
+    
+    baParams.bRelationType = '0';
+    baParams.uRelationType = '0';
+    
+
+    // [BA] category
+    
+
+    // [BA] lnb
+    
+
+    // [BA] search
+    baParams.range = '';
+    baParams.searchText = '';
+
+    // [BA] admin
+    baParams.settingMenu = 'ENVIRONMENT_filtered_list';
+
+    // NLOG2
+    var nlog2Params = {};
+    nlog2Params.page_code = '2000004062';
+    nlog2Params.page_code_alias = 'blog_admin';
+    nlog2Params.stms_id = '100103361';
+
+    
+    nlog2Params.trackingCode = '';
+    
+
+    
+    nlog2Params.blogNo = 167976723;
+    
+
+    
+
+    
+    nlog2Params.bRelationType = 0;
+    nlog2Params.uRelationType = 0;
+    
+
+    
+
+    
+
+    nlog2Params.range = '';
+    nlog2Params.searchText = '';
+    nlog2Params.settingMenu = 'ENVIRONMENT_filtered_list';
+
+    MylogPageViewSender.init(baParams, nlog2Params);
+
+</script>
+
+
+
+</body></html>

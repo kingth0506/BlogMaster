@@ -1,0 +1,1585 @@
+<html><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Script-Type" content="text/javascript">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<title>열린이웃관리 : 네이버 블로그 관리</title>
+
+
+<link rel="stylesheet" type="text/css" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning/BuddyListManage-top-311721152_https.css" charset="UTF-8">
+
+
+<script async="" src="https://ntm.pstatic.net/ex/nlog-v2.js"></script><script async="" src="https://ntm.pstatic.net/ex/nlog.js"></script><script async="" src="https://ntm.pstatic.net/scripts/ntm_d26044233161.js"></script><script type="text/javascript">
+var needToOpenRssBuddyAddLayerOnLoadTime = 'false';
+
+
+var isRequestFromIPad = false;
+</script>
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/BuddyListManageAll-1099913516_https.js" charset="UTF-8"></script>
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+	jQuery.noConflict();
+</script>
+</head>
+
+<body>
+
+<div id="wrap" class="admin_buddymanage_wrap">
+
+    <h1 class="content-title"><span class="blind">환경설정 &gt; </span>내가 추가한 이웃</h1>
+	
+
+	<ul class="tab1 wblist">
+	<li class="on _nclk(bas_neimgr.onei)"><a href="/BuddyListManage.naver?blogId=todayisgood77">이웃목록</a></li>
+	<li class="_nclk(bas_neimgr.gnei)"><a href="/BuddyGroupManage.naver?blogId=todayisgood77">이웃그룹</a></li>
+	<li class="_nclk(bas_neimgr.snei)"><a href="/BuddyShortcutManage.naver?blogId=todayisgood77">이웃순서</a></li>
+	</ul>
+
+	<div style="position:relative">
+		<div class="ngb_search" style="top:-34px;">
+		<form id="frm_search" method="get" action="/BuddyListManage.naver">
+			<fieldset class="blind">이웃 검색</fieldset>
+			<input type="text" value="블로그명, 별명 검색" name="searchText" class="input_txt input_search _nclk(bas_neimgr.oopen)" style="width:143px">
+			<input type="image" class="btn_search _nclk(bas_neimgr.osearch)" src="https://blogimgs.pstatic.net/nblog/admin/buddy/btn_srch.gif" alt="검색">
+			<input type="hidden" name="blogId" value="todayisgood77">
+		</form>
+		</div>
+	</div>
+
+	
+
+	<div class="clear:both"></div>
+
+<form method="post" action="" name="frmProcess" id="buddyListManageForm">
+	<div class="action2 neighborlist">
+		<div class="action2_l">
+
+	
+	
+	
+			<span class="btn btn4"><button type="button" class="btn_movegroup _nclk(bas_neimgr.ogroup)" onclick="return false;">그룹이동</button></span>
+	
+
+			<span class="btn btn4"><button type="button" class="btn_alert _nclk(bas_neimgr.onew)" onclick="return false;">새글소식 설정</button></span>
+			<span class="btn btn4"><button type="button" class="btn_del _nclk(bas_neimgr.odel)" onclick="return false;">삭제</button></span>
+			<span class="neighbor_add2"><span class="btn btn4"><button type="button" onclick="return false;" id="addneighbor_top_btn" class="btn_addneighbor _nclk(bas_neimgr.orss)"><img src="https://blogimgs.pstatic.net/nblog/admin50/ico_rss.gif" width="8" height="8" alt="" class="button_img"> 열린이웃(RSS) 추가</button></span></span>
+		</div>
+		<div class="action2_r cmn_slt">
+			<span class="fl">정렬된 이웃 <strong>42</strong>명</span>
+			
+			<div class="selectbox-naked" id="buddysel_order">
+				<select class="selectbox-source _selectbox" id="sort_order_selectbox">
+					<option value="adddate" _nclk="bas_neimgr.osort1">이웃추가순</option>
+					<option value="nickname" _nclk="bas_neimgr.osort3">이웃별명순</option>
+					<option value="newpost" _nclk="bas_neimgr.osort4">업데이트순</option>
+				</select>
+				<div class="selectbox-box">
+					<span class="selectbox-label">이웃추가순</span>
+				</div>
+				<div class="selectbox-layer">
+					<ul class="selectbox-list">
+						<li class="selectbox-item-selected">선택된 항목</li>
+						<li class="selectbox-item-hovered">마우스 올라간 항목</li>
+						<li>이웃추가순</li>
+						<li>블로그명순</li>
+						<li>이웃별명순</li>
+					</ul>
+				</div>
+			</div>
+			
+		</div>
+	</div>
+
+	<table cellspacing="0" summary="이웃관리 목록" class="tbl_buddymanage">
+	<caption>이웃관리 목록</caption>
+	<colgroup>
+    <col width="34"><col width="88"><col width="88"><col><col width="97"><col width="62"><col width="72">
+	</colgroup>
+	
+	<thead>
+	<tr>
+		<th class="checkwrap _nclk(bas_neimgr.olistall)"><input type="checkbox" class="input_check checkAll"></th>
+		<th class="groupwrap select_input">
+
+	
+	
+	
+	
+			<div class="selectbox-naked" id="buddysel_groupall">
+				<select class="selectbox-source group_selectbox _nclk(bas_neimgr.olgroup)">
+					<option value="">그룹전체</option>
+		
+					<option class="ellipsis1" value="1">새 그룹</option>
+		
+				</select>
+				<div class="selectbox-box">
+					<span class="selectbox-label"></span>
+				</div>
+				<div class="selectbox-layer">
+					<ul class="selectbox-list"></ul>
+				</div>
+			</div>
+	
+
+		</th>
+		<th class="buddy_type select_input">
+			<div class="selectbox-naked _nclk(bas_neimgr.olnei)" id="buddysel_buudyall">
+				<select class="selectbox-source">
+					<option value="">이웃전체</option>
+					<option value="0" class="sel_buddy">이웃</option>
+					<option value="1" class="sel_both">서로이웃</option>
+					<option value="3" class="sel_rss">이웃(RSS)</option>
+				</select>
+				<div class="selectbox-box">
+					<span class="selectbox-label"></span>
+				</div>
+				<div class="selectbox-layer">
+					<ul class="selectbox-list"></ul>
+				</div>
+			</div>
+		</th>
+		<th class="buddy">이웃</th>
+		<th class="select_input">
+			<div class="selectbox-naked _nclk(bas_neimgr.olnew)" id="buddysel_alertall">
+				<select class="selectbox-source ">
+					<option value="" class="selectbox-invisible">새글소식전체</option>
+					<option value="">새글소식전체</option>
+					<option value="true">새글소식 ON</option>
+					<option value="false">새글소식 OFF</option>
+				</select>
+				<div class="selectbox-box right">
+					<span class="selectbox-label">새글소식</span>
+				</div>
+				<div class="selectbox-layer" style="width:93px;">
+					<ul class="selectbox-list"></ul>
+				</div>
+			</div>
+		</th>
+
+        <th style="padding-left:4px">최근 글</th>
+		<th>이웃추가일</th>
+	</tr>
+	</thead>
+	<tbody>
+
+
+
+	<tr class="first">
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="2532418" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">GRIDA ON</span><span class="bar">|</span><a href="https://blog.naver.com/kk2pro0523" target="_blank">디지털드로잉 강사 김미선 : 그리다북 굿즈 강의&amp;협회</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 2532418 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="166624905" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">고래홈클린</span><span class="bar">|</span><a href="https://blog.naver.com/gorae-home" target="_blank">줄눈 청소 나노코팅 탄성 고래홈클린</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 166624905 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="161490930" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">수상한텔레콤</span><span class="bar">|</span><a href="https://blog.naver.com/susanghantel" target="_blank">수상한텔레콤의 IT 이야기</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 161490930 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="149556214" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">망구</span><span class="bar">|</span><a href="https://blog.naver.com/poll3063" target="_blank">망구의 일상</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 149556214 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>22.10.20.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="106366532" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">FM컴퍼니경호실장</span><span class="bar">|</span><a href="https://blog.naver.com/fmcompany91" target="_blank">경호 전문기업 (주)에프엠컴퍼니</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 106366532 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.19.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="165062406" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">오가예 의원</span><span class="bar">|</span><a href="https://blog.naver.com/ogyclinic" target="_blank">오가예 의원</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 165062406 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>25.08.21.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="168202789" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">Reve10</span><span class="bar">|</span><a href="https://blog.naver.com/reve-10" target="_blank">Reve10</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 168202789 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.16.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="168162146" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">창원신사치과</span><span class="bar">|</span><a href="https://blog.naver.com/sinsaoms" target="_blank">신사구강악안면외과의원</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 168162146 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.05.22.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="119547626" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">꽃꼬미</span><span class="bar">|</span><a href="https://blog.naver.com/flower-bear_j" target="_blank">노는게 좋아 꽃꼬미일상</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 119547626 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="107397795" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">아사이</span><span class="bar">|</span><a href="https://blog.naver.com/doem025" target="_blank">세상의 모든이야기</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 107397795 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.17.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="168407825" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">반짝클린</span><span class="bar">|</span><a href="https://blog.naver.com/qkswkr6647" target="_blank">부산입주청소전문 반짝클린</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 168407825 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="105567863" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">깨끗한마을 헬코</span><span class="bar">|</span><a href="https://blog.naver.com/cleartown1004" target="_blank">헬프코리아 01092248575</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 105567863 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.05.11.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="149779785" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">포스비브테크</span><span class="bar">|</span><a href="https://blog.naver.com/phosebibtec" target="_blank">포스비브테크 블로그</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 149779785 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.19.</td>
+		<td>26.06.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="51804764" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">애뜨놀먹</span><span class="bar">|</span><a href="https://blog.naver.com/leejungin89" target="_blank">-</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 51804764 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.02.</td>
+		<td>26.06.08.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="136087870" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">배관관리사</span><span class="bar">|</span><a href="https://blog.naver.com/magic-life3800" target="_blank">깔끔배관</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 136087870 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.06.08.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="167619941" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">아쿠아랑</span><span class="bar">|</span><a href="https://blog.naver.com/aquarang_official" target="_blank">카페 아쿠아랑 | 의정부 이색 힐링 카페 공식 블로그</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 167619941 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.05.26.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="25352449" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">medi_official</span><span class="bar">|</span><a href="https://blog.naver.com/medi_official" target="_blank">메디 다리 건강 연구소</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 25352449 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.19.</td>
+		<td>26.05.26.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="109241770" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">라온 회계사무소</span><span class="bar">|</span><a href="https://blog.naver.com/laon_accounting_firm" target="_blank">라온 장기요양 전문회계</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 109241770 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.04.</td>
+		<td>26.05.26.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="36978523" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">본정형외과의원</span><span class="bar">|</span><a href="https://blog.naver.com/redbear1111" target="_blank">본정형외과의원</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 36978523 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.05.26.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="122270735" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">매일 책읽는 남자</span><span class="bar">|</span><a href="https://blog.naver.com/02dongyoon02" target="_blank">그 남자의 서재</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 122270735 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.19.</td>
+		<td>26.05.16.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="168400280" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">Press Gym</span><span class="bar">|</span><a href="https://blog.naver.com/codelegend" target="_blank">프레스짐</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 168400280 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.05.16.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="146394591" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+			<td class="type"><span class="buddy">이웃</span></td>
+		
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">EZ SYSTEM 이지시스템</span><span class="bar">|</span><a href="https://blog.naver.com/sis305" target="_blank">EZ SYSTEM (이지시스템)</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 146394591 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.21.</td>
+		<td>26.05.13.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="163554033" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">박사</span><span class="bar">|</span><a href="https://blog.naver.com/glassesbaksa" target="_blank">안경박사 신림 난곡점</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 163554033 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.21.</td>
+		<td>26.05.08.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="135549288" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+			<td class="type"><span class="buddy">이웃</span></td>
+		
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">머슬홈케어</span><span class="bar">|</span><a href="https://blog.naver.com/musclehomecare" target="_blank">광주에어컨청소 머슬홈케어</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 135549288 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.05.18.</td>
+		<td>26.05.08.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="23844091" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">Healingfit Pilates</span><span class="bar">|</span><a href="https://blog.naver.com/hoho5222" target="_blank">힐링핏 필라테스&amp;요가 명일본점</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 23844091 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.05.05.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="164892749" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">힘찬의료기</span><span class="bar">|</span><a href="https://blog.naver.com/hc-care" target="_blank">힘찬의료기 복지용구</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 164892749 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.04.</td>
+		<td>26.04.20.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="166557552" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">veteran_hear</span><span class="bar">|</span><a href="https://blog.naver.com/veteran_hear" target="_blank">베테랑 보청기</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 166557552 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.04.20.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="165452060" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">따손방문요양센터</span><span class="bar">|</span><a href="https://blog.naver.com/ddasoncare" target="_blank">따손방문요양센터</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 165452060 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.05.26.</td>
+		<td>26.04.20.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="167552315" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">영화의료기</span><span class="bar">|</span><a href="https://blog.naver.com/yhmedical_blog" target="_blank">yhmedical_blog님의 블로그</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 167552315 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.08.</td>
+		<td>26.04.04.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="60279612" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">시월에</span><span class="bar">|</span><a href="https://blog.naver.com/jjhyks0407" target="_blank">행복한 Meritz 파트너스 010.2253.0212</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 60279612 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.20.</td>
+		<td>26.04.04.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="73103906" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">향줌마</span><span class="bar">|</span><a href="https://blog.naver.com/zmyz20000" target="_blank">브라보줌마라이프</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 73103906 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.04.22.</td>
+		<td>26.03.25.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="153983730" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">두비전공식</span><span class="bar">|</span><a href="https://blog.naver.com/dovision_" target="_blank">두비전 공식</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 153983730 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.19.</td>
+		<td>26.03.25.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="18663532" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">에코보청기 노원점</span><span class="bar">|</span><a href="https://blog.naver.com/0118973098" target="_blank">에코보청기 노원점</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 18663532 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.03.25.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="167335223" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">금나비</span><span class="bar">|</span><a href="https://blog.naver.com/nabicenter" target="_blank">금천나비재가복지센터</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 167335223 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.03.18.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="156510613" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+			<td class="type"><span class="buddy">이웃</span></td>
+		
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">KS연합건설</span><span class="bar">|</span><a href="https://blog.naver.com/ksyounhap" target="_blank">옥상방수스틸방수시공업체(주)KS연합건설</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 156510613 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.03.16.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="167483299" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">에이블</span><span class="bar">|</span><a href="https://blog.naver.com/ablemedipartners" target="_blank">에비블메디파트너스</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 167483299 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.03.</td>
+		<td>26.03.12.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="167183497" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">한국중독예방센터</span><span class="bar">|</span><a href="https://blog.naver.com/koapc_official" target="_blank">한국중독예방센터</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 167183497 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.03.12.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="166954858" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">공장주공인중개사무소</span><span class="bar">|</span><a href="https://blog.naver.com/gongzangju" target="_blank">공장주공인중개사무소(☎️031-8043-8866)</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 166954858 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.02.23.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="60082131" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">햋빛</span><span class="bar">|</span><a href="https://blog.naver.com/sxzsabsyuz" target="_blank">햋빛은 뜨거워</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 60082131 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.02.20.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="164931527" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+			<td class="type"><span class="buddy">이웃</span></td>
+		
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">조대표</span><span class="bar">|</span><a href="https://blog.naver.com/jejuthankyou" target="_blank">건물관리대행 고맙수다</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 164931527 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.12.</td>
+		<td>26.02.20.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="151105702" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+			<td class="type"><span class="buddy">이웃</span></td>
+		
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">sjs770820</span><span class="bar">|</span><a href="https://blog.naver.com/sjs770820" target="_blank">코웨이렌탈 서지안국장</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 151105702 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.22.</td>
+		<td>26.02.19.</td>
+	</tr>
+
+	<tr>
+		<td class="checkwrap"><input type="checkbox" class="list_checkbox input_check _nclk(bas_neimgr.olistindi)" name="buddyBlogNo" value="164511974" alt="1"></td>
+		<td class="groupwrap"><div class="ellipsis1">새 그룹</div></td>
+
+	
+		
+		
+			<td class="type"><span class="both">서로이웃</span></td>
+		
+		
+		
+	
+		<td class="buddy"><div class="ellipsis2"><span class="nickname">라파케어</span><span class="bar">|</span><a href="https://blog.naver.com/raphadevice" target="_blank">라파케어</a></div></td>
+
+	
+		
+		<td><a href="#" class="alert on 164511974 _returnFalse" onclick="sendClickNlog('bas_neimgr.oonoff','');"><span class="blind">ON</span></a></td>
+		
+		
+	
+
+
+		<td>26.06.23.</td>
+		<td>26.02.19.</td>
+	</tr>
+
+	</tbody>
+	</table>
+
+	<div class="action2">
+		<div class="action2_l">
+			<span class="all_select _nclk(bas_neimgr.olistall2)"><input type="checkbox" class="input_check checkAll"> <label>전체선택</label></span>
+
+	
+	
+	
+			<span class="btn btn4"><button type="button" class="btn_movegroup _nclk(bas_neimgr.ogroup2)" onclick="return false;">그룹이동</button></span>
+	
+
+			<span class="btn btn4"><button type="button" class="btn_alert _nclk(bas_neimgr.onew2)">새글소식 설정</button></span>
+			<span class="btn btn4"><button type="button" class="btn_del _nclk(bas_neimgr.odel2)">삭제</button></span>
+			<span class="neighbor_add2"><span class="btn btn4"><button type="button" onclick="return false;" class="btn_addneighbor _nclk(bas_neimgr.orss2)"><img src="https://blogimgs.pstatic.net/nblog/admin50/ico_rss.gif" width="8" height="8" alt="" class="button_img"> 열린이웃(RSS) 추가</button></span></span>
+		</div>
+	</div>
+
+	<div class="paginate pp1">
+        <div class="paginate_re">
+				<strong>1</strong>
+</div>
+		<br>
+		<!-- blogtag:paging type="5"/-->
+	</div>
+
+	<div class="tip1">
+		<dl>
+		<dt><img src="https://blogimgs.pstatic.net/nblog/admin50/h_tip.gif" alt="블로그 이용 Tip" width="92" height="16"></dt>
+		<dd><a href="https://blog.naver.com/blogpeople/150083247322" target="_blank">이웃과 서로이웃은 무엇인가요?</a></dd>
+		<dd><a href="https://blog.naver.com/blogpeople/220992653947" target="_blank">저는 그 사람을 이웃으로, 그 사람은 저를 이웃으로 추가했는데 서로이웃이 아니에요.</a></dd>
+		<dd><a href="https://blog.naver.com/blogpeople/220492004051" target="_blank">이웃, 서로이웃을 삭제하면 어떻게 되나요?</a></dd>
+		<dd><a href="https://blog.naver.com/blogpeople/150083772913" target="_blank">서로이웃을 이웃으로 변경하고 싶으면 어떻게 하나요?</a></dd>
+		</dl>
+		<p class="more"><a href="https://blog.naver.com/blogpeople/tag/%EC%9D%B4%EC%9B%83" target="_blank">더 많은 안내보기</a></p>
+	</div>
+
+<input type="hidden" name="blogId" value="todayisgood77">
+<input type="hidden" name="on" id="frmOnOff">
+<input type="hidden" name="force" id="frmDelete">
+<input type="hidden" name="groupId" id="frmMoveGroup">
+</form>
+
+</div>
+<form method="get" action="" name="page_filter">
+	<input type="hidden" name="blogId" value="todayisgood77">
+	<input type="hidden" name="relation" id="frmBuddy" value="">
+	<input type="hidden" name="notify" id="frmAlert" value="">
+	<input type="hidden" name="groupId" id="frmGroup" value="">
+	<input type="hidden" name="currentPage" id="frmPaginate" value="1">
+	<input type="hidden" name="searchText" value="">
+	<input type="hidden" name="orderType" id="frmOrderType" value="">
+</form>
+
+<div id="dropdown" class="groupselectlayer tpl_dropdown tpl" style="width:124px;">
+	<ul style="height:200px;"></ul>
+	<ul class="newGroup"></ul>
+</div>
+
+<div id="tpl_layer_alert" class="layer_popup2" style="width:145px;display:none">
+	<div class="layer_content_2">
+		<!-- Layer Content -->
+		<div class="tpl_content">
+			<p class="pr_9">선택한 이웃의 새글을<br>받아볼 수 있습니다.</p>
+			<div class="btn_4">
+				<a href="" class="on" onclick="oEventForm.submit('setAlert',true);return false;">
+					<span class="blind">ON</span>
+				</a>
+				<a href="" class="off" onclick="oEventForm.submit('setAlert',false);return false;">
+					<span class="blind">OFF</span>
+				</a>
+			</div>
+		</div>
+		<a href="#" class="ly_clse4 btn_alert" onclick="return false;">닫기</a>
+
+
+
+
+
+
+
+
+
+
+
+
+	</div>
+</div>
+
+
+<div id="tpl_layer_addneighbor" class="layer_popup tpl" style="width:382px; height:230px; top:100px; left:700px;display:none">
+	<div class="layer_content">
+		<!-- Layer Content -->
+			<h4 class="layer_header">열린 이웃 추가</h4>
+			<div class="tpl_content">
+				<form method="post" name="add_neighbor" id="frmAddBuddy" target="addBuddy">
+				<input type="hidden" name="blogId" value="todayisgood77">
+				<input type="hidden" name="groupId" id="frmGroupId" value="">
+				<fieldset>
+					<legend>열린 이웃 추가</legend>
+				    <p class="pr_4">다음, 티스토리, 이글루스등 다양한 블로그를 추가해보세요.</p>
+				    <table cellspacing="0" class="opt2">
+				    <tbody><tr>
+				        <th>
+							<select name="option" style="width:110px;" onchange="oEventForm.setInputAddress(this.value)" id="frmOption">
+								<option value="direct">주소 직접입력</option>
+								<option value="naver">네이버 블로그</option>
+								<option value="daum">다음 블로그</option>
+								<option value="tistory">티스토리</option>
+								<option value="egloos">이글루스</option>
+								<option value="paran">파란 블로그</option>
+								<option value="cyworld">싸이월드 블로그</option>
+								<option value="opml">OPML 파일등록</option>
+							</select>
+						</th>
+				        <td class="input_address"><input name="url" value="원하시는 블로그, RSS 주소를 입력해 주세요" class="txt_2" type="text" onfocus="this.value=this.onfocus='';"></td>
+				    </tr>
+				    </tbody></table>
+				    <div id="add_neighbor_group">
+					    <p class="pr_5">추가한 이웃을 위치시킬 그룹을 선택해주세요.</p>
+					    <table cellspacing="0" class="opt2">
+					    <tbody><tr>
+					        <th>
+								<select name="groupId_select" style="width:110px;" class="group_selectbox_add_neighbor"></select>
+							</th>
+					        <td class="group_inputbox_add_neighbor" style="display:none;">
+								<input id="addBuddy_groupName" value="" class="txt_3" type="text">&nbsp;
+								<input id="addBuddy_isOpen" name="addBuddy_open" class="input_radio addBuddy_open" value="true" type="radio" checked="checked">
+								<label for="p_16_1_1">공개</label>
+								<input name="addBuddy_open" id="p_16_1_2" class="input_radio addBuddy_open" value="false" type="radio">
+								<label for="p_16_1_2">비공개</label>
+					        </td>
+					    </tr>
+					    </tbody></table>
+				    </div>
+					<div class="btn_2" style="margin-top:4px;">
+						<a href="" id="submit_addBuddy" onclick="return false;"><img src="https://ssl.pstatic.net/static/common/btn/btn_add.gif" alt="추가" width="38" height="21"></a>
+						<a href="" onclick="oTooltip._layer_addneighbor.hide();return false;"><img src="https://ssl.pstatic.net/static/common/btn/btn_cancel2.gif" alt="취소" width="38" height="21"></a>
+					</div>
+				</fieldset>
+				</form>
+			</div>
+			<div id="layerPop" class="layer_pop" style="display:none">
+				<strong>더 이상 이웃을 추가할 수 없습니다.</strong>
+				<p>
+				이웃추가 기능을 이용한 스팸 피해를 방지하기 위해<br>
+				1일 동안 추가할 수 있는 이웃 수를 제한하고 있습니다.
+				</p>
+				<a href="http://help.naver.com/ops/step2/faq.nhn?faqId=16095&amp;preview=true" target="_blank" class="arrow">이웃추가 수 제한 자세히 보기</a>
+				<a href="#" class="close"><img src="https://blogimgs.pstatic.net/nblog/mylog/buddy_guide/btn_close.gif" width="19" height="19" border="0" alt="닫기" onclick="closeLayer();"></a>
+			</div>
+    </div>
+</div>
+
+<div id="tpl_layer_del" class="layer_popup tpl" style="width:300px;">
+	<div class="layer_content">
+		<!-- Layer Content -->
+			<h4 class="layer_header">이웃 삭제</h4>
+			<div class="tpl_content">
+			    <fieldset>
+					<legend>이웃 삭제</legend>
+			        <dl class="opt1">
+						<dt><strong>선택한 이웃을 삭제하시겠습니까?</strong><span class="t">선택한 이웃에 서로이웃이 포함되어 있을 경우,</span></dt>
+						<dd>
+							<input name="input_radio" type="radio" id="delete_all" class="input_radio" value="" checked="">
+							<label for="delete_all">이웃과 서로이웃을 모두 삭제합니다.</label>
+						</dd>
+						<dd>
+							<input name="input_radio" type="radio" id="change_neighbor" class="input_radio" value="">
+							<label for="change_neighbor">서로이웃은 이웃으로 관계만 변경합니다.</label>
+						</dd>
+					</dl>
+					<div class="btn_2">
+						<input name="" onclick="oEventForm.submit('del');" type="image" src="https://ssl.pstatic.net/static/common/btn/btn_confirm2.gif" alt="확인">
+						<a href="" onclick="oTooltip._layer_del.hide();return false;"><img src="https://ssl.pstatic.net/static/common/btn/btn_cancel2.gif" alt="취소" width="38" height="21"></a>
+					</div>
+			    </fieldset>
+			</div>
+			<a href="#" class="ly_clse2 btn_del" onclick="return false;">닫기</a>
+    </div>
+	<span class="shadow shadow1"></span><span class="shadow shadow2"></span><span class="shadow shadow3"></span>
+</div>
+<!-- http://bts.nhncorp.com/nhnbts/browse/BLOGSUS-20205 관련해서
+하단에 공백 주기위해서 <br>태그 추가 !!! -->
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
+
+<div id="tpl_opml" class="tpl">
+	<input class="file" type="file" name="buddyOPMLFile">
+</div>
+
+<div id="tpl_newgroup" class="tpl">
+	<form name="" action="" onsubmit="return false;">
+    <input type="radio" name="group_sel_new" id="group_sel_1" class="chkb" checked="checked"><label for="group_sel_1">공개</label> <input type="radio" name="group_sel_new" id="group_sel_2" class="chkb"><label for="group_sel_2">비공개</label><br>
+    <input type="text" name="" value="그룹명을 써주세요" class="chkb_txt" id="newgroupInput" onfocus="this.value=this.onfocus=''" onkeydown="if(event.keyCode===13){oEventForm.makeGroup()};"><br>
+    <a href="" onclick="oEventForm.makeGroup();return false;"><img src="https://blogimgs.pstatic.net/nblog/admin/buddy/btn_s_ok.gif" width="30" height="16" alt="확인"></a> <a href="" onclick="oEventForm.toggleNewGroupBtn();return false;"><img src="https://blogimgs.pstatic.net/nblog/admin/buddy/btn_s_cancel.gif" width="30" height="16" alt="취소"></a>
+    </form>
+</div>
+<div id="tpl_group" class="tpl">
+	<li><a href="" onclick="return false;" class="group {=groupId}">{=groupName} {=lock}</a></li>
+</div>
+<div id="tpl_newgroup_node" class="tpl">
+	<li class="newgroup">
+		<a onclick="return false;" class="make newgroup_btn" href="">새 그룹 만들기</a>
+	</li>
+</div>
+
+<script type="text/javascript">
+var gsBlogId = 'todayisgood77';
+var oGroupList = {"isSuccess":true,"result":[{"id":1,"type":1,"name":"새 그룹","open":true,"listOrder":1}],"totalCount":1,"errorMsg":"","errorCode":""};
+</script>
+
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/AdminBottomCommon-477111966_https.js" charset="UTF-8"></script>
+<script type="text/javascript">
+var g_ssc = "blog.admin";
+var ccsrv="cc.naver.com";
+var nclk_evt = 3;
+new InstallBlogAppPush();
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+    jQuery.noConflict();
+</script>
+
+
+
+    <script src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/ntm/ntm-blog-web-c326aba_https.js"></script>
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/NtmBaLog-913861719_https.js" charset="UTF-8"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/Nlog2-489749992_https.js" charset="UTF-8"></script>
+
+
+<script>
+    var baParams = {};
+    // [BA] 공통
+    baParams.baUrl = "https://scv-blog.io.naver.com/jackpotlog/v1/logs";
+    baParams.baSceneId = 'blog_admin';
+    
+    baParams.baUserKey = '34d15dabde56e6927c3af1bb4922490d4646336559fe297fc97da596e9374f10';
+    baParams.trackingCode = '';
+    
+
+    // [BA] post_end, blog_home, category
+    
+    baParams.blogNo = '167976723';
+    
+
+    // [BA] post_end, comment
+    
+
+    // [BA] blog_home
+    
+    baParams.bRelationType = '0';
+    baParams.uRelationType = '0';
+    
+
+    // [BA] category
+    
+
+    // [BA] lnb
+    
+
+    // [BA] search
+    baParams.range = '';
+    baParams.searchText = '';
+
+    // [BA] admin
+    baParams.settingMenu = 'ENVIRONMENT_my_buddy_list';
+
+    // NLOG2
+    var nlog2Params = {};
+    nlog2Params.page_code = '2000004062';
+    nlog2Params.page_code_alias = 'blog_admin';
+    nlog2Params.stms_id = '100131450';
+
+    
+    nlog2Params.trackingCode = '';
+    
+
+    
+    nlog2Params.blogNo = 167976723;
+    
+
+    
+
+    
+    nlog2Params.bRelationType = 0;
+    nlog2Params.uRelationType = 0;
+    
+
+    
+
+    
+
+    nlog2Params.range = '';
+    nlog2Params.searchText = '';
+    nlog2Params.settingMenu = 'ENVIRONMENT_my_buddy_list';
+
+    MylogPageViewSender.init(baParams, nlog2Params);
+
+</script>
+
+
+</body></html>

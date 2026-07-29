@@ -1,0 +1,3215 @@
+<html lang="ko" data-useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"><head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta http-equiv="Content-Script-Type" content="text/javascript">
+    <meta http-equiv="Content-Style-Type" content="text/css">
+    <title>꼬링이 : 네이버 블로그</title>
+    <link rel="stylesheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//css/admin/blogadmin-c8b3588_https.css" type="text/css">
+    <script type="text/javascript" language="javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jindo/1.5.2/jindo.all-4ca233c_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" language="javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jindo/agent.ie11/agent.ie11-6694cec_https.js"></script>
+    <script type="text/javascript" language="javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/jindo/jindo.Component-c10fdb8_https.js"></script>
+    <script type="text/javascript" language="javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/jindo/jindo.UIComponent-36c0ca7_https.js"></script>
+    <script type="text/javascript" language="javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/jindo/jindo.Timer-30c3e89_https.js"></script>
+    <script type="text/javascript" language="javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/jindo/jindo.LayerManager-aae3a13_https.js"></script>
+
+    <script type="text/javascript">
+        var applyResizeContentWidth = true;
+        var gsPaperId = 'todayisgood77';
+        var gsPaperId = 'todayisgood77';
+        var gsRedirectMenuType = '3';
+        var gsRedirectCode = 'CommentManage';
+        var blogURL = 'https://blog.naver.com';
+        var isJeagleDebug = false;
+        var bIsRemocon = false || document.location.href.indexOf("PostPreview.nhn") > -1 || document.location.href.indexOf("PostPreview.naver") > -1;
+        var blogId = 'todayisgood77' || 'todayisgood77';  
+        var uploadURL = "https://upload.blog.naver.com";
+    </script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/LocalStorage-f4df393_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/common-11acda0_https.js"></script>
+    <script type="text/javascript">var LH = new LH_create(); window.onload = LH_exec;</script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/util-eb5b6d2_https.js"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/EasyMakeBlog-586760072_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/AdminMain-e55ade5_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/AdminSkinPreviewController-cb428b7_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/AdminBlogMarket-582d983_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/util/TripleSRequester-e0db8c4_https.js" charset="UTF-8"></script>
+    <script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+    <script type="text/javascript">
+        jQuery.noConflict();
+    </script>
+    <script type="text/javascript">
+        // iframe의 NTM 로그에 접근
+        function sendClickNlogToIframe(clickArea, nsc) {
+            try {
+                // 1. iframe에서 노출된 함수가 있으면 우선 사용
+                if (window.iframeSendClickNlog) {
+                    window.iframeSendClickNlog(clickArea, nsc);
+                    return;
+                }
+
+                // 2. iframe이 존재하는지 확인하고 직접 접근
+                var iframe = document.getElementById('papermain') || document.getElementById('statmain');
+                if (iframe && iframe.contentWindow) {
+                    // iframe 내부의 NTM 로그 함수 호출
+                    if (iframe.contentWindow.sendClickNlog) {
+                        iframe.contentWindow.sendClickNlog(clickArea, nsc);
+                        return;
+                    }
+                    // iframe 내부의 ntm_blog_web 객체에 직접 접근
+                    if (iframe.contentWindow.ntm_blog_web && iframe.contentWindow.ntm_blog_web.push) {
+                        iframe.contentWindow.ntm_blog_web.push({
+                            event: 'blog-be-click',
+                            click_nsc: nsc || '',
+                            click_area: clickArea
+                        });
+                        return;
+                    }
+                }
+
+                // 3. fallback: 현재 윈도우에서 시도
+                if (window.ntm_blog_web && window.ntm_blog_web.push) {
+                    window.ntm_blog_web.push({
+                        event: 'blog-be-click',
+                        click_nsc: nsc || '',
+                        click_area: clickArea
+                    });
+                }
+            } catch (e) {}
+        }
+
+        // 통계가 아닐 때만 오버라이드
+        
+            window.addEventListener('load', function() {
+                window.sendClickNlog = sendClickNlogToIframe;
+            });
+        
+    </script>
+<script type="text/javascript" charset="utf-8" src="https://ssl.pstatic.net/static.gn/templates/gnb_utf8.nhn?20260623"></script><style id="gnb_style" type="text/css">@charset "UTF-8";
+/* NTS UIT Development Office YJH 140717 */
+a.gnb_my, .gnb_icon, #gnb .gnb_my_interface, .gnb_my_li .gnb_my_content .gnb_membership, #gnb .gnb_ico_num .gnb_ico_new, #gnb .gnb_ico_num .gnb_ico_new .gnb_count, .gnb_lst .ico_arrow, a.gnb_my .filter_mask, .gnb_my_lyr, .gnb_my_li .gnb_my_content .gnb_mask, .gnb_my_li .gnb_my_content .gnb_edit_lst li, .gnb_notice_li .gnb_notice_lyr, .gnb_notice_li .svc_list .gnb_ico_mail, .gnb_notice_li .svc_list .gnb_btn_remove span, .gnb_notice_li .svc_list .gnb_btn_remove i, .gnb_notice_li .gnb_error .gnb_ico_error, .gnb_ly_alert .gnb_btn_close i, .gnb_first_visit, .gnb_search_box, .gnb_search_box .gnb_del_txt, .gnb_svc_more .gnb_svc_lstwrp li.gnb_event em.ic_gnb_new, .gnb_svc_more .svc_btnwrp button { background: url(https://ssl.pstatic.net/static/common/gnb/one/sp_gnb_v16.png?v=202307) no-repeat -999px -999px;}
+.gnb_favorite_area, .gnb_search_area, .gnb_banner, .gnb_linkwrp{background:url(https://ssl.pstatic.net/static/common/gnb/2014/bg_svclyr2_v2.png) no-repeat -999px -999px}
+#gnb .gnb_my_li .gnb_my_community a, .gnb_notice_li .gnb_notice_all, a.gnb_service_all, .gnb_svc_more .svc_btns{display:block;height:38px;border-top:1px solid #ebebeb;background-color:#f8f8f8;text-align:center;font-weight:bold;text-decoration:none;letter-spacing:-1px;line-height:38px}
+#gnb .gnb_my_li .gnb_my_community a:visited, .gnb_notice_li .gnb_notice_all:visited, a.gnb_service_all:visited, .gnb_svc_more .svc_btns:visited{color:#444}
+.gnb_login_li, .gnb_my_li, .gnb_notice_li, .gnb_talk_li, .mail_li, .gnb_service_li{float:left;margin-right:2px;overflow:visible}
+.gnb_login_li a, .gnb_my_li a, .gnb_notice_li a, .gnb_talk_li a, .mail_li a, .gnb_service_li a{position:relative;z-index:100;}
+a.gnb_my, .gnb_icon{position:relative}
+#gnb{position:relative;z-index:2147483646;font-family:'나눔고딕',NanumGothic,'돋움',Dotum,'Apple SD Gothic Neo',Helvetica,Sans-serif !important;color:#444;font-size:12px;letter-spacing:0 !important;line-height:normal !important;text-align:left !important}
+#gnb div, #gnb p, #gnb span, #gnb em, #gnb strong, #gnb h1, #gnb h2, #gnb h3, #gnb h4, #gnb h5, #gnb h6, #gnb ul, #gnb ol, #gnb li, #gnb dl, #gnb dt, #gnb dd, #gnb table, #gnb th, #gnb td, #gnb form, #gnb fieldset, #gnb legend, #gnb input, #gnb textarea, #gnb button, #gnb label{font-family:'나눔고딕',NanumGothic,'돋움',Dotum,'Apple SD Gothic Neo',Helvetica,Sans-serif !important}
+#gnb a, #gnb label, #gnb button{cursor:pointer}
+#gnb a, #gnb a:visited, #gnb a:active, #gnb a:focus{color:#444}
+#gnb a:hover{color:#444;text-decoration:underline;vertical-align: baseline;}
+#gnb input::-ms-clear{display:none}
+#gnb em{font-style:normal}
+#gnb ul{list-style:none}
+#gnb .blind{display:block;overflow:hidden;position:absolute;top:-1000em;left:0;width:1px;height:1px;margin:0;padding:0;font-size:0;line-height:0}
+#gnb .gnb_my_membership{padding: 0;display: block;width: 64px;height: 16px;background: url(https://ssl.pstatic.net/static/common/gnb/one/ico_gnb_membership.png) no-repeat; background-size: 64px 16px;margin: 0;}
+#gnb .gnb_my_interface{padding:5px;position:absolute;top:12px;right:8px;display:block;width:17px;height:16px;background-position:-90px 5px}
+#gnb .gnb_my_interface:hover{background-position:-90px -20px}
+#gnb .gnb_my_interface:focus{background-position:-90px -20px}
+#gnb .gnb_pad_lyr{position:absolute}
+#gnb .gnb_ico_num{display:block;position:absolute;top:1px;width:40px;text-align:center}
+#gnb .gnb_ico_num .gnb_ico_new{height:15px;display:inline-block;background-position: -331px 0;zoom:1}
+#gnb .gnb_ico_num .gnb_ico_new .gnb_count{position:relative;top:0;right:-5px;height:15px;margin:0;padding:0 4px 0 1px;display:inline-block;*display:inline;vertical-align:top;background-position: 100% 0;text-indent:-2px;font-family:tahoma !important;font-weight:bold;color:#fff;zoom:1}
+#gnb .gnb_ico_num .gnb_ico_new .plus{margin:1px -1px 0 2px;font-size:8px;display:inline-block;color:#fff;vertical-align:top}
+:root #gnb .gnb_pad_lyr{opacity:1 !important;/* background:#fff */}
+.gnb_lst{margin:0;padding:0;zoom:1}
+.gnb_lst:after{display:block;clear:both;content:''}
+.gnb_lst ul{margin:0;padding:0}
+.gnb_lst .ico_arrow{display:none;position:absolute;left:50%;top:27px;width:10px;height:8px;margin-left:-5px;background-position:-175px -10px}
+.gnb_lyr_opened .gnb_my_lyr, .gnb_lyr_opened .gnb_service_lyr, .gnb_lyr_opened .gnb_notice_lyr, .gnb_lyr_opened .ico_arrow{display:block !important}
+.gnb_login_li{height:23px;padding:5px 7px 0 0}
+.gnb_btn_login, .gnb_bg, .gnb_bdr{display:inline-block;width:46px;height:20px;font-size:12px}
+.gnb_btn_login{position:relative}
+.gnb_bg{background-color: #fff;opacity: 0.05;filter: alpha(opacity=5);}
+.gnb_bdr{position:absolute;top: -1px;left: -1px;width: 46px;height: 20px;border: 1px solid #000;opacity: 0.12;filter: alpha(opacity=12);}
+.gnb_txt{position:absolute;top:0;left:0;width:45px;height:20px;padding-left:1px;line-height:21px;color:#666;text-align:center}
+.gnb_btn_login:hover{text-decoration:none !important}
+.gnb_account .gnb_btn_login{width:54px;margin:-1px 0 0 8px;vertical-align:top}
+.gnb_account a.gnb_btn_login .gnb_txt {padding-left: 0;}
+.gnb_account .gnb_bdr{width:52px}
+.gnb_account .gnb_txt{width:53px}
+.gnb_my_li{margin-right:7px}
+.gnb_my_namebox{padding:2px 9px 0 0;background-repeat:no-repeat;background-position:100% 50%;zoom:1}
+.gnb_my_namebox:after{display:block;clear:both;content:''}
+a.gnb_my{float:left;display:block;font-size:12px;vertical-align:middle}
+a.gnb_my .filter_mask {position: absolute; top: -1px; left: -1px; z-index: 1; width: 28px; height: 28px; background-position: -260px -60px;}
+a.gnb_my img{vertical-align:top;border-radius:16px}
+a.gnb_my .gnb_name{margin-right:-1px;padding-left:5px;display:inline-block;height:28px;line-height:28px;vertical-align:top;font-size:11px;color:#444}
+a.gnb_my:visited{color:#444}
+a.gnb_my:hover, a.gnb_my:active, a.gnb_my:visited, a.gnb_my:focus{text-decoration:none !important}
+a.gnb_my:hover .gnb_name{text-decoration:underline}
+a.gnb_my .ico_arrow{top:25px;margin-left:8px}
+.gnb_my_namebox a.gnb_emp{float:left;display:inline-block;height:28px;margin-left:3px;line-height:28px;font-size:11px;color:#777 !important}
+.gnb_my_lyr{display:none;position:absolute;top:26px;right:-8px;padding:9px 5px 4px 4px;width:316px;height:155px;background-position:-2px -1310px;z-index:10}
+.gnb_my_lyr.gnb_groupid{height:144px;background-position:-2px -1500px}
+.gnb_my_lyr.gnb_groupid .gnb_my_content{height:80px}
+.gnb_my_lyr.gnb_groupid.gnb_longid1{height:144px;/*background-position:-2px -1664px*/}
+.gnb_my_lyr.gnb_groupid.gnb_longid2{height:144px;background-position:-2px -1828px}
+.gnb_my_lyr.gnb_longid1{/*width:318px;*/ /*background-position:-2px -1118px;*/}
+.gnb_my_lyr.gnb_longid2{width:348px;background-position:-2px -926px}
+.gnb_my_li .gnb_my_content{zoom:1;height:91px;padding:15px 0 10px 15px}
+.gnb_my_li .gnb_my_content:after{display:block;clear:both;content:''}
+.gnb_my_li .gnb_my_content .gnb_img_area{float:left;position:relative;display:block;width:80px;margin: 1px 0 0 1px;}
+.gnb_my_li .gnb_my_content .gnb_img_area img{vertical-align:top}
+.gnb_my_li .gnb_my_content .gnb_mask{position:absolute;top:0;left:0;display:block;width:80px;height:80px;background-position:-70px -60px}
+.gnb_my_li .gnb_my_content .gnb_change{position:absolute;bottom:-2px;left:-2px;display:block;width:28px;height:28px;background: url(https://ssl.pstatic.net/static/common/gnb/one/ico_gnb_change.png) no-repeat !important; background-size: 28px 28px !important;}
+.gnb_my_li .gnb_my_content .gnb_change:hover{background-image: url(https://ssl.pstatic.net/static/common/gnb/one/ico_gnb_change_hover.png) !important;}
+.gnb_my_li .gnb_my_content .gnb_txt_area{float:left;width:210px;margin:0 0 0 10px}
+.gnb_longid1 .gnb_my_content .gnb_txt_area{/* width:210px; */}
+.gnb_longid2 .gnb_my_content .gnb_txt_area{width:235px}
+.gnb_my_li .gnb_my_content .gnb_account{margin-bottom:3px 0 1px;font-size:0}
+.gnb_my_li .gnb_my_content .gnb_name{color:#666;font-size:14px;vertical-align: top}
+.gnb_my_li .gnb_my_content .gnb_name a{display:inline-block;vertical-align:top;font-weight:bold;color:#222 !important}
+.gnb_my_li .gnb_my_content a.gnb_mail_address{margin-left:1px;font-family:tahoma;color:#666 !important;font-size:12px}
+.gnb_my_li .gnb_my_content .gnb_edit_lst{zoom:1;margin-top:7px !important}
+.gnb_my_li .gnb_my_content .gnb_edit_lst:after{display:block;clear:both;content:''}
+.gnb_my_li .gnb_my_content .gnb_edit_lst li{float:left;padding-left:6px;margin-left:5px;background-position:-290px -25px}
+.gnb_my_li .gnb_my_content .gnb_edit_lst li.gnb_info{padding-left:0;margin-left:0;background:none}
+.gnb_my_li .gnb_my_content .gnb_edit_lst a{color:#666 !important;letter-spacing:-1px}
+.gnb_my_li .gnb_my_content .gnb_membership {display: inline-block;margin: 0 5px 0 1px !important; padding-right: 8px !important; background-position: -288px -403px;}
+.gnb_my_li .gnb_my_content .gnb_pay_check{height:16px;margin:7px -4px 0 0 !important}
+@media screen and (min-width: 0\0) { .gnb_my_li .gnb_my_content .gnb_pay_check{margin-top:17px} }
+.gnb_my_li .gnb_my_content .gnb_pay_check em{display:inline-block;width:16px;height:16px;background: url(https://ssl.pstatic.net/static/common/gnb/one/ico_gnb_pay_check.svg) no-repeat !important; background-size: 16px 16px !important;margin:0 4px 0 0;overflow:hidden;font-size:0;line-height:0;vertical-align:top}
+.gnb_my_li .gnb_my_content .gnb_pay_check a{font-size:14px;letter-spacing:-1px;line-height:16px;vertical-align:top}
+.gnb_my_li .gnb_my_content .gnb_pay_check span{font-weight: bold; vertical-align: top;}
+.gnb_my_li .gnb_my_content .gnb_pay_check strong{font-family:tahoma;letter-spacing:0;vertical-align:top;}
+.gnb_my_li .gnb_my_content .gnb_pay_check a, .gnb_my_li .gnb_my_content .gnb_pay_check span, .gnb_my_li .gnb_my_content .gnb_pay_check strong{font-size:12px;color:#222 !important}
+#gnb .gnb_my_li .gnb_my_community{clear:both;zoom:1;display: flex}
+#gnb .gnb_my_li .gnb_my_community:after{display:block;clear:both;content:''}
+#gnb .gnb_my_li .gnb_my_community a{float:left;width:106px;margin-right: 0;border-right:1px solid #ebebeb}
+#gnb .gnb_my_li .gnb_my_community a.gnb_pay{width:102px;border-right:0;line-height:0}
+#gnb .gnb_my_li .gnb_my_community a.gnb_pay span{display:inline-block;width:41px;height:16px;background: url(https://ssl.pstatic.net/static/common/gnb/one/ico_gnb_pay.svg) no-repeat !important; background-size: 41px 16px !important;margin:11px auto 0;font-size:0;line-height:0}
+#gnb .gnb_my_li .gnb_my_community a.gnb_pay i {display: inline-block;width: 61px;height: 20px;margin: 9px auto 0;background: url(https://ssl.pstatic.net/static/common/gnb/banner/promo_membership.png) no-repeat !important;background-size: 61px 20px !important;font-size: 0;line-height: 0;}
+#gnb .gnb_my_li .gnb_my_community a:active, #gnb .gnb_my_li .gnb_my_community a:focus, #gnb .gnb_my_li .gnb_my_community a:visited{text-decoration:none !important}
+#gnb .gnb_my_li .gnb_my_community a:hover{text-decoration:underline !important}
+#gnb .gnb_my_lyr.gnb_longid1 .gnb_my_community a{/*width:105px;*/}
+#gnb .gnb_my_lyr.gnb_longid1 .gnb_my_community a.gnb_pay{/* width:106px;*/}
+#gnb .gnb_my_lyr.gnb_longid2 .gnb_my_community a{width:115px}
+#gnb .gnb_my_lyr.gnb_longid2 .gnb_my_community a.gnb_pay{width:116px}
+#gnb.gnb_one .gnb_my_community a, #gnb.gnb_one_small .gnb_my_community a{margin-right: 0 !important;}
+.gnb_notice_li a.gnb_notice{display:block;width:15px;height:17px;padding:7px 9px 4px;text-decoration:none !important}
+.gnb_notice_li a.gnb_notice .gnb_ico_num{left:1px;top:0}
+.gnb_notice_li a.gnb_notice .gnb_icon{display:block;width:15px;height:17px;background-position:-3px -60px}
+.gnb_notice_li a.gnb_notice:hover .gnb_icon{background-position:-38px -60px;text-decoration:none !important}
+.gnb_notice_li .gnb_notice_lyr{display:none;position:absolute;top:26px;right:-7px;width:297px;height:330px;padding:9px 4px 4px;background-position:-2px -584px;z-index:10;overflow:hidden}
+.gnb_notice_li .svc_scroll{height:291px;overflow:scroll;overflow-x:hidden;position:relative;zoom:1}
+.gnb_notice_li .svc_panel{width:100%;height:330px;overflow:hidden}
+.gnb_notice_li .svc_head{position:relative;height:36px;padding-left:15px;line-height:20px;border-bottom:1px solid #eaeaea;zoom:1}
+.gnb_notice_li .svc_head .gnb_tit{color:#6b6d70;margin-right:1px;line-height:36px}
+.gnb_notice_li .svc_head .task_right{position:absolute;right:8px;top:8px;font-size:0}
+.gnb_notice_li .svc_head .task_right button{height:20px;padding:0 6px;margin-left:4px;border:1px solid #ddd;color:#888;background-color:#fff;font-family:'나눔고딕', NanumGothic;font-size:12px;letter-spacing:-1px;line-height:18px;*line-height:16px;overflow:visible}
+.gnb_notice_li .svc_list .gnb_btn_remove i, .gnb_notice_li .svc_list .gnb_btn_remove span, .gnb_notice_li .svc_noti .gnb_ico_mail, .gnb_notice_li .svc_blank .svc_msg_box, .gnb_notice_li .svc_blank .gnb_v_guide{display:inline-block;*display:inline;*zoom:1}
+.gnb_notice_li .svc_list{margin-top:-1px}
+.gnb_notice_li .svc_list li{position:relative;padding:7px 34px 7px 15px;border-top:1px solid #eaeaea;line-height:18px}
+.gnb_notice_li .svc_list .gnb_new{background:#ffffd8}
+.gnb_notice_li .svc_list .gnb_unread .gnb_subject{color:#444}
+.gnb_notice_li .svc_list .gnb_unread .d_cnt{color:#ff630e}
+.gnb_notice_li .svc_list .gnb_unread a:hover .gnb_subject, .gnb_notice_li .svc_list .gnb_unread .gnb_unread a:hover .d_cnt{color:#390}
+.gnb_notice_li .svc_list .gnb_unread .svc_name{color:#444}
+.gnb_notice_li .svc_list a.gnb_list_cover{text-decoration:none !important;display:block;position:relative;zoom:1}
+.gnb_notice_li .svc_list a:hover .gnb_subject{text-decoration:underline}
+.gnb_notice_li .svc_list .gnb_subject{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;color:#adadad}
+.gnb_notice_li .svc_list .d_cnt{font-family:tahoma;font-size:10px}
+.gnb_notice_li .svc_list .gnb_info{color:#adadad}
+.gnb_notice_li .svc_list .svc_name{margin-right:3px;color:#adadad}
+.gnb_notice_li .svc_list .cchr{margin-right:3px}
+.gnb_notice_li .svc_list .dona{position:absolute;top:8px;right:34px;text-decoration:underline}
+.gnb_notice_li .svc_list .dona a{color:#adadad}
+.gnb_notice_li .svc_list .dona a:hover{color:#390}
+.gnb_notice_li .svc_list .gnb_ico_mail{width:14px;height:15px;font-size:0;line-height:0;color:#fff;vertical-align:top}
+.gnb_notice_li .svc_list .gnb_ico_mail.gnb_yes{background-position:-245px -17px}
+.gnb_notice_li .svc_list .gnb_ico_mail.gnb_no{background-position:-245px 4px}
+.gnb_notice_li .svc_list .gnb_btn_remove{position:absolute;right:4px;top:50%;z-index:100;margin-top:-13px;padding:10px;line-height:6px;font-size:0;background:none !important;border:0 !important}
+.gnb_notice_li .svc_list .gnb_btn_remove span, .gnb_notice_li .svc_list .gnb_btn_remove i{display:block !important;width:7px;height:7px;font-size:0;line-height:0;color:transparent;white-space:nowrap;overflow:hidden;vertical-align:top;background-position:-175px 0}
+.gnb_notice_li .svc_blank{position:absolute;top:104px;left:0;width:100%;white-space:nowrap;height:100px;font-size:0;text-align:center}
+.gnb_notice_li .svc_blank .svc_msg_box{white-space:normal;font-size:12px;width:100%}
+.gnb_notice_li .svc_blank .gnb_tit{display:block;color:#2f3743;font-size:14px;margin:0 0 15px}
+.gnb_notice_li .svc_blank .gnb_tit strong{font-weight:normal;color:#390}
+.gnb_notice_li .svc_blank .gnb_desc{line-height:19px;color:#2f3743;margin-bottom:7px}
+.gnb_notice_li .svc_blank .gnb_desc a, .gnb_notice_li .svc_blank .gnb_link{color:#390;text-decoration:underline}
+.gnb_notice_li .svc_blank .gnb_v_guide{vertical-align:middle;height:100%;width:0}
+.gnb_notice_li .svc_blank .gnb_link_wrap{text-align:center}
+.gnb_notice_li .svc_blank .gnb_link_wrap .gnb_link{display:block;width:40px;margin:0 auto !important;text-align:center}
+.gnb_notice_li .svc_loading{background:url(https://ssl.pstatic.net/static/www/2014/loading.gif) no-repeat #fff center center;position:absolute;top:33px;left:0;width:100%;height:245px}
+.gnb_notice_li .gnb_error{position:absolute;top:81px;left:2px;width:100%;color:#444;text-align:center}
+.gnb_notice_li .gnb_error .gnb_ico_error{display:inline-block;width:57px;height:57px;background-position:-280px -190px}
+.gnb_notice_li .gnb_error .gnb_tit{font-size:14px;margin:15px 0 11px}
+.gnb_notice_li .gnb_error .gnb_desc{margin-bottom:13px;line-height:18px}
+.gnb_notice_li .gnb_error .gnb_link{text-decoration:underline}
+.gnb_ly_alert{position:absolute;top:110px;left:13px;background-color:#fff;border:1px solid #b7b9bc;width:260px;padding:34px 0 20px;zoom:1;z-index:100}
+.gnb_ly_alert .gnb_msg{text-align:center;line-height:17px;margin-bottom:14px;color:#2f3743}
+.gnb_.ly_alert .gnb_btn_close{position:absolute;right:2px;top:0;*overflow:visible}
+.gnb_ly_alert .gnb_btns{text-align:center}
+.gnb_ly_alert .gnb_btns button{height:27px;line-height:27px;*line-height:22px;font-weight:bold;font-size:12px;padding:0 8px;color:#2f3743;border:1px solid #ddd;background-color:white}
+.gnb_ly_alert .gnb_btns button:first-child{margin-right:4px}
+.gnb_ly_alert .gnb_btn_close{position:absolute;right:2px;top:0;width:35px;border:0;background:none;cursor:pointer;border-radius:0;padding:10px}
+.gnb_ly_alert .gnb_btn_close i{display:block;width:15px;height:15px;font:0/0 a;color:transparent;white-space:nowrap;overflow:hidden;vertical-align:top;background-position:-240px -60px}
+.gnb_talk_li a.gnb_talk{display:block;width:20px;height:20px;padding: 6px 7px 3px;text-decoration: none !important;}
+.gnb_talk_li a.gnb_talk .gnb_icon{display: block;width: 20px;height: 20px;background-position: -260px -160px;}
+.gnb_talk_li a.gnb_talk:hover .gnb_icon{background-position: -280px -160px;text-decoration: none !important;}
+.mail_li a.gnb_mail{display:block;width:20px;height:15px;padding:7px 9px 6px;text-decoration:none !important}
+.mail_li a.gnb_mail .gnb_icon{display:block;width:20px;height:15px;background-position:0px -95px}
+.mail_li a.gnb_mail:hover .gnb_icon{background-position:-35px -95px;text-decoration:none !important}
+.mail_li .gnb_ico_num{left:6px;top:0}
+.gnb_service_li{margin-right:0}
+.gnb_service_li a.gnb_service{display:block;width:16px;height:16px;padding:7px 9px 5px}
+.gnb_service_li a.gnb_service .gnb_icon{display:block;width:16px;height:16px;background-position:-2px -130px}
+.gnb_service_li a.gnb_service:hover .gnb_icon{background-position:-37px -130px;text-decoration:none !important}
+.gnb_service_li .gnb_service_lyr{display:none;position:absolute;top:27px;right:-7px;z-index:10}
+.gnb_favorite_search{width:301px;letter-spacing:-1px}
+.gnb_response .gnb_favorite_search{display:none}
+.gnb_favorite_area{height:93px;padding:8px 4px 0;background-position:0 0}
+.gnb_favorite_lstwrp{position:relative;padding:22px 1px 15px 15px;border-bottom:1px solid #ebebeb}
+.gnb_favorite_lstwrp .gnb_my_interface{top:3px !important;right:3px !important}
+.gnb_first_visit{position:absolute;top:0;left:0;width:293px;height:92px;background-position:0 -310px;z-index:200}
+.gnb_first_visit .gnb_close{position:absolute;top:0;right:0;display:block;width:32px;height:32px}
+.gnb_favorite_lst{zoom:1}
+.gnb_favorite_lst:after{display:block;clear:both;content:''}
+.gnb_favorite_lst li{float:left;width:65px;text-align:center;white-space:nowrap}
+.gnb_favorite_lst a{display:inline-block;text-align:center;font-weight:bold}
+.gnb_favorite_lst .gnb_add a{display:block;test-align:center;}
+.gnb_favorite_lst .gnb_add a span.ic_add{display:block;width:36px;height:36px;margin:0 auto 4px;background-image: url(https://ssl.pstatic.net/static/common/gnb/one/sp_gnb_4b16e6.png);background-position: 0px 0px;background-repeat: no-repeat;width: 36px;height: 36px;vertical-align: top;}
+.gnb_favorite_lst .gnb_add a:hover span.ic_add{background-image: url(https://ssl.pstatic.net/static/common/gnb/one/sp_gnb_4b16e6.png);background-position: -42px 0px;background-repeat: no-repeat;width: 36px;height: 36px;vertical-align: top;}
+.gnb_favorite_lst img{display:block;margin:0 auto 4px;vertical-align:top}
+.gnb_search_area{position:relative;z-index:200;padding:18px 4px 17px;background-position:-301px 0;background-repeat:repeat-y}
+.gnb_search_box{position:relative;z-index:101;margin:0 12px 16px 0;padding-left:10px;display:block;width:270px;height:35px;background-position:10px -190px}
+.gnb_search_box.over{background-position:10px -230px}
+.gnb_search_box.fcs{background-position:10px -270px}
+.gnb_search_box.fcs input{width:200px;font-size:16px;font-weight:bold;color:#444;outline:0}
+.gnb_search_box input{float:left;display:block;width:210px;height:22px;margin-top:6px;padding-left:10px;font-family:'나눔고딕',NamumGothic;letter-spacing:-1px;color:#adadad;font-size:13px;border:0;line-height:22px;background:transparent}
+.gnb_search_box .gnb_del_txt{position:absolute;top:8px;right:32px;display:block;width:17px;height:17px;background-position:-190px 0px}
+.gnb_search_box .gnb_del_txt:hover{background-position:-190px -20px}
+.gnb_search_box .gnb_pop_input{position:absolute;top:34px;left:10px;width:268px;height:170px;*height:172px;border:1px solid #cbc5c5;border-top:0;background:#fff;overflow-x:hidden;overflow-y:scroll;z-index:110}
+.gnb_search_box .gnb_pop_lst{padding:4px 0 2px}
+.gnb_search_box .gnb_pop_lst a{display:block;padding:6px 0 6px 10px;font-weight:bold}
+.gnb_search_box .gnb_pop_lst .on{background-color:#f5f5f5}
+.gnb_search_lstwrp{zoom:1;height:118px;padding-left:12px}
+.gnb_search_lstwrp:after{display:block;clear:both;content:''}
+.gnb_search_lstwrp .gnb_search_lst{float:left;width:69px;border-left:1px solid #eaeaea}
+.gnb_search_lstwrp .gnb_search_lst.gnb_first{width:64px;border:0}
+.gnb_search_lstwrp li{padding:12px 0 0 8px}
+.gnb_search_lstwrp li.gnb_first{font-weight:bold;padding-top:0}
+.gnb_search_lstwrp li a{display:inline-block;vertical-align:top}
+.gnb_banner{height:47px;margin:0;padding:0 18px;background-position:-301px 0;background-repeat:repeat-y}
+.gnb_banner .gnb_service_event{display:inline-block;border-top:1px solid #ebebeb}
+.gnb_linkwrp{padding:0 4px 4px;background-position:-602px 0}
+a.gnb_service_all:hover, a.gnb_service_all:visited, a.gnb_service_all:active, a.gnb_service_all:focus{text-decoration:none}
+.gnb_svc_more{display:none;position:absolute;top:4px;right:303px;width:589px;overflow:hidden;zoom:1;z-index:1000}
+.gnb_svc_more:after{display:block;clear:both;content:''}
+.gnb_response .gnb_svc_more{right:2px}
+.gnb_bg_top{height:6px;background:url(https://ssl.pstatic.net/static/common/gnb/2014/bg_svclyr1_v2.png) no-repeat}
+.gnb_bg_btm{position:relative;height:6px;background:url(https://ssl.pstatic.net/static/common/gnb/2014/bg_svclyr1_v2.png) no-repeat -1282px 0}
+.gnb_svc_more .gnb_svc_hd{position:relative;padding:0 18px 2px 23px;letter-spacing:-1px;background:url(https://ssl.pstatic.net/static/common/gnb/2014/bg_svclyr1_v2.png) repeat-y -641px 0}
+.gnb_svc_more .gnb_svc_hd .gnb_svc_tit{display:block;padding:12px 0 13px;border-bottom:1px solid #ebebeb;font-size:14px;color:#222}
+.gnb_svc_more .gnb_svc_hd .link{position:absolute;top:14px;right:19px;font-size:12px;color:#444}
+.gnb_svc_more .gnb_svc_hd .link a{color:#444 !important;line-height:16px !important}
+.gnb_svc_more .gnb_svc_lstwrp{position:relative;height:283px;overflow:hidden;padding:15px 15px 0 20px;letter-spacing:-1px;background:url(https://ssl.pstatic.net/static/common/gnb/2014/bg_svclyr1_v2.png) repeat-y -641px 0;zoom:1}
+.gnb_svc_more .gnb_svc_lstwrp:after{display:block;clear:both;content:''}
+.gnb_svc_more .gnb_svc_lstwrp li{height:15px;margin-bottom:5px;color:#6b6d70;white-space:nowrap;line-height:15px}
+.gnb_svc_more .gnb_svc_lstwrp li.gnb_event label{color:#444;font-weight:bold}
+.gnb_svc_more .gnb_svc_lstwrp li.gnb_event em.ic_gnb_new{display:inline-block;width:11px;height:11px;background-position:-215px 0px;margin:2px 0 0 4px;font-size:0;line-height:0;vertical-align:top}
+@media screen and (min-width: 0\0) { .gnb_svc_more .gnb_svc_lstwrp li.gnb_event em.ic{margin-top:3px} }
+.gnb_svc_more .gnb_svc_lstwrp .gnb_input_check{width:13px;height:13px;margin:2px 3px 0 3px;padding:0;vertical-align:top;-webkit-appearance:checkbox;}
+.gnb_svc_more .gnb_svc_lstwrp label{vertical-align:0px}
+.gnb_svc_more .gnb_svc_lstwrp .gnb_disabled strong{color:#a8acb0}
+.gnb_svc_more .gnb_svc_lstwrp .gnb_disabled li{color:#cbcbcb}
+.gnb_svc_more .gnb_svc_lst1{float:left;width:328px;height:280px}
+.gnb_svc_more .gnb_svc_lst1 ul{float:left;width:102px;min-height:260px;padding:5px 0 0 10px;border-left:1px solid #eee}
+.gnb_svc_more .gnb_svc_lst1 ul.gnb_first{padding-left:0;border:0}
+.gnb_svc_more .svc_lst2{float:left;position:relative;width:221px;border:1px solid #eee;background:#fbfbfb;zoom:1}
+.gnb_svc_more .svc_lst2:after{display:block;clear:both;content:''}
+.gnb_svc_more .svc_spc{float:left;position:relative;width:100px;min-height:254px;padding:9px 0 0 10px}
+.gnb_svc_more .svc_spc.gnb_first{border-right:1px solid #eee}
+.gnb_svc_more .svc_spc strong{height:20px;color:#2f3743;line-height:16px}
+.gnb_svc_more .svc_spc a:visited{color:#2f3743}
+.gnb_svc_more .svc_spc ul{padding:8px 0}
+.gnb_svc_more .svc_spc li{margin-bottom:0;padding-bottom:5px;color:#848689}
+.gnb_svc_more .svc_stroy{width:89px;margin-top:-5px;padding:12px 0 0;border-top:1px solid #eee}
+.gnb_svc_more .svc_btns{position:relative;height:33px;overflow:hidden;padding-top:5px;line-height:normal}
+.gnb_svc_more .svc_btnwrp{position:relative;*height:39px;background:url(https://ssl.pstatic.net/static/common/gnb/2014/bg_svclyr1_v2.png) repeat-y -641px 0;padding:0 2px 0 4px}
+.gnb_svc_more .svc_btnwrp button{display:inline-block;width:60px;height:25px;border:0;vertical-align:top}
+.gnb_svc_more .svc_btnwrp .gnb_save{background-position:0 -160px}
+.gnb_svc_more .svc_btnwrp .gnb_close{margin-left:1px;background-position:-65px -160px}
+.gnb_svc_more .svc_btnwrp .gnb_return{position:absolute;top:5px;left:15px;background-position:-130px -160px}
+.gnb_type2 .gnb_notice_li a.gnb_notice .gnb_icon{background-position:-155px -120px}
+.gnb_type2 .gnb_notice_li a.gnb_notice:hover .gnb_icon{background-position:-155px -140px}
+.gnb_type2 .gnb_service_li .gnb_service .gnb_icon{background-position:-200px -120px}
+.gnb_type2 .gnb_service_li .gnb_service:hover .gnb_icon{background-position:-200px -140px}
+.gnb_type2 .mail_li a.gnb_mail .gnb_icon{background-position:-175px -120px}
+.gnb_type2 .mail_li a.gnb_mail:hover .gnb_icon{background-position:-175px -140px}
+.gnb_dark .gnb_my_li .gnb_my .gnb_name, .gnb_dark .gnb_login_li .gnb_btn_login .gnb_txt{color:#fff}
+.gnb_dark .gnb_notice_li a.gnb_notice .gnb_icon{background-position:-220px -140px}
+.gnb_dark .gnb_notice_li a.gnb_notice:hover .gnb_icon{background-position:-220px -120px}
+.gnb_dark .gnb_talk_li a.gnb_talk .gnb_icon{background-position: -300px -160px;}
+.gnb_dark .gnb_talk_li a.gnb_talk:hover .gnb_icon{background-position: -320px -160px;}
+.gnb_dark .mail_li a.gnb_mail .gnb_icon{background-position:-238px -141px}
+.gnb_dark .mail_li a.gnb_mail:hover .gnb_icon{background-position:-238px -121px}
+.gnb_dark .gnb_service_li .gnb_service .gnb_icon{background-position:-261px -140px}
+.gnb_dark .gnb_service_li .gnb_service:hover .gnb_icon{background-position:-261px -120px}
+.gnb_dark_type2 .gnb_my_li .gnb_my .gnb_name, .gnb_dark_type2 .gnb_login_li .gnb_btn_login .gnb_txt{color:#fff}
+.gnb_dark_type2 .gnb_notice_li a.gnb_notice .gnb_icon{background-position:-220px -120px}
+.gnb_dark_type2 .gnb_notice_li a.gnb_notice:hover .gnb_icon{background-position:-220px -140px}
+.gnb_dark_type2 .gnb_talk_li a.gnb_talk .gnb_icon{background-position: -320px -160px;}
+.gnb_dark_type2 .gnb_talk_li a.gnb_talk:hover .gnb_icon{background-position: -300px -160px;}
+.gnb_dark_type2 .mail_li a.gnb_mail .gnb_icon{background-position:-238px -121px}
+.gnb_dark_type2 .mail_li a.gnb_mail:hover .gnb_icon{background-position:-238px -141px}
+.gnb_dark_type2 .gnb_service_li .gnb_service .gnb_icon{background-position:-261px -120px}
+.gnb_dark_type2 .gnb_service_li .gnb_service:hover .gnb_icon{background-position:-261px -140px;}
+.gnb_dark .gnb_notice_li a.gnb_notice, .gnb_dark_type2 .gnb_notice_li a.gnb_notice {width: 17px;height: 19px;padding: 6px 8px 3px;}
+.gnb_dark .gnb_notice_li a.gnb_notice .gnb_icon, .gnb_dark_type2 .gnb_notice_li a.gnb_notice .gnb_icon {width: 17px;height: 19px;}
+.gnb_dark .mail_li a.gnb_mail, .gnb_dark_type2 .mail_li a.gnb_mail {width: 22px;height: 16px;padding: 7px 8px 4px;}
+.gnb_dark .mail_li a.gnb_mail .gnb_icon, .gnb_dark_type2 .mail_li a.gnb_mail .gnb_icon {width: 22px;height: 16px;}
+.gnb_dark .gnb_service_li a.gnb_service, .gnb_dark_type2 .gnb_service_li a.gnb_service {width: 18px;height: 18px;padding: 6px 8px 4px;}
+.gnb_dark .gnb_service_li .gnb_service .gnb_icon, .gnb_dark_type2 .gnb_service_li .gnb_service .gnb_icon {width: 18px;height: 18px;}
+#gnb.gnb_one .gnb_my_li .gnb_my .gnb_name, #gnb.gnb_one_small .gnb_my_li .gnb_my .gnb_name, #gnb.gnb_one .gnb_login_li .gnb_btn_login .gnb_txt, #gnb.gnb_one_small .gnb_login_li .gnb_btn_login .gnb_txt{color:#fff}
+#gnb.gnb_one .gnb_login_li, #gnb.gnb_one_small .gnb_login_li {height: 28px;}
+#gnb.gnb_one .gnb_login_li .gnb_btn_login, #gnb.gnb_one_small .gnb_login_li .gnb_btn_login, #gnb.gnb_one .gnb_login_li .gnb_bg, #gnb.gnb_one_small .gnb_login_li .gnb_bg, #gnb.gnb_one .gnb_login_li .gnb_bdr, #gnb.gnb_one_small .gnb_login_li .gnb_bdr, #gnb.gnb_one .gnb_login_li .gnb_txt, #gnb.gnb_one_small .gnb_login_li .gnb_txt {width: 53px;height: 23px;}
+#gnb.gnb_one .gnb_login_li .gnb_btn_login .gnb_txt, #gnb.gnb_one_small .gnb_login_li .gnb_btn_login .gnb_txt {top: -1px;width: 53px;height: 23px;line-height: 28px;font-size: 11px;}
+#gnb.gnb_one .gnb_login_li, #gnb.gnb_one_small .gnb_login_li, #gnb.gnb_one .gnb_my_li, #gnb.gnb_one_small .gnb_my_li, #gnb.gnb_one .gnb_notice_li, #gnb.gnb_one_small .gnb_notice_li,#gnb.gnb_one .gnb_talk_li, #gnb.gnb_one_small .gnb_talk_li, #gnb.gnb_one .mail_li, #gnb.gnb_one_small .mail_li, #gnb.gnb_one .gnb_service_li, #gnb.gnb_one_small .gnb_service_li{margin-right: 0;margin-left: 0; background: url(https://ssl.pstatic.net/static/common/gnb/bg_one_line.png) repeat-y right 0;}
+#gnb.gnb_one .gnb_login_li a, #gnb.gnb_one_small .gnb_login_li a, #gnb.gnb_one .gnb_my_li a, #gnb.gnb_one_small .gnb_my_li a, #gnb.gnb_one .gnb_notice_li a, #gnb.gnb_one_small .gnb_notice_li a, #gnb.gnb_one .gnb_talk_li a, #gnb.gnb_one_small .gnb_talk_li a, #gnb.gnb_one .mail_li a, #gnb.gnb_one_small .mail_li a, #gnb.gnb_one .gnb_service_li a, #gnb.gnb_one_small .gnb_service_li a {margin-right: 1px;}
+#gnb.gnb_one .gnb_login_li.hover .gnb_service, #gnb.gnb_one_small .gnb_login_li.hover .gnb_service, #gnb.gnb_one .gnb_login_li.hover .gnb_notice, #gnb.gnb_one_small .gnb_login_li.hover .gnb_notice, #gnb.gnb_one .gnb_login_li.hover .gnb_mail, #gnb.gnb_one_small .gnb_login_li.hover .gnb_mail, #gnb.gnb_one .gnb_login_li.hover .gnb_service, #gnb.gnb_one_small .gnb_login_li.hover .gnb_service, #gnb.gnb_one .gnb_my_li.hover .gnb_service, #gnb.gnb_one_small .gnb_my_li.hover .gnb_service, #gnb.gnb_one .gnb_my_li.hover .gnb_notice, #gnb.gnb_one_small .gnb_my_li.hover .gnb_notice, #gnb.gnb_one .gnb_my_li.hover .gnb_mail, #gnb.gnb_one_small .gnb_my_li.hover .gnb_mail, #gnb.gnb_one .gnb_my_li.hover .gnb_service, #gnb.gnb_one_small .gnb_my_li.hover .gnb_service, #gnb.gnb_one .gnb_notice_li.hover .gnb_service, #gnb.gnb_one_small .gnb_notice_li.hover .gnb_service, #gnb.gnb_one .gnb_notice_li.hover .gnb_notice, #gnb.gnb_one_small .gnb_notice_li.hover .gnb_notice,
+#gnb.gnb_one .gnb_notice_li.hover .gnb_mail, #gnb.gnb_one_small .gnb_notice_li.hover .gnb_mail, #gnb.gnb_one .gnb_notice_li.hover .gnb_service, #gnb.gnb_one_small .gnb_notice_li.hover .gnb_service,
+#gnb.gnb_one .gnb_talk_li.hover .gnb_talk,
+#gnb.gnb_one_small .gnb_talk_li.hover .gnb_talk,
+#gnb.gnb_one .mail_li.hover .gnb_service, #gnb.gnb_one_small .mail_li.hover .gnb_service, #gnb.gnb_one .mail_li.hover .gnb_notice, #gnb.gnb_one_small .mail_li.hover .gnb_notice, #gnb.gnb_one .mail_li.hover .gnb_mail, #gnb.gnb_one_small .mail_li.hover .gnb_mail, #gnb.gnb_one .mail_li.hover .gnb_service, #gnb.gnb_one_small .mail_li.hover .gnb_service, #gnb.gnb_one .gnb_service_li.hover .gnb_service, #gnb.gnb_one_small .gnb_service_li.hover .gnb_service, #gnb.gnb_one .gnb_service_li.hover .gnb_notice, #gnb.gnb_one_small .gnb_service_li.hover .gnb_notice, #gnb.gnb_one .gnb_service_li.hover .gnb_mail, #gnb.gnb_one_small .gnb_service_li.hover .gnb_mail, #gnb.gnb_one .gnb_service_li.hover .gnb_service, #gnb.gnb_one_small .gnb_service_li.hover .gnb_service {background: url(https://ssl.pstatic.net/static/common/gnb/bg_one_hover.png) repeat 0 0;}
+#gnb.gnb_one .gnb_my_li .gnb_my .gnb_name, #gnb.gnb_one_small .gnb_my_li .gnb_my .gnb_name{margin:0 0 0 1px;}
+#gnb.gnb_one .gnb_notice_li a.gnb_notice, #gnb.gnb_one_small .gnb_notice_li a.gnb_notice #gnb.gnb_one .gnb_talk_li a.gnb_talk, #gnb.gnb_one_small .gnb_talk_li a.gnb_talk{width:17px;height:19px}
+#gnb.gnb_one .gnb_notice_li a.gnb_notice .gnb_icon, #gnb.gnb_one_small .gnb_notice_li a.gnb_notice .gnb_icon{width:17px;height:19px;background-position:-284px -119px}
+#gnb.gnb_one .gnb_notice_li a.gnb_notice:hover .gnb_icon, #gnb.gnb_one_small .gnb_notice_li a.gnb_notice:hover .gnb_icon{background-position:-284px -119px}
+#gnb.gnb_one .gnb_talk_li a.gnb_talk .gnb_icon, #gnb.gnb_one_small .gnb_talk_li a.gnb_talk .gnb_icon{background-position: -220px -160px;}
+#gnb.gnb_one .gnb_talk_li a.gnb_talk:hover .gnb_icon, #gnb.gnb_one_small .gnb_talk_li a.gnb_talk:hover .gnb_icon{background-position: -220px -160px;}
+#gnb.gnb_one_flat .gnb_talk_li a.gnb_talk .gnb_icon, #gnb.gnb_one_flat .gnb_talk_li a.gnb_talk:hover .gnb_icon{background-position: -240px -160px;}
+#gnb.gnb_one .mail_li a.gnb_mail, #gnb.gnb_one_small .mail_li a.gnb_mail{width:21px;height:17px}
+#gnb.gnb_one .mail_li a.gnb_mail .gnb_icon, #gnb.gnb_one_small .mail_li a.gnb_mail .gnb_icon{width:21px;height:17px;background-position:-302px -120px}
+#gnb.gnb_one .mail_li a.gnb_mail:hover .gnb_icon, #gnb.gnb_one_small .mail_li a.gnb_mail:hover .gnb_icon{background-position:-302px -120px}
+#gnb.gnb_one .gnb_service_li .gnb_service, #gnb.gnb_one_small .gnb_service_li .gnb_service{width:17px;height:17px}
+#gnb.gnb_one .gnb_service_li .gnb_service .gnb_icon, #gnb.gnb_one_small .gnb_service_li .gnb_service .gnb_icon{width:17px;height:17px;background-position:-324px -120px}
+#gnb.gnb_one .gnb_service_li .gnb_service:hover .gnb_icon, #gnb.gnb_one_small .gnb_service_li .gnb_service:hover .gnb_icon{background-position:-324px -120px}
+#gnb.gnb_one .gnb_my_lyr, #gnb.gnb_one_small .gnb_my_lyr, #gnb.gnb_one .gnb_notice_lyr, #gnb.gnb_one_small .gnb_notice_lyr, #gnb.gnb_one .gnb_service_lyr, #gnb.gnb_one_small .gnb_service_lyr {right: 7px;}
+#gnb.gnb_one .gnb_ico_num, #gnb.gnb_one_small .gnb_ico_num{width:34px;top:10px;right:3px;left:auto;vertical-align:top}
+#gnb.gnb_one .gnb_ico_num .gnb_ico_new, #gnb.gnb_one_small .gnb_ico_num .gnb_ico_new{vertical-align:top;height:13px;background-position:-332px -60px;}
+#gnb.gnb_one .gnb_ico_num .gnb_count, #gnb.gnb_one_small .gnb_ico_num .gnb_count {height: 13px;padding: 0 6px 0 2px;background-position: 100% -60px;font-size: 10px;font-weight: normal;}
+#gnb.gnb_one .gnb_ico_num .plus, #gnb.gnb_one_small .gnb_ico_num .plus{margin:1px 0 0 2px}
+#gnb.gnb_one .ico_arrow{top:48px}
+#gnb.gnb_one .gnb_my_lyr, #gnb.gnb_one .gnb_notice_lyr{top:47px}
+#gnb.gnb_one .gnb_service_lyr{top:48px;}
+#gnb.gnb_one .gnb_login_li{padding:16px 21px 10px 1px;}
+#gnb.gnb_one .gnb_my_li{padding:12px 20px 12px 2px}
+#gnb.gnb_one .gnb_my_li .ico_arrow{top:34px}
+#gnb.gnb_one .gnb_notice_li a.gnb_notice{padding:18px 19px 17px 19px}
+#gnb.gnb_one .gnb_talk_li a.gnb_talk{width: 20px; height: 20px; padding: 17px 17px 17px 18px;}
+#gnb.gnb_one .mail_li a.gnb_mail{padding:19px 17px 18px 17px}
+#gnb.gnb_one .gnb_service_li .gnb_service{padding:19px 19px 18px 19px}
+#gnb.gnb_one_small .ico_arrow{top:33px}
+#gnb.gnb_one_small .gnb_my_lyr, #gnb.gnb_one_small .gnb_notice_lyr{top:32px}
+#gnb.gnb_one_small .gnb_service_lyr{top:33px}
+#gnb.gnb_one_small .gnb_login_li{padding:7px 12px 4px 2px}
+#gnb.gnb_one_small .gnb_my_li{padding:5px 20px 4px 2px}
+#gnb.gnb_one_small .gnb_my_li .ico_arrow{top:27px}
+#gnb.gnb_one_small .gnb_notice_li a.gnb_notice{padding:10px 11px 10px 12px}
+#gnb.gnb_one_small .gnb_talk_li a.gnb_talk{padding:10px 11px 10px 12px}
+#gnb.gnb_one_small .mail_li a.gnb_mail{padding:11px 10px 11px 9px}
+#gnb.gnb_one_small .gnb_service_li .gnb_service{padding:11px 12px 11px 11px}
+#gnb.gnb_one_small .gnb_ico_num{top:5px;right:6px;width:24px}
+#gnb.gnb_one_flat .gnb_login_li,
+#gnb.gnb_one_flat .gnb_my_li,
+#gnb.gnb_one_flat .gnb_notice_li,
+#gnb.gnb_one_flat .mail_li,
+#gnb.gnb_one_flat .gnb_service_li {border-color: #e0e0e0;}
+#gnb.gnb_one_flat .gnb_notice_li.hover,
+#gnb.gnb_one_flat .gnb_talk_li.hover,
+#gnb.gnb_one_flat .mail_li.hover,
+#gnb.gnb_one_flat .gnb_service_li.hover {background-color: rgba(0, 0, 0, 0.04);}
+#gnb.gnb_one_flat .gnb_service_li .gnb_service .gnb_icon,
+#gnb.gnb_one_flat .gnb_service_li .gnb_service:hover .gnb_icon {background-image: url(https://ssl.pstatic.net/static/common/gnb/one/sp_gnb_4b16e6.png);background-position: -84px -24px;background-repeat: no-repeat; width: 16px;height: 16px;vertical-align: top; margin: 0 1px;}
+#gnb.gnb_one_flat .mail_li a.gnb_mail .gnb_icon,
+#gnb.gnb_one_flat .mail_li a.gnb_mail:hover .gnb_icon {background-image: url(https://ssl.pstatic.net/static/common/gnb/one/sp_gnb_4b16e6.png);background-position: 0px -42px;background-repeat: no-repeat;width: 20px;height: 16px;vertical-align: top;margin: 0 1px;}
+#gnb.gnb_one_flat .gnb_notice_li a.gnb_notice .gnb_icon,
+#gnb.gnb_one_flat .gnb_notice_li a.gnb_notice:hover .gnb_icon {background-image: url(https://ssl.pstatic.net/static/common/gnb/one/sp_gnb_4b16e6.png);background-position: -84px 0px;background-repeat: no-repeat;width: 16px;height: 18px;vertical-align: top;margin: 0 1px;}
+#gnb.gnb_one_flat .gnb_my_li .gnb_my .gnb_name,
+#gnb.gnb_one_flat .gnb_login_li .gnb_btn_login .gnb_txt {color: #666;}
+#gnb.gnb_one_pwe .gnb_my .filter_mask {box-sizing: border-box;background: none;border: 1px solid rgba(0,0,0,.1);border-radius: 100%;}
+#gnb.gnb_one_pwe .gnb_my_namebox {background-image: url(https://ssl.pstatic.net/static/common/gnb/pwe/ico_arrow_wh.svg) !important;}
+#gnb.gnb_one_pwe .gnb_notice_li a.gnb_notice .gnb_icon,
+#gnb.gnb_one_pwe .gnb_notice_li a.gnb_notice:hover .gnb_icon {width: 17px;height: 19px;background: url(https://ssl.pstatic.net/static/common/gnb/pwe/gnb_notice.svg) no-repeat;}
+#gnb.gnb_one_pwe .gnb_talk_li a.gnb_talk .gnb_icon,
+#gnb.gnb_one_pwe .gnb_talk_li a.gnb_talk:hover .gnb_icon {width: 20px; height: 20px; background: url(https://ssl.pstatic.net/static/common/gnb/pwe/gnb_talk.svg) no-repeat; background-position: 2px 1px; }
+#gnb.gnb_one_pwe .gnb_service_li .gnb_service .gnb_icon,
+#gnb.gnb_one_pwe .gnb_service_li .gnb_service:hover .gnb_icon {width: 17px;height: 17px;background: url(https://ssl.pstatic.net/static/common/gnb/pwe/gnb_service.svg) no-repeat;}
+#gnb.gnb_one_pwe .gnb_ico_num .gnb_ico_new,
+#gnb.gnb_one_pwe .gnb_ico_num .gnb_count {background: #e1523a;}
+#gnb.gnb_one_pwe .gnb_ico_num .gnb_ico_new {border-radius: 13px 0 0 13px;}
+#gnb.gnb_one_pwe .gnb_ico_num .gnb_count {border-radius: 0 13px 13px 0;}</style><script src="https://ssl.pstatic.net/static.gn/js/clickcrD.js" id="gnb_clickcrD" charset="utf-8"></script></head>
+<body id="index">
+
+
+
+<style type="text/css">
+/* Default Type Selector */
+#banword_wrap *, #banword_wrap1 *{ margin:0; padding:0; font-size:12px; font-family:돋움, Dotum, 굴림, Gulim, Helvetica, Sans-serif; text-align:left;}
+#banword_wrap a, #banword_wrap1 a{ color:#004790;}
+#banword_wrap img, #banword_wrap1 img,
+#banword_wrap fieldset, #banword_wrap1 fieldset{ border:none;}
+#banword_wrap legend, #banword_wrap1 legend{ display:none;}
+#banword_wrap em, #banword_wrap1 em{ font-style:normal; color:#258102;}
+#banword_wrap strong, #banword_wrap1 strong{ color:#258102;}
+#banword_wrap li, #banword_wrap1 li{ list-style:none;}
+#banword_wrap h1, #banword_wrap1 h1{ font:bold 13px 굴림, Gulim, 돋움, Dotum, Helvetica, Sans-serif; color:#333; padding:11px 0 0 19px; *padding:12px 0 0 19px; }
+/* Layout */
+#banword_wrap{ position:absolute; width:410px; _width /**/:418px; overflow:hidden; border:4px solid #777; background:#fff; display: none; z-index: 200;}
+#banword_wrap1{ position:relative; width:410px; _width /**/:418px;height:446px; overflow:hidden; border:4px solid #777; background:#fff;}
+#bw_content{ padding:14px 0 28px 0; margin:0 19px 0 18px;}
+#bw_footer{ height:8px; _height:8px; text-align:center;}
+body:first-of-type #bw_footer{ height:7px;}
+#bw_footer, x:-moz-any-link, x:default { height:7px;}
+*:first-child+html #bw_footer{ height:8px;}
+#bw_btn_footer{ height:46px; _height /**/:45px; text-align:center; background:url(https://ssl.pstatic.net/static/common/popup/bg_not_available_common.gif) no-repeat left 1px; padding:16px 0 0 0 ; _padding /**/:16px 0 20px 0 ;}
+
+/* Common */
+#bw_content .bw_bx1{border:1px solid #f1f1f1; margin:0 1px 9px 2px; height:100px; background:#f8f8f8; }
+#bw_content .bw_bx1_shadow{position:relative;  padding:13px 13px 12px 0; }
+#bw_content .bw_bx1_shadow strong { color:#282828; vertical-align:top; margin-left:13px; margin-bottom:10px; display:block; }
+#bw_content .bw_bx1_shadow a img {vertical-align:middle; margin:-1px 0 0 0; *margin:-2px 0 0 0;}
+@media all and (-webkit-min-device-pixel-ratio:10000), not all and (-webkit-min-device-pixel-ratio:0)
+{
+	#bw_content .bw_bx1_shadow a img {margin:-1px !important;}
+}
+body:first-of-type #bw_content .bw_bx1_shadow a img {vertical-align:middle; margin:-5px 0 0 0;}
+#bw_content .bw_bx1_shadow_in {height:35px; _height /**/:53px; margin:7px 0 0 13px; _margin:5px 0 0 13px; padding:8px 13px 7px 12px; _padding:9px 13px 8px 12px; border:#e3e3e3 1px solid; color:#666; line-height:20px; background:#fff; overflow:auto;}
+body:first-of-type #bw_content .bw_bx1_shadow_in {height:35px; _height /**/:53px; margin:5px 0 0 13px; padding:8px 13px 9px 12px; border:#e3e3e3 1px solid; color:#666; line-height:20px; background:#fff; overflow:auto;}
+#bw_content .bw_bx1_shadow_in, x:-moz-any-link, x:default {height:35px; _height /**/:53px; margin:5px 0 0 13px; padding:8px 13px 9px 12px; border:#e3e3e3 1px solid; color:#666; line-height:20px; background:#fff; overflow:auto;}
+*:first-child+html #bw_content .bw_bx1_shadow_in {height:33px; _height /**/:53px; margin:7px 0 0 13px; padding:8px 13px 9px 12px; border:#e3e3e3 1px solid; color:#666; line-height:20px; background:#fff; overflow:auto;}
+
+#bw_content .bw_bx2{ border:1px solid #eeeeee; margin:0 0 6px 3px; background:#fbfbfb; line-height:18px;}
+#bw_content .bw_bx2 *{ color:#444444;}
+/* Content */
+#bw_content .bw_desc1{ color:#444444; font-weight:bold; margin:0 0 4px 0;  letter-spacing:-1px;}
+#bw_content .bw_desc2{ color:#444444; margin:0 0 13px 0;}
+
+#bw_content .bw_desc3{ position:relative; color:#696968; padding:9px 2px 9px 34px; font-size:11px; letter-spacing:-1px; background:url(https://ssl.pstatic.net/static/common/popup/bu_attention.gif) no-repeat 13px 12px;}
+body:first-of-type #bw_content .bw_desc3{ padding:10px 2px 8px 34px;}
+#bw_content .bw_desc3, x:-moz-any-link, x:default { padding:10px 2px 8px 34px;}
+*:first-child+html #bw_content .bw_desc3{ padding:9px 2px 9px 34px;}
+
+#bw_content .bw_desc4 { color:#6c6c6c; margin:10px 0 0 33px; font-size:11px; letter-spacing:-1px;}
+body:first-of-type #bw_content .bw_desc4 { margin:9px 0 0 33px;}
+#bw_content .bw_desc4, x:-moz-any-link, x:default { margin:9px 0 0 33px;}
+*:first-child+html #bw_content .bw_desc4 { margin:10px 0 0 33px;}
+#bw_content .bw_desc4 a {color:#258102; font-size:11px;}
+
+#bw_content .bw_desc5 { color:#333333; margin:16px 0 10px 0; _margin:16px 0 10px 0; padding:0 0 0 1px; letter-spacing:-1px;}
+body:first-of-type #bw_content .bw_desc5 { color:#333333; margin:14px 0 12px 0; padding:0 0 0 1px; letter-spacing:-1px;}
+#bw_content .bw_desc5, x:-moz-any-link, x:default { color:#333333; margin:14px 0 12px 0; padding:0 0 0 1px; letter-spacing:-1px;}
+*:first-child+html #bw_content .bw_desc5 { color:#333333; margin:16px 0 12px 0; _margin:16px 0 10px 0; padding:0 0 0 1px; letter-spacing:-1px;}
+#bw_content .bw_desc5 strong{ color:#333333;}
+
+#bw_content .bw_desc6{color:#333333; margin:21px 0 0 0; padding:0 0 5px 1px; _padding:0 0 3px 1px; letter-spacing:-1px; border-bottom:1px solid #ececec; line-height:20px;}
+/*html:first-child #bw_content .bw_desc6 {margin:46px 0 0 0; padding:0 0 8px 1px;}
+body:first-of-type #bw_content .bw_desc6 {margin:26px 0 0 0; padding:0 0 8px 1px;}
+#bw_content .bw_desc6, x:-moz-any-link, x:default {margin:26px 0 0 0; padding:0 0 8px 1px;}
+*:first-child+html #bw_content .bw_desc6 { margin:27px 0 0 0; padding:0 0 9px 1px;}*/
+#bw_content .bw_desc6 strong{ color:#333333;}
+
+#bw_content .layer_content p {font-size:11px; line-height:14px; color:#717171; letter-spacing:-1px;}
+#bw_content .layer_content p.bw_orange {margin-top:5px; color:#fd630a;}
+/* function button box */
+#bw_content .function_btn {overflow:hidden; height:53px; *height:57px; _height:60px; width:362px; margin:14px 0 21px 6px; padding-top:4px;}
+body:first-of-type #bw_content .function_btn { margin:14px 0 20px 6px;}
+#bw_content .function_btn, x:-moz-any-link, x:default  { margin:14px 0 20px 6px;}
+*:first-child+html #bw_content .function_btn { margin:14px 0 21px 6px;}
+
+#bw_content .function_btn .btn_wrap {float:left; width:174px; _width /**/:181px; padding:0 0 0 7px;}
+#bw_content .function_btn .btn_wrap p {margin-top:5px; font-size:11px; letter-spacing:-1px; color:#696968; background:url(https://ssl.pstatic.net/static/common/popup/bu_line.gif) no-repeat right top;}
+body:first-of-type #bw_content .function_btn .btn_wrap p {margin-top:6px;}
+#bw_content .function_btn .btn_wrap p, x:-moz-any-link, x:default  {margin-top:6px;}
+*:first-child+html #bw_content .function_btn .btn_wrap p {margin-top:5px;}
+
+#bw_content .function_btn .btn_wrap1 {float:left; width:179px; _width /**/:181px; text-align:center; padding-left:2px}
+#bw_content .function_btn .btn_wrap1 p {margin-top:5px; font-size:11px; letter-spacing:-1px; color:#696968; text-align:left; padding:0 0 0 4px;}
+body:first-of-type #bw_content .function_btn .btn_wrap1 p {margin-top:6px;}
+#bw_content .function_btn .btn_wrap1 p, x:-moz-any-link, x:default  {margin-top:6px;}
+*:first-child+html #bw_content .function_btn .btn_wrap1 p {margin-top:5px;}
+
+#bw_footer button.c_close{position:absolute; top:7px; right:6px; width:18px; height:17px; background:none; border:none;}
+#bw_footer button.c_close, x:-moz-any-link, x:default {top:5px; right:8px;}
+*:first-child+html #bw_footer button.c_close {top:7px; right:6px;}
+
+#bw_btn_footer button {width:55px; height:27px; text-align:center; font-size:12px;}
+@media all and (-webkit-min-device-pixel-ratio:10000), not all and (-webkit-min-device-pixel-ratio:0)
+{
+	#bw_btn_footer button {padding-top:6px;}
+}
+#bw_btn_footer button.c_close{position:absolute; top:7px; right:6px; width:18px; height:17px; background:none; border:none;}
+#bw_btn_footer button.c_close, x:-moz-any-link, x:default {top:5px; right:8px;}
+*:first-child+html #bw_btn_footer button.c_close {top:7px; right:6px;}
+
+</style>
+<script type="text/javascript">
+	var wordCheck;
+	function setWordCheckObject(obj) {
+		wordCheck = obj;
+	}
+</script>
+	<!-- 레이어팝업2 Document Size : 410*372 -->
+<div id="banword_wrap">
+	<div id="bw_content">
+		<p class="bw_desc5">작성하신 <strong><span id="bw_ugc_type"></span>에 이용자들의 신고가 많은 표현이 포함</strong>되어 있습니다.</p>
+		<div class="bw_bx1">
+			<div class="bw_bx1_shadow">
+				<strong>신고가 많은 표현</strong>
+				<div id="bw_ban_words" class="bw_bx1_shadow_in">
+				</div>
+			</div>
+		</div>
+		<div class="bw_bx2">
+			<p class="bw_desc3">다른 표현을 사용해주시기 바랍니다.<br>
+			건전한 인터넷 문화 조성을 위해 회원님의 적극적인 협조를 부탁드립니다.</p>
+		</div>
+		<p class="bw_desc4">더 궁금하신 사항은 <a href="https://help.naver.com/support/alias/blog/stats/stats1.naver" target="_blank">고객센터</a>로 문의하시면 자세히 알려드리겠습니다.</p>
+	</div>
+		<div id="bw_btn_footer">
+		<button type="button" onclick="if(wordCheck) wordCheck.hideDialog();">확인</button>
+		<button type="button" class="c_close" onclick="if(wordCheck) wordCheck.hideDialog();"><img src="https://blogimgs.pstatic.net/static/common/popup/btn_close3.gif" width="15" height="14" alt="닫기"></button>
+		</div>
+	</div>
+	<div id="dimmed_layer" style="z-index:198; position:absolute;left:0px; top:0px;  background: #000; opacity:0.1;filter:alpha(opacity=10); display:none;"></div>
+	<div id="dimmed_iframe_layer" style="z-index:197; position:absolute;left:0px; top:0px;  background: #000; opacity:0.1;filter:alpha(opacity=10); display:none;"><iframe style="z-index:198; width: 100%; height: 100%; position:absolute;left:0px; top:0px;  background: #000; opacity:0;filter:alpha(opacity=0);" title="ie6에서 사용되는 팝업시 비활성화 프레임"></iframe></div>
+
+
+<div class="l__wrapper">
+    <div id="layer_myvideo_edit" ng-show="" class="" style="display: none;">
+        <div class="post_protection dimmed" aria-hidden="false"></div>
+        <div class="wrap_layer_popup">
+            <div class="layer_alert">
+                <!-- 레이어팝업 컨텐츠 -->
+                <div class="area_layer" aria-hidden="false">
+                    <strong class="title">정보수정 전 주의사항을<br>알려드립니다.</strong>
+                    <p class="text">여러개의 동영상 정보수정을 동시에<br>하는 경우, 마지막에 수정하는 내용만<br>반영될 수 있습니다.</p>
+                    <div class="list_button">
+                        <a href="#" class="button_resend" onclick="myVideoUpdateFormPopup.disablePopup(); return false;" role="button">다시 보지 않기</a>
+                        <!-- [D] .button_check 클릭하면 1).area_layer aria-hidden="true" 2).link_install aria-expanded="false" -->
+                        <a href="#" class="button_check" onclick="myVideoUpdateFormPopup.goToPostUpdateForm(); return false;" role="button">확인</a>
+                    </div>
+                </div>
+                <!-- //레이어팝업 컨텐츠 -->
+            </div>
+        </div>
+    </div>
+    <div class="u_skip" id="u_skip">
+        <a href="#lnbMenu" onclick="adminMain.focusElement('lnbMenu')" class="item _returnFalse">메뉴 바로가기</a>
+        <a href="#content" onclick="adminMain.focusElement('content')" class="item _returnFalse">본문 바로가기</a>
+    </div>
+    <div id="header" class="l__header">
+        
+
+
+
+
+<link rel="stylesheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/css/blogdomain/BlogDomainRegisterLayer-717ef83_https.css" type="text/css">
+<div id="domainRegisterWrap"></div>
+<div class="header__blog">
+    <div class="header__inner">
+        <h1 class="header__title">
+            <span class="header__logo-naver-blog">
+				<a href="https://www.naver.com" class="header__title-naver-link" target="_blank"><span class="blind">NAVER</span></a>
+				<a href="https://section.blog.naver.com" class="header__title-blog-link" target="_top"><span class="blind">blog</span></a>
+			</span>
+
+            
+                <a href="https://admin.blog.naver.com/todayisgood77" class="header__title-blog">관리</a>
+            
+            
+        </h1>
+        <div id="admin-gnb" class="header__area-blog-menu" style="display: block;">
+            <ul class="header__list-blog-menu">
+                <li class="header__blog-menu"><a href="https://blog.naver.com/MyBlog.naver" onclick="sendClickNlog('gnb_oth.my','')" target="_top">내 블로그</a></li>
+                <li class="header__blog-menu">
+                    <a href="#" class="link _buddyList _param(https://blog.naver.com|todayisgood77) _returnFalse" onclick="sendClickNlog('gnb_myb.other','')" id="buddy_anchor">이웃블로그</a>
+                    <div id="buddydiv" style="display:none">
+                        <div class="buddylist_bg"></div>
+                        <span class="ico_arrow"></span>
+                        <div id="buddylist"></div>
+                    </div>
+                </li>
+                <li class="header__blog-menu _mymenu"><a href="https://section.blog.naver.com" onclick="sendClickNlog('gnb_myb.all','');" target="_top">블로그 홈</a></li>
+                <li class="header__blog-menu" id="GNBMyMenuArea">
+                    <a href="#" role="button" class="my _toggleMymenu _mymenu _eachClick">내 메뉴<i class="sp-admin sp-admin__icon-arrow-down" id="elMyMenu"></i></a>
+                    <div class="header__layer-box ly_gnb _my-menu" id="gnb-direct1" style="display: none">
+                        <ul class="post_menu _my-menu">
+                            <li class="header__my-menu"><a href="https://blog.naver.com/todayisgood77?Redirect=Write" onclick="sendClickNlog('gnb_myb.write','')" target="_top">글쓰기</a></li>
+                            <li class="header__my-menu"><a href="https://admin.blog.naver.com/todayisgood77" onclick="sendClickNlog('gnb_myb.set','')">관리</a></li>
+                            <li class="header__my-menu"><a href="https://admin.blog.naver.com/todayisgood77/stat/today" target="_top" onclick="sendClickNlog('gnb_myb.stats','');">통계</a></li>
+                            <li class="header__my-menu header__my-menu--line"><a href="https://admin.blog.naver.com/todayisgood77/skin/list" target="_top" onclick="sendClickNlog('gnb_myb.editskin','');">스킨 변경</a></li>
+                            <li class="header__my-menu"><a href="https://admin.blog.naver.com/Remocon.naver?blogId=todayisgood77&amp;Redirect=Remocon" onclick="sendClickNlog('gnb_myb.designset','');" target="_top">세부 디자인 설정</a></li>
+                        
+                        </ul>
+                    </div>
+                </li>
+                <li class="header__blog-menu header__naver-menu">
+                    <div id="gnb" class=""><strong class="blind">사용자 링크</strong><ul class="gnb_lst" id="gnb_lst" style="display: block;"><li class="gnb_login_li" id="gnb_login_layer" style="display: none;"><a class="gnb_btn_login" href="https://nid.naver.com/nidlogin.login" id="gnb_login_button" target="_top"><span class="gnb_bg"></span><span class="gnb_bdr"></span><span class="gnb_txt">로그인</span></a></li><li class="gnb_my_li" id="gnb_my_layer" style="display: inline-block;"><div class="gnb_my_namebox" id="gnb_my_namebox" style="background-image: url(&quot;https://ssl.pstatic.net/static/common/gnb/2014/ico_arrow_bl1.gif&quot;);"><a href="javascript:;" id="gnb_my" class="gnb_my" onclick="gnbUserLayer.clickToggle(); return false;" target="_top"><img id="gnb_profile_img" src="https://phinf.pstatic.net/contact/20260211_97/17707747102343Uweg_PNG/%B2%BF%B8%B5%C0%CC.png?type=s80" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAMAAAC5zwKfAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAADNQTFRF8PDw5ubm+vr6+/v76enp+Pj47e3t5+fn9/f37Ozs9PT08vLy7+/v6urq9fX15OTk/f39pqwodgAAAQNJREFUeNrs11EOgyAMgOEWUAF19f6n3cMeplJHoSZbsv4H+DIWaCNsNwcGGmiggQZ+D/Q5reuasr8H9ID0CsHfALpA74JTgwPSPnRK0Ac6FrwOXOjcogIdlTkNuDDgogGRAVEBDsQ19IMzC879ILAgGNgAZhbMP3RttonxJs1Lgea/sDYcyreHXjW+oPUHVid2MWC1K+A0sqsDW7CksGmlCNZoFt9pIfjYgY8bwMMexUENQuOtqYCxfHtT7AddYodDcp0gIPEh9IBxous+nBuaTis4Nw/OSLVwloN+JEmjGJR5FyIDRpIWZeAoBkcZGMRgkIEkz0D7GjXQQAMN/GvwKcAAEGGHJh0mmaAAAAAASUVORK5CYII='" width="26" height="26" alt="내 프로필 이미지" style="display: none;"><span id="gnb_profile_filter_mask" class="filter_mask" style="display: none;"></span> <span class="gnb_name" id="gnb_name1">킹태</span><em class="blind">내정보 보기</em><span class="ico_arrow"></span></a><a href="#" class="gnb_emp" id="gnb_emp" target="_top" style="display: none;">(임직원혜택)</a></div><div class="gnb_my_lyr" id="gnb_my_lyr"><div class="gnb_my_content"><div class="gnb_img_area"><span class="gnb_mask"></span><img src="https://phinf.pstatic.net/contact/20260211_97/17707747102343Uweg_PNG/%B2%BF%B8%B5%C0%CC.png?type=s160" onerror="this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAFAAAABQCAMAAAC5zwKfAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAADNQTFRF8PDw5ubm+vr6+/v76enp+Pj47e3t5+fn9/f37Ozs9PT08vLy7+/v6urq9fX15OTk/f39pqwodgAAAQNJREFUeNrs11EOgyAMgOEWUAF19f6n3cMeplJHoSZbsv4H+DIWaCNsNwcGGmiggQZ+D/Q5reuasr8H9ID0CsHfALpA74JTgwPSPnRK0Ac6FrwOXOjcogIdlTkNuDDgogGRAVEBDsQ19IMzC879ILAgGNgAZhbMP3RttonxJs1Lgea/sDYcyreHXjW+oPUHVid2MWC1K+A0sqsDW7CksGmlCNZoFt9pIfjYgY8bwMMexUENQuOtqYCxfHtT7AddYodDcp0gIPEh9IBxous+nBuaTis4Nw/OSLVwloN+JEmjGJR5FyIDRpIWZeAoBkcZGMRgkIEkz0D7GjXQQAMN/GvwKcAAEGGHJh0mmaAAAAAASUVORK5CYII='" width="80" height="80" alt="프로필 이미지"><a href="https://nid.naver.com/user2/api/naverProfile?m=checkIdType" class="gnb_change" target="_top"><span class="blind">프로필 사진 변경</span></a></div><div class="gnb_txt_area"><p class="gnb_account"><span class="gnb_name" id="gnb_name2"><a class="gnb_nick" href="https://nid.naver.com/user2/api/naverProfile?m=checkIdType" target="_top">킹태</a>님</span><a class="gnb_btn_login" href="https://nid.naver.com/nidlogin.logout?returl=https://blog.naver.com/todayisgood77" id="gnb_logout_button" target="_top"><span class="gnb_bg"></span><span class="gnb_bdr"></span><span class="gnb_txt">로그아웃</span></a></p><a href="https://mail.naver.com" class="gnb_mail_address" target="_top">kingte0560@naver.com</a><ul class="gnb_edit_lst"><li class="gnb_info"><a href="https://nid.naver.com/user2/help/myInfo?menu=home" target="_top">네이버ID</a></li><li class="gnb_secure" id="gnb_secure_lnk"><a href="https://nid.naver.com/user2/help/myInfo?m=viewSecurity&amp;menu=security" target="_top">보안설정</a></li><li class="gnb_cert" id="gnb_cert_lnk"><a href="https://nid.naver.com/user2/eSign/v1/home/land" id="gnb_cert_lnk_a" target="_top">내인증서</a></li></ul><div class="gnb_pay_check" id="gnb_pay_check"><p class="gnb_membership" style="display: none;" id="gnb_membership"><a href="https://nid.naver.com/membership/my" class="gnb_my_membership" id="gnb_my_membership" target="_top"><i class="blind">네이버 멤버쉽</i></a></p><em>N Pay</em><a href="https://point.pay.naver.com" id="gnb_pay_point" target="_top"><span style="display: none">내 페이포인트</span></a></div></div></div><div class="gnb_my_community"><a href="https://blog.naver.com/MyBlog.naver" class="gnb_blog" target="_top">내 블로그</a><a href="https://section.cafe.naver.com" class="gnb_cafe" target="_top">가입한 카페</a><a href="https://pay.naver.com" class="gnb_pay" id="gnb_pay_banner_membership" style="display: none;" target="_top"><span>N Pay</span></a><a href="https://nid.naver.com/membership/join" class="gnb_pay" id="gnb_pay_banner_newbie" style="display: block;" target="_top"><i>네이버 멤버십 최대 5% 적립</i></a></div><a href="#" class="gnb_my_interface" style="display:none" target="_top"><span class="blind">환경설정</span></a></div><iframe id="gnb_my_lyr_iframe" title="빈 프레임" class="gnb_pad_lyr" name="padding" width="0" height="0" scrolling="no" frameborder="0" style="top:34px;right:-4px;width:320px;height:158px;display:none;opacity:0;-ms-filter:alpha(opacity=0)"></iframe></li><li class="gnb_talk_li" id="gnb_talk_layer" style="display:none"><a id="gnb_talks_button" class="gnb_talk" target="_top" rel="noopener noreferrer" href="https://talks.naver.com/?frm=pcgnb&amp;anchor=&amp;category="><span class="blind">네이버톡</span><span class="gnb_icon"></span><em class="gnb_ico_num" id="gnb_talk_menu" style="display:none"><span class="gnb_ico_new"><span class="gnb_count" id="gnb_talk_count"></span></span></em><span class="ico_arrow"></span></a></li><li class="gnb_notice_li" id="gnb_notice_layer" style="display:none"><a href="https://m.notify.naver.com/?from=pcmain" class="gnb_notice" target="_top" rel="noopener noreferrer"><span class="blind">알림</span><span class="gnb_icon"></span><em class="gnb_ico_num" id="gnb_me_menu" style="display: block;"><span class="gnb_ico_new"><span class="gnb_count" id="gnb_me_count" style="display: inline-block;">15</span></span></em><span class="ico_arrow"></span></a><div class="gnb_notice_lyr" id="gnb_notice_lyr"><div class="svc_noti svc_panel"><div class="svc_scroll"><div class="svc_head"><strong class="gnb_tit">전체 알림</strong><div class="task_right"><button onclick="gnbNaverMeLayer.deleteReadList(this, event);" id="gnb_btn_read_noti_del">읽은 알림 삭제</button><button onclick="gnbNaverMeLayer.showDeleteAlert();" id="gnb_btn_all_noti_del">모두 삭제</button></div></div><div class="svc_body" id="gnb_naverme_layer"></div></div><div class="gnb_ly_alert" id="gnb_ly_alert" style="display: none;"><p class="gnb_msg"><strong>알림을 모두 삭제하시겠습니까?</strong></p><div class="gnb_btns"><button id="ly_alert_confirm" onclick="gnbNaverMeLayer.deleteAllList(this, event);">확인</button><button onclick="gnbNaverMeLayer.hideDeleteAlert();">취소</button></div><button class="gnb_btn_close" onclick="gnbNaverMeLayer.hideDeleteAlert();"><i>레이어 닫기</i></button></div><a href="https://m.notify.naver.com/?from=pcmain" class="gnb_notice_all" target="_top">내 알림 전체보기</a></div></div><iframe id="gnb_notice_lyr_iframe" title="빈 프레임" class="gnb_pad_lyr" name="padding" width="0" height="0" scrolling="no" frameborder="0" style="top:34px;right:-4px;width:299px;height:332px;display:none;opacity:0;-ms-filter:alpha(opacity=0)"></iframe></li><li class="mail_li" id="gnb_mail_layer" style="display:none"><a href="https://mail.naver.com" class="gnb_mail" target="_top"><span class="blind">메일</span><span class="gnb_icon"></span><em class="gnb_ico_num" id="gnb_mail_menu" style="display: block;"><span class="gnb_ico_new"><span class="gnb_count" id="gnb_mail_count" style="display: inline-block;">99<span class="plus">+</span></span></span></em></a></li><li class="gnb_service_li" id="gnb_service_layer" style="display: inline-block;"><a href="javascript:;" class="gnb_service" onclick="gnbMoreLayer.clickToggle(); return false;" target="_top"><span class="blind">서비스 더보기</span><span class="gnb_icon"></span><span class="ico_arrow"></span></a><div class="gnb_service_lyr" id="gnb_service_lyr"><div class="gnb_favorite_search" id="gnb_favorite_search"><div class="gnb_favorite_area"><div class="gnb_favorite_lstwrp"><div class="gnb_first_visit" style="display:none"><span class="blind">나만의 즐겨찾기를 추가해 보세요!</span><a href="#" class="gnb_close" target="_top"><span class="blind">닫기</span></a></div><strong class="blind">즐겨찾는 서비스</strong><ul class="gnb_favorite_lst" id="gnb_favorite_lst"><li class="gnb_add"><a href="#" target="_top"><span class="ic_add"></span>추가</a></li><li class="gnb_add"><a href="#" target="_top"><span class="ic_add"></span>추가</a></li><li class="gnb_add"><a href="#" target="_top"><span class="ic_add"></span>추가</a></li><li class="gnb_add"><a href="#" target="_top"><span class="ic_add"></span>추가</a></li></ul><a href="#" class="gnb_my_interface" onclick="gnbMoreLayer.clickToggleWhole(); return false;" target="_top"><span class="blind">즐겨찾기 설정</span></a></div></div><div class="gnb_search_area"><div class="gnb_search_box" onmouseover="gnb_search.mouseOver(this);" onmouseout="gnb_search.mouseOut(this);"><input id="gnb_svc_search_input" type="text" autocomplete="off" title="서비스 검색" value="더 많은 서비스를 간편하게 시작하세요!" onfocus="gnb_search.clearInput(this);" onblur="gnb_search.resetInput(this);" onkeydown="gnb_search.keyDown(event);" onkeyup="gnb_search.keyUp(event);"><a href="#" class="gnb_del_txt" id="gnb_del_txt" style="display:none" target="_top"><span class="blind">삭제</span></a><div class="gnb_pop_input" id="gnb_pop_input" tabindex="0" onfocus="gnb_search.searchPopOnMouse = true; return false;" onfocusout="gnb_search.searchPopOnMouse = false; return false;" onmouseover="gnb_search.searchPopOnMouse = true; return false;" onmouseout="gnb_search.searchPopOnMouse = false; return false;" style="display:none"><ul class="gnb_pop_lst"></ul></div></div><div id="gnb_search_lstwrp" class="gnb_search_lstwrp"><ul class="gnb_search_lst gnb_first"><li class="gnb_first"><a id="gnb_search_lst_first_item" href="https://cafe.naver.com/" target="_top">카페</a></li><li><a href="https://news.naver.com/" target="_top">뉴스</a></li><li><a href="https://comic.naver.com/" target="_top">웹툰</a></li><li><a href="https://book.naver.com" target="_top">도서</a></li><li><a href="https://kin.naver.com/" target="_top">지식iN</a></li></ul><ul class="gnb_search_lst"><li class="gnb_first"><a href="https://section.blog.naver.com/" target="_top">블로그</a></li><li><a href="https://stock.naver.com/" target="_top">증권</a></li><li><a href="https://chzzk.naver.com/" target="_top">치지직</a></li><li><a href="https://dict.naver.com/" target="_top">사전</a></li><li><a href="https://calendar.naver.com/" target="_top">캘린더</a></li></ul><ul class="gnb_search_lst"><li class="gnb_first"><a href="https://mail.naver.com/" target="_top">메일</a></li><li><a href="https://land.naver.com/" target="_top">부동산</a></li><li><a href="https://weather.naver.com/" target="_top">날씨</a></li><li><a href="https://m.sports.naver.com/index" target="_top">스포츠</a></li><li><a href="https://mybox.naver.com/" target="_top">MYBOX</a></li></ul><ul class="gnb_search_lst"><li class="gnb_first"><a href="https://shopping.naver.com/ns/home" target="_top">스토어</a></li><li><a href="https://map.naver.com/" target="_top">지도</a></li><li><a href="https://pay.naver.com/" target="_top">페이</a></li><li><a href="https://novel.naver.com/webnovel/weekday" target="_top">웹소설</a></li><li><a href="https://vibe.naver.com/today/" target="_top">VIBE</a></li></ul></div></div><div class="gnb_banner"><a href="https://campaign.naver.com/npay/rediret/index.nhn" class="gnb_service_event" target="_top"><img id="gnb_promo" alt="N페이, 이벤트 참여하면 포인트 적립!" width="265" height="47" src="https://ssl.pstatic.net/static/common/gnb/banner/promo_npay_2309.png"></a></div><div class="gnb_linkwrp"><a href="https://www.naver.com/more.html" class="gnb_service_all" id="gnb_service_all" target="_top">전체 서비스 보기</a></div></div><div class="gnb_svc_more" id="gnb_svc_more" style=""><strong class="blind">네이버 주요 서비스</strong><div class="gnb_bg_top"></div><div class="gnb_svc_hd" id="gnb_svc_hd" tabindex="0"><strong class="gnb_svc_tit">바로가기 설정</strong><span class="link"><a href="https://www.naver.com/more.html" target="_top">전체 서비스 보기</a></span></div><div class="gnb_svc_lstwrp"><div class="gnb_svc_lst1"><ul class="gnb_first"><li><input type="checkbox" id="nsvc_game" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_game">네이버게임</label></li><li><input type="checkbox" id="nsvc_weather" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_weather">날씨</label></li><li><input type="checkbox" id="nsvc_shopping" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_shopping">네이버+ 스토어</label></li><li><input type="checkbox" id="nsvc_naverpay" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_naverpay">네이버페이</label></li><li><input type="checkbox" id="nsvc_mybox" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_mybox">MYBOX</label></li><li><input type="checkbox" id="nsvc_news" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_news">뉴스</label></li><li><input type="checkbox" id="nsvc_comic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_comic">웹툰</label></li><li><input type="checkbox" id="nsvc_memo" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_memo">메모</label></li><li><input type="checkbox" id="nsvc_mail" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_mail">메일</label></li><li><input type="checkbox" id="nsvc_land" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_land">부동산</label></li><li><input type="checkbox" id="nsvc_bookmark" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_bookmark">Keep</label></li><li><input type="checkbox" id="nsvc_blog" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_blog">블로그</label></li><li><input type="checkbox" id="nsvc_dic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_dic">사전</label></li></ul><ul class=""><li><input type="checkbox" id="nsvc_smartboard" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_smartboard">스마트보드</label></li><li><input type="checkbox" id="nsvc_sports" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_sports">스포츠</label></li><li><input type="checkbox" id="nsvc_series" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_series">시리즈</label></li><li><input type="checkbox" id="nsvc_serieson" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_serieson">시리즈on</label></li><li><input type="checkbox" id="nsvc_novel" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_novel">웹소설</label></li><li><input type="checkbox" id="nsvc_contact" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_contact">주소록</label></li><li><input type="checkbox" id="nsvc_finance" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_finance">증권</label></li><li><input type="checkbox" id="nsvc_map" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_map">지도</label></li><li><input type="checkbox" id="nsvc_kin" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_kin">지식iN</label></li><li><input type="checkbox" id="nsvc_terms" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_terms">지식백과</label></li><li><input type="checkbox" id="nsvc_book" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_book">도서</label></li><li><input type="checkbox" id="nsvc_cafe" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_cafe">카페</label></li><li><input type="checkbox" id="nsvc_calendar" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_calendar">캘린더</label></li></ul><ul class=""><li><input type="checkbox" id="nsvc_navertv" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_navertv">네이버TV</label></li></ul></div><div class="svc_lst2"><div class="svc_spc gnb_first"><strong><a href="https://dict.naver.com/" target="_top">어학사전</a></strong><ul class=""><li><input type="checkbox" id="nsvc_krdic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_krdic">국어사전</label></li><li><input type="checkbox" id="nsvc_endic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_endic">영어사전</label></li><li><input type="checkbox" id="nsvc_hanja" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_hanja">한자사전</label></li><li><input type="checkbox" id="nsvc_jpdic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_jpdic">일어사전</label></li><li><input type="checkbox" id="nsvc_cndic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_cndic">중국어사전</label></li><li><input type="checkbox" id="nsvc_frdic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_frdic">프랑스어사전</label></li><li><input type="checkbox" id="nsvc_dedic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_dedic">독일어사전</label></li><li><input type="checkbox" id="nsvc_rudic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_rudic">러시아어사전</label></li><li><input type="checkbox" id="nsvc_vndic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_vndic">베트남어사전</label></li><li><input type="checkbox" id="nsvc_spdic" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_spdic">스페인어사전</label></li><li><input type="checkbox" id="nsvc_papago" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_papago">파파고</label></li></ul></div><div class="svc_spc"><strong>인기/신규서비스</strong><ul class=""><li><input type="checkbox" id="nsvc_chzzk" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_chzzk">치지직</label></li><li><input type="checkbox" id="nsvc_healthcare" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_healthcare">헬스케어</label></li><li><input type="checkbox" id="nsvc_band" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_band">밴드</label></li><li><input type="checkbox" id="nsvc_line" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_line">라인</label></li><li><input type="checkbox" id="nsvc_vibe" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_vibe">VIBE</label></li><li><input type="checkbox" id="nsvc_pcontents" name="selmenu" class="gnb_input_check" value=""> <label for="nsvc_pcontents">프리미엄콘텐츠</label></li></ul></div></div></div><div class="svc_btnwrp"><div class="svc_btns"><button class="gnb_save" onclick="if(gnbFavorite.addService()){gnbMoreLayer.clickToggleWhole()} return false;"><strong class="blind">확인</strong></button><button class="gnb_close" onclick="gnbFavorite.cancel(); return false;"><span class="blind">취소</span></button><button class="gnb_return" onclick="gnbFavorite.resetService(); return false;"><span class="blind">초기 설정으로 변경</span></button></div></div><div class="gnb_bg_btm"></div></div></div><iframe id="gnb_service_lyr_iframe" title="빈 프레임" class="gnb_pad_lyr" name="padding" width="0" height="0" scrolling="no" frameborder="0" style="display:none;top:34px;right:297px;width:585px;height:385px;opacity:0;-ms-filter:alpha(opacity=0)"></iframe><iframe id="gnb_svc_more_iframe" title="빈 프레임" class="gnb_pad_lyr" name="padding" width="0" height="0" scrolling="no" frameborder="0" style="display:none;top:34px;right:-4px;width:295px;height:385px;opacity:0;-ms-filter:alpha(opacity=0)"></iframe></li></ul></div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    var gnb_service = "admin.blog";
+    var gnb_template = "gnb_utf8";
+    var gnb_url = 'https://blog.naver.com/todayisgood77';
+    var gnb_logout = gnb_url;
+    var gnb_brightness = 1;
+    var gnb_item_hide_option = 1 | 4 | 8 | 16 | 128;
+    var gnb_login_on_top = true;
+
+    
+    var timeStamp = "20260623";
+    var gnb_src = "https://ssl.pstatic.net/static.gn/templates/gnb_utf8.nhn";
+    var scriptTag = document.createElement("script");
+    scriptTag.type = "text/javascript";
+    scriptTag.charset = "utf-8";
+    scriptTag.src = gnb_src + "?" + timeStamp;
+
+    scriptTag.onreadystatechange = function () {
+        if (scriptTag.readyState == "loaded" || scriptTag.readyState == "complete") {
+            scriptTag.onreadystatechange = null;
+            scriptTag.onload = null;
+            loadGNB();
+        }
+    };
+
+    scriptTag.onload = function () {
+        scriptTag.onreadystatechange = null;
+        loadGNB();
+    };
+
+    var headTag = document.getElementsByTagName('head')[0];
+    headTag.appendChild(scriptTag);
+
+    function loadGNB() {
+        getGNB();
+        setTimeout(function () {
+            document.getElementById("admin-gnb").style.display = "block";
+        }, 500);
+    }
+
+    var doc = document.documentElement;
+    doc.setAttribute('data-useragent', navigator.userAgent);
+</script>
+
+        
+
+
+
+<div class="header__admin">
+    <div class="header__inner">
+        <div class="module__gnb" id="lnbMenu">
+            <ul class="gnb__list">
+                <li class="gnb__menu">
+                    <a href="https://admin.blog.naver.com/todayisgood77/config/bloginfo" class="_nclk(gnb.setting) ">기본 설정</a>
+                </li>
+                <li class="gnb__menu">
+                    <a href="https://admin.blog.naver.com/todayisgood77/skin/list" class="_nclk(gnb.layout) ">꾸미기 설정</a>
+                </li>
+                <li class="gnb__menu">
+                    <a href="https://admin.blog.naver.com/todayisgood77/config/topmenu" class="_nclk(gnb.menu) is-on">메뉴·글·동영상 관리</a>
+                </li>
+                <li class="gnb__menu">
+                    <a href="https://admin.blog.naver.com/todayisgood77/stat/today" class="_nclk(gnb.stats) ">내 블로그 통계</a>
+                </li>
+            </ul>
+            <a href="#" role="button" class="gnb__button-menu-all _showSiteMap _nclk(gnb.gohome)" id="_siteMap">전체보기</a>
+        </div>
+        <div id="blogMarketButton" class="header__area-button">
+            <div class="header__layer-register">
+                
+                
+                    
+                    
+                        <button type="button" id="" class="button__type1 button__type1--fill goBlogMarketRegister _nclk(gnb.mrkjoin)">블로그 마켓 가입</button>
+
+                        
+                            <div id="blog_market_register_layer" class="header__layer-box" style="display:block">
+                                <p class="header__register-tooltip">
+                                    여기서 블로그 마켓 셀러로<br>가입하고, 상품을 등록해보세요.
+                                    <a href="#" class="header__register-close _nclk(gnb.mrktooltip)"><span class="blind">닫기</span></a>
+                                </p>
+                            </div>
+                        
+                    
+                
+            </div>
+
+            <div class="header__layer-tutorial" id="easyMakeBlog">
+                <button type="button" class="button__type1 _openTutorialLayer _returnFalse" onclick="sendClickNlog('gnb.easy','');">블로그 쉽게 꾸미기</button>
+                
+                    <div id="easyMakeBlogLayer" class="header__layer-box" style="display: none">
+                        <p class="header__tutorial-tooltip">쉽고 간단하게 나만의<br>블로그를 만들어 보세요!<a href="#" class="header__tutorial-close _close" onclick="sendClickNlog('gnb.easyclose','');"><img src="https://ssl.pstatic.net/static/blog/admin/btn-closetooltip@2x.png" alt="닫기" width="10" height="10"></a>
+                        </p>
+                    </div>
+                
+            </div>
+            <button type="button" class="button__type1 _lnbGoWirte _nclk(gnb.write)">블로그 글쓰기</button>
+        </div>
+    </div>
+</div>
+<script>
+    var gsBlogUrl = 'https://blog.naver.com';
+    var gsSellerBlog = 'https://seller.blog.naver.com';
+</script>
+
+
+        <div class="header__dimmed" id="head_dimmed" style="display: none"></div>
+        <div class="module__layer-all-menu" id="siteMapLayer" style="display: none">
+            
+
+
+
+<div class="layer-all-menu__inner">
+    <div class="layer-all-menu__depth1">
+        <strong class="layer-all-menu__title">기본 설정</strong>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">기본 정보 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <!-- [D] 선택 is-on -->
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/bloginfo" id="all_userbasic_config_anchor" class="layer-all-menu__item _nclk(hme_basic.binfo)">블로그 정보
+                    
+                </a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/defaulteditor" id="all_default_editor_anchor" class="layer-all-menu__item _nclk(hme_basic.editor)">기본 서체 설정</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">사생활 보호</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/bloginit" id="all_userinit_config_anchor" class="layer-all-menu__item _nclk(hme_basic.preset)">블로그 초기화</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/activity" id="all_useractivity_config_anchor" class="layer-all-menu__item _nclk(hme_basic.privacy)">방문집계 보호 설정</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/share" id="all_contentsProtect_config_anchor" class="layer-all-menu__item _nclk(hme_basic.share)">콘텐츠 공유 설정</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">스팸 차단 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/userfilter/blacklist" id="all_userblacklist_config_anchor" class="layer-all-menu__item _nclk(hme_basic.spamset)">차단 설정</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/userfilter/filteredlist" id="all_filteredlist_config_anchor" class="layer-all-menu__item _nclk(hme_basic.blocklist)">차단된 글목록</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/authority" id="all_authority_config_anchor" class="layer-all-menu__item _nclk(hme_basic.guest)">댓글·안부글 권한
+
+                </a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">이웃 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/buddy/manage" id="all_buddylist_config_anchor" class="layer-all-menu__item _nclk(bas_menu.neimgr)">내가 추가한 이웃</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/buddy/me" id="all_buddyme_config_anchor" class="layer-all-menu__item _nclk(bas_menu.neiyadd)">나를 추가한 이웃</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/buddy/relation" id="all_buddyinvite_config_anchor" class="layer-all-menu__item _nclk(bas_menu.neitadd)">서로이웃 신청<span class="layer-all-menu__buddy"></span></a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="layer-all-menu__depth1">
+        <strong class="layer-all-menu__title">꾸미기 설정</strong>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">스킨</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/skin/list" id="all_skin_config_anchor" class="layer-all-menu__item _nclk(hme_edit.skin)">스킨 선택</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/skin/personalskin" id="all_skin_make_config_anchor" class="layer-all-menu__item _nclk(hme_edit.nskin)">내 스킨 관리</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">디자인 설정</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/LayoutSelect.naver?blogId=todayisgood77" id="all_layout_config_anchor" class="layer-all-menu__item _nclk(hme_edit.layout) ">레이아웃·위젯 설정</a></li>
+                <li><a href="https://admin.blog.naver.com/Remocon.naver?blogId=todayisgood77&amp;loadType=admin&amp;Redirect=Remocon" id="all_remocon_config_anchor" class="layer-all-menu__item _nclk(hme_edit.detail)">세부 디자인 설정</a></li>
+                <li><a href="https://admin.blog.naver.com/Remocon.naver?blogId=todayisgood77&amp;loadType=admin&amp;Redirect=Remocon&amp;SelectedMenu=title" id="all_remocon_title_config_anchor" class="layer-all-menu__item _nclk(hme_edit.title)">타이틀 꾸미기</a></li>
+                <li><a href="https://admin.blog.naver.com/Remocon.naver?blogId=todayisgood77&amp;loadType=admin&amp;Redirect=Remocon&amp;SelectedMenu=poststyle" id="all_remocon_poststyle_config_anchor" class="layer-all-menu__item _nclk(hme_edit.pstst)">글·댓글 스타일</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">아이템 설정</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/item/personacon" id="all_personacon_config_anchor" class="layer-all-menu__item _nclk(hme_edit.person)">퍼스나콘</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/item/music" id="all_music_config_anchor" class="layer-all-menu__item _nclk(hme_edit.music)">뮤직</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">네이버 페이·선물 내역</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="http://order.pay.naver.com/home?tabMenu=DIGITAL" target="_blank" class="layer-all-menu__item _nclk(hme_edit.npay)">페이 이용내역</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/item/gift" id="all_gift_config_anchor" class="layer-all-menu__item _nclk(hme_edit.gift)">아이템 선물내역</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="layer-all-menu__depth1">
+        <strong class="layer-all-menu__title">메뉴·글·동영상 관리</strong>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">메뉴 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/topmenu" id="all_menu_use_config_anchor" class="layer-all-menu__item _nclk(hme_menu.topmenu)">상단메뉴 설정</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/blog" id="all_mylog_category_config_anchor" class="layer-all-menu__item _nclk(hme_menu.blog)">블로그
+                    
+                </a></li>
+                
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/prologue" id="all_prologue_config_anchor" class="layer-all-menu__item _nclk(hme_menu.prologue)">프롤로그</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">글배달</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/mrblog" id="all_mrblog_config_anchor" class="layer-all-menu__item _nclk(hme_menu.mrb)">블로그씨 질문</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">글 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <li>
+                    
+                        
+                        
+                            <a href="https://admin.blog.naver.com/todayisgood77/userfilter/commentlist" id="all_commentlist_config_anchor" class="layer-all-menu__item _nclk(hme_menu.reply) is-on">댓글</a>
+                        
+                    
+                </li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/tag" id="all_tag_config_anchor" class="layer-all-menu__item _nclk(hme_menu.tag)">태그</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/postexport" id="all_postexport_config_anchor" class="layer-all-menu__item _nclk(hme_menu.pstsave)">글 저장</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">동영상 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/my-video" id="all_my_video_config_anchor" class="layer-all-menu__item _nclk(hme_menu.myvideo)">내 동영상</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">플러그인·연동 관리</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/advertiseconfiguration" id="all_advertiseconfiguration_config_anchor" class="layer-all-menu__item _nclk(hme_menu.adpost)">애드포스트 설정</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="layer-all-menu__depth1">
+        <strong class="layer-all-menu__title">내 블로그 통계</strong>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">오늘</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/today" id="all_stat_today" class="layer-all-menu__item _nclk(hme_stats.today)">일간 현황</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">방문 분석</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/visit_pv" id="all_stat_visit_pv" class="layer-all-menu__item _nclk(hme_stats.pv)">조회수</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/uv" id="all_stat_uv" class="layer-all-menu__item _nclk(hme_stats.uv)">순방문자수</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/visit" id="all_stat_visit" class="layer-all-menu__item _nclk(hme_stats.visit)">방문 횟수</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/frequency" id="all_stat_frequency" class="layer-all-menu__item _nclk(hme_stats.avgvisit)">평균 방문 횟수</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/retention" id="all_stat_retention" class="layer-all-menu__item _nclk(hme_stats.retention)">재방문율</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/averageDuration" id="all_stat_averageDuration" class="layer-all-menu__item _nclk(hme_stats.avgtime)">평균 사용 시간</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">사용자 분석</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/referer" id="all_stat_referer" class="layer-all-menu__item _nclk(hme_stats.referer)">유입분석</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/hour_cv" id="all_stat_hour_cv" class="layer-all-menu__item _nclk(hme_stats.hourlypv)">시간대 분석</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/demo" id="all_stat_demo" class="layer-all-menu__item _nclk(hme_stats.demo)">성별·연령별 분포</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/device" id="all_stat_device" class="layer-all-menu__item _nclk(hme_stats.device)">기기별 분포</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/relationDist" id="all_stat_relationDist" class="layer-all-menu__item _nclk(hme_stats.relvisit)">이웃 방문 현황</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/relationDelta" id="all_stat_relationDelta" class="layer-all-menu__item _nclk(hme_stats.reldiff)">이웃 증감수</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/relationDemo" id="all_stat_relationDemo" class="layer-all-menu__item _nclk(hme_stats.reldiffdemo)">이웃 증감 분석</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/country" id="all_stat_country" class="layer-all-menu__item _nclk(hme_stats.nation)">국가별 분포</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">동영상 분석 <i class="sp-admin sp-admin__icon-beta"><span class="blind">BETA</span></i></strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/play_count" id="all_stat_play_count" class="layer-all-menu__item _nclk(hme_stats.playnb)">재생수분석</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/play_time" id="all_stat_play_time" class="layer-all-menu__item _nclk(hme_stats.playtm)">재생시간분석</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/uniq_watcher" id="all_stat_uniq_watcher" class="layer-all-menu__item hme_stats(need.viewer)">시청자분석</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <strong class="layer-all-menu__subtitle">순위</strong>
+            <ul class="layer-all-menu__depth3">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/rank_pv" id="all_stat_rank_pv" class="layer-all-menu__item _nclk(hme_rank.pv)">조회수 순위</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/rank_like" id="all_stat_rank_like" class="layer-all-menu__item _nclk(hme_rank.sym)">공감수 순위</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/rank_comment" id="all_stat_rank_comment" class="layer-all-menu__item _nclk(hme_rank.reply)">댓글수 순위</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/stat/rank_play_count" id="all_stat_rank_play_count" class="layer-all-menu__item _nclk(hme_rank.videorank)">동영상 순위</a></li>
+            </ul>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <a href="https://admin.blog.naver.com/todayisgood77/stat/average_upperGroup" id="all_stat_average_upperGroup" class="layer-all-menu__subtitle _nclk(hme_blogscale)">블로그 평균 데이터</a>
+        </div>
+        <div class="layer-all-menu__depth2">
+            <a href="https://admin.blog.naver.com/todayisgood77/stat/download" id="all_stat_download" class="layer-all-menu__subtitle _nclk(hme_download)">지표 다운로드</a>
+        </div>
+    </div>
+</div>
+
+        </div>
+    </div>
+    <div class="l__container">
+        <div class="container__inner">
+            <div class="l__aside">
+                
+                    
+                    
+                    
+
+
+
+<div class="module__lnb">
+    <div class="lnb__local-menu" id="nav">
+        <div class="lnb__depth1">
+            <div class="lnb__title">메뉴 관리</div>
+            <ul class="lnb__depth2">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/topmenu" id="menu_use_config_anchor" class="lnb__item _nclk(edt_post.topmenu)">상단메뉴 설정</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/blog" id="mylog_category_config_anchor" class="lnb__item _nclk(edt_post.blog)">블로그</a></li>
+                
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/prologue" id="prologue_config_anchor" class="lnb__item _nclk(edt_post.prologue)">프롤로그</a></li>
+            </ul>
+        </div>
+        <div class="lnb__depth1">
+            <div class="lnb__title">글배달</div>
+            <ul class="lnb__depth2">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/mrblog" id="mrblog_config_anchor" class="lnb__item _nclk(edt_post.mrb)">블로그씨 질문</a></li>
+            </ul>
+        </div>
+        <div class="lnb__depth1">
+            <div class="lnb__title">글 관리</div>
+            <ul class="lnb__depth2">
+                
+                    
+                    
+                        <li><a href="https://admin.blog.naver.com/todayisgood77/userfilter/commentlist" id="commentlist_config_anchor" class="lnb__item _nclk(edt_post.reply) is-on">댓글</a></li>
+                    
+                
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/tag" id="tag_config_anchor" class="lnb__item _nclk(edt_post.tag)">태그</a></li>
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/postexport" id="postexport_config_anchor" class="lnb__item _nclk(edt_post.postsave)">글 저장</a></li>
+            </ul>
+        </div>
+        <div class="lnb__depth1">
+            <div class="lnb__title">동영상 관리</div>
+            <ul class="lnb__depth2">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/my-video" id="my_video_config_anchor" class="lnb__item _nclk(edt_post.myvideo)">내 동영상</a></li>
+            </ul>
+        </div>
+        <div class="lnb__depth1">
+            <div class="lnb__title">플러그인·연동 관리</div>
+            <ul class="lnb__depth2">
+                <li><a href="https://admin.blog.naver.com/todayisgood77/config/advertiseconfiguration" id="advertiseconfiguration_config_anchor" class="lnb__item _nclk(edt_post.adpost)">애드포스트 설정</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="lnb__common-menu">
+        
+
+
+
+<div>
+    <div class="lnb__depth1">
+        <a href="https://section.blog.naver.com/Notice.naver" target="_blank" class="lnb__title is-arrow _nclk(edt_menu.notice)">
+            공지사항
+        </a>
+    </div>
+    <div class="lnb__depth1">
+        <a href="https://blog.naver.com/PostList.naver?blogId=blogpeople&amp;from=postList&amp;categoryNo=50&amp;parentCategoryNo=50" target="_blank" class="lnb__title is-arrow _nclk(edt_menu.tip))">
+            블로그 이용 Tip
+        </a>
+    </div>
+    <div class="lnb__depth1">
+        <a href="https://talk.naver.com/ct/w4nd8p" target="_blank" title="블로그에 대한 궁금증을 답변해드리는 블로그 스마트봇 입니다." class="lnb__title is-arrow _nclk(edt_menu.bsb)">
+            블로그 스마트봇
+        </a>
+    </div>
+</div>
+    </div>
+</div>
+                    
+                    
+                    
+                
+            </div>
+            <div id="content" class="l__content content" style="min-height: 770px; height: 1941px;">
+                
+                
+                    <iframe id="papermain" name="papermain" allowtransparency="true" frameborder="0" width="728" height="1871" scrolling="no" src="https://admin.blog.naver.com/AdminNaverCommentManageView.naver?blogId=todayisgood77" onload="adminMain.resizeIfr(this, 579);" class="content_iframe l__content-iframe" title="본문영역" style="height: 1871px;"></iframe>
+                
+                <div id="MainDiv" name="MainDiv" style="width:590px;overflow:auto;height:30px" class="bscrollbar" onscroll="adminMain.Scrollon(this.scrollLeft);"></div>
+            </div>
+        </div>
+    </div>
+    <div id="footer" class="l__footer">
+        
+
+<div class="footer__inner">
+    <div class="footer__menu">
+        <a href="http://www.naver.com/rules/service.html" target="_blank" class="footer__menu-item">이용약관</a>
+        <a href="http://blog.naver.com/post/blog_use.htm" target="_blank" class="footer__menu-item">블로그 서비스 운영정책</a>
+        <a href="http://www.naver.com/rules/privacy.html" target="_blank" class="footer__menu-item"><strong class="footer__menu-highlight">개인정보처리방침</strong></a>
+        <a href="http://www.naver.com/rules/disclaimer.html" target="_blank" class="footer__menu-item">책임의 한계와 법적고지</a>
+        <a href="javascript:adminMain.showPostProtection()" class="footer__menu-item __showBlogPostProtection">글 권리 보호하기</a>
+        <a href="https://right.naver.com" target="_blank" class="footer__menu-item">게시중단요청서비스</a>
+    </div>
+    <address class="footer__address">
+        <i class="sp-admin sp-admin__logo-naver-footer"></i> Copyright © <a href="https://www.navercorp.com/" target="_blank">NAVER Corp.</a> All Rights Reserved.
+    </address>
+</div>
+
+    </div>
+    <div class="popup_domain_wrap is_hidden" id="popup_domain_wrap">
+        <div class="popup_domain_change">
+            <strong class="popup_title">도메인 주소 변경시 이전 주소를 다시<br>사용할 수 없습니다. 진행하시겠습니까?</strong>
+            <p class="popup_text">브라우저 쿠키 정책 변경에 맞춰, 2021년부터 네이버 도메인 주소만 사용 가능합니다.</p>
+            <button class="popup_btn popup_btn_confirm" id="popup_domain_confirm">확인</button>
+            <button class="popup_btn" id="popup_domain_cancel">취소</button>
+        </div>
+    </div>
+
+    <div id="domainPolicyPopup" class="popup_domain_wrap is_hidden">
+        <div class="popup_domain_policy">
+            <strong class="popup_title">개인 도메인 및 blog.me 도메인 사용 중단 안내</strong>
+            <div class="popup_text">
+                안녕하세요. 블로그 서비스팀입니다.<br>
+                chrome 브라우저 쿠키 정책 변경에 따라 2021년 부터 네이버 도메인(blog.naver.com) 만<br> 사용 가능합니다.
+                <a href="https://blog.naver.com/blogpeople/221788926430" target="_blank" rel="noopener noreferrer" class="popup_link">팀블로그 공지 보러가기</a><br><br>
+                <strong>2020년 12월 31일까지 네이버 도메인으로 블로그 주소를 변경해주시기 바랍니다.</strong><br><br>
+
+                <strong class="popup_red_text">
+                    ※ 기간내 변경하지 않으신 분들은 2021년 1월 부터 네이버 도메인으로 순차적으로 변경되며,<br>
+                    개인도메인 주소를 이용한 블로그 접근이 제한될 수 있습니다.<br><br>
+                </strong>
+
+                보안을 강화하기 위해 불가피하게 정책 변경이 필요한 것으로<br>
+                안전한 웹 사이트 환경을 만들기 위해 모두 함께해주세요.<br>
+                궁금하신 점 있으시면 <a href="https://help.naver.com/support/home.help" target="_blank" rel="noopener noreferrer" class="popup_link">고객센터</a>에 문의해주세요.
+            </div>
+            <button class="popup_btn popup_btn_confirm" onclick="hideDomainPolicyPopup()">확인</button>
+            <button class="popup_btn popup_btn_cookie" onclick="hideAndNoShowForOneDay()">1일 동안 보지 않기</button>
+            <div class="popup_dimmed"></div>
+        </div>
+    </div>
+    
+
+<div class="alert_layer_popup" id="secret_start_layer_popup" style="visibility:hidden">
+    <div class="video_limit_layer_content">
+        <i class="caution_icon"></i>
+        <strong class="title">비공개 동영상 용량 제한 안내</strong>
+        <p class="desc">
+            2023년 1월 16일부터 업로드하는<br>
+            비공개 동영상 총 용량이 15GB로<br>
+            제한됩니다.
+        </p>
+        <div class="btn_area">
+            <a href="https://notice.naver.com/notices/blog/9137?page=1&amp;pageSize=10&amp;newNoticeHour=168&amp;t=d" target="_blank" class="btn green_btn">자세히 보기</a>
+            <button type="button" class="close_btn" onclick="closeSecretVideoServiceStartPopup()">확인</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function closeSecretVideoServiceStartPopup() {
+        document.getElementById("secret_start_layer_popup").style.visibility = "hidden";
+        window.document.body.style.overflow = '';
+    }
+</script>
+    
+
+<div class="alert_layer_popup" id="video_overflow_layer_popup" style="visibility:hidden">
+    <div class="video_limit_layer_content">
+        <i class="caution_icon"></i>
+        <strong class="title">비공개 동영상 용량 제한 안내</strong>
+        <p class="desc">
+            해당 카테고리를 비공개로 변경시,<br>
+            비공개 동영상 업로드 용량이 초과됩니다.<br>
+            카테고리를 비공개로 변경할 수 없으니,<br>
+            글 단위로 공개설정을 확인해주세요.
+        </p>
+        <div class="btn_area">
+            <a href="https://notice.naver.com/notices/blog/9137?page=1&amp;pageSize=10&amp;newNoticeHour=168&amp;t=d" target="_blank" class="btn green_btn">자세히 보기</a>
+            <button type="button" class="close_btn" onclick="closeSecretVideoOverflowPopup()">확인</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function closeSecretVideoOverflowPopup() {
+        document.getElementById("video_overflow_layer_popup").style.visibility = "hidden";
+        window.document.body.style.overflow = '';
+    }
+
+    function openSecretVideoOverflowPopup() {
+        parent.document.getElementById("video_overflow_layer_popup").style.visibility = "visible";
+        parent.window.document.body.style.overflow = 'hidden';
+    }
+</script>
+    
+
+<div class="alert_layer_popup" id="myvideo_layer_popup" style="visibility:hidden">
+    <div class="alert_layer_content">
+        <p class="desc">
+            비공개 동영상 업로드 용량이<br>
+            <strong class="red_color" id="myvideo_remaining_capaciy"></strong> 남았습니다.
+        </p>
+        <div class="btn_area">
+            <button type="button" class="close_btn green_btn" onclick="closeMyVideoPopup()">확인</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function closeMyVideoPopup() {
+        document.getElementById("myvideo_layer_popup").style.visibility = "hidden";
+        window.document.body.style.overflow = '';
+    }
+</script>
+</div>
+<form name="loginForm" method="post" action="https://nid.naver.com/nidlogin.login?mode=form">
+    <input type="hidden" name="url" value="">
+    <input type="hidden" name="categoryNo" value="">
+</form>
+
+
+
+
+<link rel="stylesheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//css/admin/LayerdAlert-9082ce7_https.css" type="text/css">
+
+<div id="layerAlert" style="z-index:199; top:100px; left:414px; display:none;" class="ly_alert">
+	<strong id="resultMsg">성공적으로 반영되었습니다.</strong>
+	<div class="ly_btns">
+		<a href="#" id="_btnConfirm" class="_btnConfirm _returnFalse"><img height="26" width="45" alt="확인" src="https://blogimgs.pstatic.net/nblog/admin50/btn_cfm.gif"></a>
+	</div>
+	<a class="ly_clse closelayer" href="#" id="_closeLayer"><img height="13" width="13" alt="닫기" src="https://blogimgs.pstatic.net/nblog/admin50/btn_clse_ly.gif"></a>
+</div>
+
+<div id="layerLoadingBar" class="layerpopup" style="z-index:199; top:100px; left:414px; display:none;">
+		<div>
+			<!-- dev -->
+		       <table border="0" cellspacing="0" height="130" width="330" role="presentation">
+		           <tbody>
+		               <tr>
+		                   <td align="center">
+		                       <table align="center" border="0" cellpadding="0" cellspacing="0" width="330" role="presentation">
+		                           <tbody><tr>
+		                           <td><img src="https://blogimgs.pstatic.net/nblog/admin/box13_l_t.gif" height="6" width="6"></td>
+		                           <td background="https://blogimgs.pstatic.net/nblog/admin/box13_t_bg.gif" width="100%"></td>
+		                           <td><img src="https://blogimgs.pstatic.net/nblog/admin/box13_r_t.gif" height="6" width="6"></td>
+		                           </tr>
+		                           <tr>
+		                           <td background="https://blogimgs.pstatic.net/nblog/admin/box13_l_bg.gif"></td>
+		                           <td style="padding: 20px;" align="center" bgcolor="#f4f4f4">
+		                           <table border="0" cellpadding="0" cellspacing="0" role="presentation">
+		                               <tbody><tr>
+		                                   <td class="gray05 ln15" align="center"><b>저장 중<br>잠시만 기다려 주세요.<br>
+		                                   </b> <img src="https://blogimgs.pstatic.net/nblog/admin/bar.gif" style="margin-top: 15px;" height="17" width="252" alt="로딩중"></td>
+		                               </tr>
+		                               </tbody></table></td>
+		                           <td background="https://blogimgs.pstatic.net/nblog/admin/box13_r_bg.gif"></td>
+		                           </tr>
+		                           <tr>
+		                           <td><img src="https://blogimgs.pstatic.net/nblog/admin/box13_l_b.gif" height="6" width="6"></td>
+		                           <td background="https://blogimgs.pstatic.net/nblog/admin/box13_b_bg.gif"></td>
+		                           <td><img src="https://blogimgs.pstatic.net/nblog/admin/box13_r_b.gif" height="6" width="6"></td>
+		                           </tr>
+		                       </tbody></table>
+		                       <br><br><br>
+		                   </td>
+		               </tr>
+		           </tbody>
+		       </table>
+			<!-- //dev -->
+		</div>
+
+</div>
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/mylog/nblog_common-11a793b_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/LayeredAlert-b1a87b7_https.js" charset="utf-8"></script>
+
+
+
+<div id="blogPostProtectionPopup" style="display: none">
+    <div class="post_protection dimmed"></div>
+
+    <div class="wrap_layer_popup">
+        <div class="area_layer_popup">
+            <!-- 레이어팝업 컨텐츠 -->
+            <div class="popup_blog" data-popup="right_protection">
+                <div class="popup_heading">
+                    <!-- temp h5 tag -->
+                    <h5 class="title">
+                        블로그 글 권리보호
+                    </h5>
+                    <p class="text">
+                        블로거의 소중한 자산인 블로그 글 내용이 무단으로 복제되어 사용되지 않도록 노력해주세요.
+                    </p>
+                </div>
+                <div class="popup_text">
+                    <div class="text_detail">
+                        <strong class="title">내 글 보호하기</strong>
+                        <ul class="list">
+                            <li class="item">내 글 별 스크랩 허용범위(본문허용, 링크허용, 비허용) 설정을 확인해보세요. <a id="scrapPostDescription" href="https://help.naver.com/support/contents/contents.nhn?serviceNo=520&amp;categoryNo=1805" class="link_help" target="_blank">도움말 보기</a></li>
+                            <li class="item">마우스 우클릭을 통한 글 복사를 방지하고, 내 글을 담아갈 때 자동으로 출처가 남도록 기능을<br>설정해보세요. <a href="http://admin.blog.naver.com/Go.naver?action=config/share" class="link_setting" target="_blank">설정하기</a></li>
+                            <li class="item">CCL을 통해 내 글의 사용범위를 표시하세요. <a href="http://admin.blog.naver.com/Go.naver?action=config/share" class="link_setting" target="_blank">설정하기</a> <a href="https://help.naver.com/support/contents/contents.nhn?serviceNo=520&amp;categoryNo=2039" class="link_help" target="_blank">도움말 보기</a></li>
+                        </ul>
+                    </div>
+                    <div class="text_detail">
+                        <strong class="title">타인의 글 보호하기</strong>
+                        <ul class="list">
+                            <li class="item">타인의 글을 인용하고 싶을 때에는 먼저 작성자에게 허락을 구하고 인용 사실을 알려주세요.</li>
+                            <li class="item">타인의 글을 인용할 때에는 출처와 원문링크를 표시하세요.</li>
+                            <li class="item">블로그 또는 글에 표시된 CCL표시를 참고하여 원저작자가 허용한 범위만큼만 활용하세요.</li>
+                        </ul>
+                    </div>
+                    <div class="text_detail">
+                        <strong class="title">글 무단 도용 시 신고하기</strong>
+                        <p class="text">
+                            내 글이 네이버 블로그에 무단으로 등록된 경우 신고해주세요. 네이버, 다음, 티스토리, 이글루스,<br>설치형 블로그 등 블로거라면 누구나 신고를 통해 게시중단 요청을 하실 수 있습니다.<br>
+                            <a href="https://right.naver.com" class="link_more_detail" target="_blank">게시중단 요청 서비스 안내 자세히 보기</a>
+                        </p>
+                        <div class="text_box">
+                            <strong class="title">신고대상</strong>
+                            <ul class="list">
+                                <li class="item">내 블로그 <em class="point">글 전문</em>이 도용된 경우</li>
+                                <li class="item">내 글에 첨부된 <em class="point">직접 찍은 사진</em>이 도용된 경우</li>
+                            </ul>
+                            <strong class="title">신고방법</strong>
+                            <ul class="list">
+                                <li class="item">원본 게시물 URL과 도용 게시물 URL이 필요합니다.</li>
+                                <li class="item">네이버 블로거인 경우: 본인 확인을 위해 로그인 후 신고해주세요.<br>타사 블로거인 경우: 해당 블로그의 로그인 화면을 캡쳐해서 보내주세요.</li>
+                            </ul>
+                            <a href="https://right.naver.com" class="button_report" role="button" target="_blank">신고</a>
+                        </div>
+                        <ul class="list_notice">
+                            <li class="item"><em class="point">도용된 글이 네이버 블로그가 아닌 타사 블로그에 등록된 경우,</em> 도용자에 대한 조치는 해당 서비스의<br>고객센터로 문의 해주세요.</li>
+                            <li class="item">블로그 권리보호 센터에서는 <em class="point">블로그 사이에 발생한 사례에 대해서만 확인 및 조치가 가능</em>합니다.<br>네이버 카페 등 다른 서비스에 도용 포스트가 등록된 경우 게시중단서비스로 신고해주세요. <a href="https://right.naver.com" class="link_move" target="_blank">바로가기</a></li>
+                        </ul>
+                    </div>
+                </div>
+                <a id="closeProtectionPopup" href="javascript:adminMain.hidePostProtection()" class="button_check" role="button">확인</a>
+            </div>
+            <!-- //레이어팝업 컨텐츠 -->
+        </div>
+    </div>
+</div>
+
+
+
+<link rel="stylesheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/css/ip_layer_1-72b077e_https.css" type="text/css">
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/global/RemoveSubDomain-12d2f16_https.js"></script>
+<script type="text/javascript">
+	var svcurl="/common/CheckloginForJindo1.naver";
+	var userid = "todayisgood77";
+	var targetWindow;
+	var callBack = null;
+	function openCheckLayer(win) {
+		targetWindow = win ;
+		document.getElementById("layeredframe").src=svcurl;
+	}
+	function openLayeredLogin() {
+		try{
+			var loginUrl = "https://nid.naver.com/nidlogin.login?mode=form&svctype=64&url="+encodeURIComponent(blogURL+'/closePopup.naver');
+			window.open(loginUrl, 'login', 'width=400,height=260,location=no,resizable=no');
+			
+			
+			
+			
+			
+		} catch (e) {
+		}
+	}
+	function openCheckLayerWithCallback(win,calb){
+		callBack = calb;
+		openCheckLayer(win);
+	}
+	function closeLayeredLogin() {
+		document.getElementById("dimmed_layer").style.display = "none";
+		document.getElementById("loginstart_layer").style.display = "none";
+		document.getElementById("layeredframe").src="";
+	}
+	function getDocHeight() {
+		if(document.body) return document.body.scrollHeight;
+		else return document.documentElement.scrollHeight;
+	}
+	function getDocWidth() {
+		if(document.body) return document.body.scrollWidth;
+		else return document.documentElement.scrollWidth;
+	}
+
+</script>
+
+<div id="loginstart_layer" class="layerpopup" style="z-index:199;width:380px; top:100px; left:414px; display:none;">
+	<div class="shadow1">
+	<div class="shadow1_side">
+	<div class="shadow2">
+
+	<div class="shadow2_side">
+	<div class="shadow3">
+	<div class="shadow3_side">
+		<div class="border_type">
+			<!-- dev -->
+			<div class="logbox_wrap">
+				<p class="notice">회원님의 안전한 서비스 이용을 위해 <strong>비밀번호를 확인해 주세요.</strong></p>
+				<p class="notice02">다시 한번 <strong>비밀번호 확인</strong> 하시면 이용중인 화면으로 돌아가며, 작성 중이던<br>내용을 정상적으로 전송 또는 등록하실 수 있습니다.</p>
+				<a href="#" onclick="closeLayeredLogin(); return false;" class="closelayer"><img src="https://blogimgs.pstatic.net/nblog/widget/btn_close.gif" alt="닫기" width="15" height="14"></a>
+				<div class="frame_wrap"><iframe id="layeredframe" src="" width="350" height="163" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" title="빈프레임"></iframe></div>
+			</div>
+			<!-- //dev -->
+		</div>
+
+	</div>
+	</div>
+	</div>
+	</div>
+	</div>
+	</div>
+</div>
+
+
+
+
+<div id="skin_preview_layer" class="dimmed skin_preview" aria-hidden="true"></div>
+<div id="wrap_skin_layer" class="wrap_layer_skin_preview" style="display: none">
+    <div class="area_layer_skin_preview">
+        <div class="layer_skin_preview" id="layer_skin_preview">
+            <div class="layer_header">
+                <div class="desc">
+                    <strong class="title">스킨 미리보기</strong>
+                    <p id="skinPreviewLayerText" class="text">
+                    </p>
+                </div>
+                <div class="area_btn">
+                    <button class="btn _layoutSettingForPreview">레이아웃 변경</button>
+                    <button class="btn _detailDesignSettingForPreview">세부 디자인 변경</button>
+                    <button class="btn btn_apply _skinSaveForPreview">바로 적용</button>
+                </div>
+            </div>
+            <div class="layer_content" id="layer_content">
+                <iframe id="skin_preview_layer_content" tabindex="-1" allowtransparency="true" frameborder="0" src="" title="스킨 미리보기 화면" style="width:100%;height:100%"></iframe>
+            </div>
+            <button class="btn_close_layer _closeSkinPreviewLayer"><span class="blind">스킨 미리보기 레이어 닫기</span></button>
+        </div>
+    </div>
+</div>
+<div id="age_init_popup" style="display: none">
+    <div class="age_popup_layer_wrap">
+        <div class="popup_layer">
+            <div class="text">
+
+            </div>
+            <div class="btn_area">
+                <button type="button" class="btn" onclick="window.hideAgePopup()">취소</button>
+                <button type="button" class="btn" onclick="realNameCheck()">본인인증하기</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script type="text/javascript">
+    var existMemoLog = 'false' === 'true';
+    var isRequestFromIPad = false;
+    var g_ssc = "blog.admin";
+    var gsAdminDomain = "https://admin.blog.naver.com";
+    var blogUserYN = "Y";
+    var memberURL = "https://nid.naver.com";
+    var skinPreviewGuide = {
+        type0 : "레이아웃이나 세부 디자인을 변경해 다른 느낌의 스킨을 만들 수 있어요.",
+        type1 : "<a href=\"#\" class=\"link_text _goRemoconSk _nclk(edt_skinprv.txtbc)\">스킨배경의 하단 컬러</a>를 변경해 나만의 특별한 스킨으로 만들어 보세요.",
+        type2 : "<a href=\"#\" class=\"link_text _goRemoconTitle _nclk(edt_skinprv.txttbc)\">타이틀 배경 컬러</a>를 내 블로그에 맞게 변경할 수 있어요.",
+        type3 : "스킨 배경에 다양한 <a href=\"#\" class=\"link_text _goRemoconSk _nclk(edt_skinprv.txtfrimg)\">무료 이미지</a>를 활용해 보세요.",
+        type4 : "<a href=\"#\" class=\"link_text _goRemoconProfile _nclk(edt_skinprv.txtpc)\">프로필 컬러</a>를 변경해 나만의 개성있는 스킨을 만들어 보세요."
+    };
+
+    window.initSkinPreviewController = (function() {
+        window.skinPreviewController;
+        return function(fnGoLayout, fnGoRemocon, fnApplySkin, skinId, skinType) {
+            if (!window.skinPreviewController) {
+                window.skinPreviewController = new AdminSkinPreviewController();
+            }
+            window.skinPreviewController.start(fnGoLayout, fnGoRemocon, fnApplySkin, skinId, skinType);
+            return window.skinPreviewController;
+        }
+    })();
+
+    
+    window.showDomainPolicyPopup = function (){
+        $Element('domainPolicyPopup').removeClass('is_hidden');
+    }
+
+     window.hideDomainPolicyPopup = function (){
+         $Element('domainPolicyPopup').addClass('is_hidden');
+     }
+
+    
+    window.showAgePopup = function (text){
+        cssquery.getSingle('.text', $("age_init_popup")).innerHTML = text
+        window.document.body.style.overflow = 'hidden';
+        $("age_init_popup").style.display = "block"
+    }
+
+    window.hideAgePopup = function (){
+        window.document.body.style.overflow = '';
+        $("age_init_popup").style.display = "none"
+    }
+
+     window.hideAndNoShowForOneDay = function (){
+        window.hideDomainPolicyPopup();
+        tripleSRequester.requestWithUid(blogId, 'BAPPD', getToday(),  function() {
+         });
+     }
+
+    function getToday() {
+        var d = new Date(), month = '' + (d.getMonth() + 1), day = '' + d.getDate(), year = d.getFullYear();
+        if (month.length < 2) month = '0' + month;
+        if (day.length < 2) day = '0' + day;
+        return [year, month, day].join('-');
+    }
+
+    var realNameCheck = function () {
+        var returnUrl = gsAdminDomain + "/" + blogId+"/config/bloginfo";
+        if (blogUserYN == 'Y') {
+            window.open(memberURL + "/user2/help/realNameCheck?type=20&rurl=" + returnUrl + "&surl=" + returnUrl);
+        } else {
+            window.open(memberURL + "/user2/help/realNameCheck?type=2&rurl=" + returnUrl + "&surl=" + returnUrl);
+        }
+        window.hideAgePopup()
+    }
+</script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/AdminMainAll-1032059668_https.js" charset="UTF-8"></script>
+
+
+
+
+</body></html>
+<!-- IFRAME 0 -->
+<html><head></head><body></body></html>
+<!-- IFRAME 1 -->
+<html><head></head><body></body></html>
+<!-- IFRAME 2 -->
+<html><head></head><body></body></html>
+<!-- IFRAME 3 -->
+<html><head></head><body></body></html>
+<!-- IFRAME 4 -->
+<html><head></head><body></body></html>
+<!-- IFRAME 5 -->
+<html lang="ko"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Script-Type" content="text/javascript">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<title>네이버 블로그 관리</title>
+<link rel="StyleSheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//css/admin/blogadmin_content-498c980_https.css" type="text/css">
+<!--// 각 서버의 호스트 URL -->
+<script async="" src="https://ntm.pstatic.net/ex/nlog-v2.js"></script><script async="" src="https://ntm.pstatic.net/ex/nlog.js"></script><script async="" src="https://ntm.pstatic.net/scripts/ntm_d26044233161.js"></script><script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/common-11acda0_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+	jQuery.noConflict();
+</script>
+</head>
+
+<body>
+<form id="searchFrm" name="searchFrm" action="/AdminNaverCommentManageView.naver" method="post">
+<input type="hidden" name="paging.currentPage" value="1">
+<input type="hidden" name="blogId" value="todayisgood77">
+<input type="hidden" name="m">
+<div id="wrap">
+    <h1 class="content-title"><span class="blind">글쓰기 설정 &gt; </span>댓글</h1>
+	<p class="top_desc_2">
+	내 블로그에 등록된 댓글을 모아서 보면서 ID 기준으로 차단 설정을 할 수 있습니다.
+	</p>
+
+	<div class="action2">
+		<div class="action2_r">
+			<span class="btn btn2"><button type="button" class="_btnSubmit _moveToTrash _nclk(edt_reply.delup)">삭제</button></span>
+			<span class="btn btn2"><button type="button" class="_btnSubmit _registBlackAndDelete _nclk(edt_reply.delblockup)">차단후 삭제</button></span>
+		</div>
+	</div>
+
+	<table cellspacing="0" class="table3">
+	<colgroup><col class="col1">
+	<col class="col2">
+	<col>
+	</colgroup><thead>
+	<tr>
+	<th scope="col" class="check1"><input type="checkbox" class="input_check _chSelectAll _nclkcb(edt_reply.checkallup)" title="전체선택"></th>
+	<th scope="col" class="l">작성자</th>
+	<th scope="col">내용</th>
+	</tr>
+	</thead>
+
+	<tbody id="tableListById">
+
+	
+		
+		
+
+			
+			<tr class="f">
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224305766614|pr-ic-eunhye|897117655754866991">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">김노숙씨</span>
+							<span class="blogid hand _writer">pr-ic-eunhye</span>
+							<span class="_writerNickname" style="display:none;">김노숙씨</span>
+							<span class="_writerId" style="display:none;">pr-ic-eunhye</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224305766614" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 대전요양원 은혜의집 소중한 기억을 만드는 곳</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요. 인천은혜의집 입니다. 이런 우연이...</span><span class="_replyRealContents" style="display:none;">안녕하세요. 인천은혜의집 입니다. 이런 우연이~ 이름이 같아서 그런지 지도 첨부를 잘못하셨나봐요~! 저희 채널 소식에 요양원이 보이네요~ 수정부탁드립니다.</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.23.</span> <span>13:58</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224317013441|phosebibtec|896979671827087437">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">포스비브테크</span>
+							<span class="blogid hand _writer">phosebibtec</span>
+							<span class="_writerNickname" style="display:none;">포스비브테크</span>
+							<span class="_writerId" style="display:none;">phosebibtec</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224317013441" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 광주요양원 양지뜰노인복지센터 안정된 휴식 공간의 중요성은 동구나</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요! 양지뜰노인복지센터 방문 후기 잘 봤...</span><span class="_replyRealContents" style="display:none;">안녕하세요! 양지뜰노인복지센터 방문 후기 잘 봤어요. 어르신을 위한 안정적인 휴식 공간 알아보는 마음, 정말 공감되네요. 교통 편리한 지산동에 위치해서 가족들이 자주 찾아뵙기 좋겠다는 점이 특히 와닿았습니다 😊</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.22.</span> <span>02:16</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224317009071|flower-bear_j|896888214374055963">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">꽃꼬미</span>
+							<span class="blogid hand _writer">flower-bear_j</span>
+							<span class="_writerNickname" style="display:none;">꽃꼬미</span>
+							<span class="_writerId" style="display:none;">flower-bear_j</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224317009071" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 광주요양원 정다움케어하우스 이곳에서 찾은 편안함</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요! 광주 요양원 정다움케어하우스에 대...</span><span class="_replyRealContents" style="display:none;">안녕하세요! 광주 요양원 정다움케어하우스에 대한 글 잘 봤어요. 어르신을 위한 요양시설 알아보시는 마음이 얼마나 크실지 공감됩니다. 특히 양산동에 위치해서 접근성도 좋고 시설도 깔끔하다니 안심이 되네요. 🙂</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.21.</span> <span>02:37</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224317008810|sinsaoms|896879946058694659">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">창원신사치과</span>
+							<span class="blogid hand _writer">sinsaoms</span>
+							<span class="_writerNickname" style="display:none;">창원신사치과</span>
+							<span class="_writerId" style="display:none;">sinsaoms</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224317008810" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 광주요양원 쉼터실버빌요양원 편안한 공간에서의 특별한 하루는 북구</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요! 쉼터실버빌요양원 방문 후기 잘 봤...</span><span class="_replyRealContents" style="display:none;">안녕하세요! 쉼터실버빌요양원 방문 후기 잘 봤어요. 북구에 있어서 교통편도 좋고, 외관도 산뜻하고 따뜻한 분위기라는 점이 특히 인상 깊네요. 😊</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.21.</span> <span>00:29</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224316994808|gorae-home|896608437083832370">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">고래홈클린</span>
+							<span class="blogid hand _writer">gorae-home</span>
+							<span class="_writerNickname" style="display:none;">고래홈클린</span>
+							<span class="_writerId" style="display:none;">gorae-home</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224316994808" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 광주요양원 새롬실버요양원 결국, 행복한 노후를 위한 선택이란</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">잘 보고 갑니다 :)</span><span class="_replyRealContents" style="display:none;">잘 보고 갑니다 :)</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.18.</span> <span>02:14</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224316985294|kk2pro0523|896423924533821490">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">GRIDA ON</span>
+							<span class="blogid hand _writer">kk2pro0523</span>
+							<span class="_writerNickname" style="display:none;">GRIDA ON</span>
+							<span class="_writerId" style="display:none;">kk2pro0523</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224316985294" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 광주요양원 베데스다요양원 편안함과 안전은 이곳에서 동시에 느낄</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요! 광주 서구 매월동에 있는 베데스다...</span><span class="_replyRealContents" style="display:none;">안녕하세요! 광주 서구 매월동에 있는 베데스다요양원 다녀오셨군요. 지인분 상태도 확인하고 오시고, 처음 방문하셨다니 떨리는 마음으로 가셨을 텐데 편안하고 안전하다는 느낌을 받으셨다니 다행입니다. 😊</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.16.</span> <span>02:30</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224305774394|02dongyoon02|895863204607950857">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">매일 책읽는 남자</span>
+							<span class="blogid hand _writer">02dongyoon02</span>
+							<span class="_writerNickname" style="display:none;">매일 책읽는 남자</span>
+							<span class="_writerId" style="display:none;">02dongyoon02</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224305774394" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 대전요양원 선우행복마을 사랑이 가득한 돌봄 공간</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">부모님 모시는 거 진짜 힘든 결정이셨겠어요 ㅠ...</span><span class="_replyRealContents" style="display:none;">부모님 모시는 거 진짜 힘든 결정이셨겠어요 ㅠㅠ 대전 유성구 덕명동 선우행복마을 찐이네요! 저도 기억해둬야겠어요</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.10.</span> <span>01:27</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224305734100|leejungin89|895396642310586387">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">애뜨놀먹</span>
+							<span class="blogid hand _writer">leejungin89</span>
+							<span class="_writerNickname" style="display:none;">애뜨놀먹</span>
+							<span class="_writerId" style="display:none;">leejungin89</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224305734100" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 대전요양원 대전삼성요양원 신뢰할 수 있는 돌봄</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">부모님 요양원 보내는 결정 정말 쉽지 않으셨을...</span><span class="_replyRealContents" style="display:none;">부모님 요양원 보내는 결정 정말 쉽지 않으셨을 텐데, 글 읽으면서 많이 공감했습니다. 특히 여러 요양원 비교하고 프로그램 하나하나 꼼꼼히 체크하시는 모습에서 부모님 생각하는 마음이 절절히 느껴지네요.</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.05.</span> <span>00:45</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224305731378|mincoffe_|895373545821962422">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">mincoffe_</span>
+							<span class="blogid hand _writer">mincoffe_</span>
+							<span class="_writerNickname" style="display:none;">mincoffe_</span>
+							<span class="_writerId" style="display:none;">mincoffe_</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224305731378" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 대전요양원 계룡효센터 정직한 후기와 평가</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">유익한 정보 가득한 내용 너무 잘 봤습니다! 래미...</span><span class="_replyRealContents" style="display:none;">유익한 정보 가득한 내용 너무 잘 봤습니다!
+래미안에서 진행한 특별 초청 마술 공연 및 행사 관련해서 도움이 되실만 한 내용
+하나 소개 시켜드리려고 합니다!
+관심 있으시다면 방문해주세요 ^^!
+
+https://blog.naver.com/shmagic720/224291907537</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.04.</span> <span>18:46</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224296849176|hwayeonjung33|895352106486071601">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">하루</span>
+							<span class="blogid hand _writer">hwayeonjung33</span>
+							<span class="_writerNickname" style="display:none;">하루</span>
+							<span class="_writerId" style="display:none;">hwayeonjung33</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224296849176" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 상계동물파양유기묘보호센터요양원 신뢰할 수 있는 선택</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">꼬링꼬링님, 재미있게 작성하신 포스팅 잘 읽었...</span><span class="_replyRealContents" style="display:none;">꼬링꼬링님,  재미있게 작성하신 포스팅 잘 읽었습니다 :-)
+
+현재 모집 중인 헬스장 체험단과 잘 어울리실 것 같아 조심스럽게 제안드립니다. https://naver.me/5PWWM3XV
+종종 방문하겠습니다. 고맙습니다 :) 좋은 하루되세요!</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.04.</span> <span>13:13</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224296849176|bangaunmkt|895207439639511099">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">반가운마케팅</span>
+							<span class="blogid hand _writer">bangaunmkt</span>
+							<span class="_writerNickname" style="display:none;">반가운마케팅</span>
+							<span class="_writerId" style="display:none;">bangaunmkt</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224296849176" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 상계동물파양유기묘보호센터요양원 신뢰할 수 있는 선택</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세욧 ^^ 알차게 작성하신 포스팅 유용하게...</span><span class="_replyRealContents" style="display:none;">안녕하세욧 ^^
+알차게 작성하신 포스팅 유용하게 읽고
+인사 댓글 남기고 갑니다 '◡'✿
+버핏그라운드 체험단 함께 보시면 좋을 것 같아 제안드립니다 :-) 여름 오기 전 운동 같이하실 분?! https://naver.me/5PWWM3XV 오늘도 으쌰으쌰 힘나는 하루되세요^^</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.02.</span> <span>23:48</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224296849176|loveisperpomance|895195965466607681">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">사움의 고수</span>
+							<span class="blogid hand _writer">loveisperpomance</span>
+							<span class="_writerNickname" style="display:none;">사움의 고수</span>
+							<span class="_writerId" style="display:none;">loveisperpomance</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224296849176" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 상계동물파양유기묘보호센터요양원 신뢰할 수 있는 선택</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요 블로그 구경하러 들렀어요! 댓글남기...</span><span class="_replyRealContents" style="display:none;">안녕하세요 
+
+블로그 구경하러 들렀어요!
+
+댓글남기고 가요!
+
+제 블로그도 놀러와주시면 바로 답방 약속드릴게요!! ^^
+
+즐거운 하루 되셔요!</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.06.02.</span> <span>20:50</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224296822779|rnvhd9309|894884570573308102">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">rnvhd9309</span>
+							<span class="blogid hand _writer">rnvhd9309</span>
+							<span class="_writerNickname" style="display:none;">rnvhd9309</span>
+							<span class="_writerId" style="display:none;">rnvhd9309</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224296822779" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 봄날주간보호센터 편안한 쉼터를 찾아서</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요 단순히 쓴 글이 아니라 고민 흔적을...</span><span class="_replyRealContents" style="display:none;">안녕하세요 단순히 쓴 글이 아니라 고민 흔적을 담아낸 기록 처럼 느껴 져요 :) 시간 되실 때 협업 설명 드려도 괜찮을까요
+https://m.site.naver.com/29gM4</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.30.</span> <span>12:16</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224296811044|02dongyoon02|894716411027390622">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">매일 책읽는 남자</span>
+							<span class="blogid hand _writer">02dongyoon02</span>
+							<span class="_writerNickname" style="display:none;">매일 책읽는 남자</span>
+							<span class="_writerId" style="display:none;">02dongyoon02</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224296811044" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 용현노인생활가정 진정한 안식을 찾아서</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">용현노인생활가정 선택 진짜 잘하셨네요! 의정부...</span><span class="_replyRealContents" style="display:none;">용현노인생활가정 선택 진짜 잘하셨네요! 의정부탑석역 근처라니 넘 좋네요</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.28.</span> <span>16:46</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224289454715|02dongyoon02|894336439028809848">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">매일 책읽는 남자</span>
+							<span class="blogid hand _writer">02dongyoon02</span>
+							<span class="_writerNickname" style="display:none;">매일 책읽는 남자</span>
+							<span class="_writerId" style="display:none;">02dongyoon02</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224289454715" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 예다움요양원 실제 이용자 후기</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">맞아요 ㅠㅠ 부모님 요양원 알아볼 때 죄책감 드...</span><span class="_replyRealContents" style="display:none;">맞아요 ㅠㅠ 부모님 요양원 알아볼 때 죄책감 드는 거 저만 그런 줄 알았어요. 예다움요양원 찐이네요!</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.24.</span> <span>14:28</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224289446717|codelegend|894160981477818410">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">Press Gym</span>
+							<span class="blogid hand _writer">codelegend</span>
+							<span class="_writerNickname" style="display:none;">Press Gym</span>
+							<span class="_writerId" style="display:none;">codelegend</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224289446717" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 사랑가득요양원 편안한 일상을 위한 공간</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">와~ 부모님 요양원 알아보시는 과정 정말 공감돼...</span><span class="_replyRealContents" style="display:none;">와~ 부모님 요양원 알아보시는 과정 정말 공감돼요. 의정부범골역에서 가까운 사랑가득요양원이라니, 위치도 참 좋네요!</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.22.</span> <span>17:05</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224289438344|codelegend|894006419647365121">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">Press Gym</span>
+							<span class="blogid hand _writer">codelegend</span>
+							<span class="_writerNickname" style="display:none;">Press Gym</span>
+							<span class="_writerId" style="display:none;">codelegend</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224289438344" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 광림요양원 2회연속A등급 안심할 수 있는 공간</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">어머나, 부모님 모시고 요양원 알아보는 과정 얼...</span><span class="_replyRealContents" style="display:none;">어머나, 부모님 모시고 요양원 알아보는 과정 얼마나 마음고생 심하셨을지 글 읽으면서 저도 모르게 찡해졌어요. ㅠㅠ  '2회 연속 A등급'이라는 게 정말 신뢰가 확 가네요.</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.21.</span> <span>01:06</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224289432560|odj0520|893894528904200271">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">노트정리</span>
+							<span class="blogid hand _writer">odj0520</span>
+							<span class="_writerNickname" style="display:none;">노트정리</span>
+							<span class="_writerId" style="display:none;">odj0520</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224289432560" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 생명샘요양원 실제 경험에서 온 추천</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">부모님을 위한 요양원 선택 과정에서 얼마나 마...</span><span class="_replyRealContents" style="display:none;">부모님을 위한 요양원 선택 과정에서 얼마나 마음고생이 심하셨을지 글에서 깊이 느껴지네요. 저도 비슷한 경험이 있어 죄책감과 불안감을 이겨내셨다는 말씀에 정말 많이 공감했습니다. 생명샘요양원을 선택하신 이유와 그곳에서 느끼신 점들이 정말 궁금하고, 다음 이야기도 기대하고 있겠습니다! 😊</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.19.</span> <span>20:09</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224289430438|ulsandigital|893855920704979267">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">울디배</span>
+							<span class="blogid hand _writer">ulsandigital</span>
+							<span class="_writerNickname" style="display:none;">울디배</span>
+							<span class="_writerId" style="display:none;">ulsandigital</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224289430438" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 쉼터요양원 신뢰할 수 있는 공간</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요 블로그 구경하러 들렀어요! 댓글남기...</span><span class="_replyRealContents" style="display:none;">안녕하세요 
+
+블로그 구경하러 들렀어요!
+
+댓글남기고 가요!
+
+제 블로그도 놀러와주시면 바로 답방 약속드릴게요!! ^^
+
+즐거운 하루 되셔요!</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.19.</span> <span>10:09</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+			<tr>
+				<td class="check1">
+					<input type="checkbox" name="commentKey" class="input_check _nclkcb(edt_reply.check)" value="167976723_201_224289429974|eronayo|893847291830468617">
+				</td>
+				<td>
+					
+						
+							<span class="nickname hand _writer">이로나요</span>
+							<span class="blogid hand _writer">eronayo</span>
+							<span class="_writerNickname" style="display:none;">이로나요</span>
+							<span class="_writerId" style="display:none;">eronayo</span>
+						
+						
+					
+				</td>
+
+
+
+
+
+
+
+
+
+
+
+
+
+				<td>
+
+				  
+		          	 	
+		          	 	
+		          	    <a href="https://blog.naver.com/todayisgood77/224289429974" target="_blank" class="link">
+		          	    
+		          		<span class="_titleContents _nclk(edt_reply.title)">[글] 의정부요양원 왕가요양원 리뷰로 확인하는 방법</span></a>
+
+		          
+					<p class="desc1">
+					
+						
+						
+						
+							<span class="hand _replyContents">안녕하세요 블로그 구경하러 들렀어요! 댓글남기...</span><span class="_replyRealContents" style="display:none;">안녕하세요 
+
+블로그 구경하러 들렀어요!
+
+댓글남기고 가요!
+
+제 블로그도 놀러와주시면 바로 답방 약속드릴게요!! ^^
+
+즐거운 하루 되셔요!</span>
+						
+					
+					</p>
+
+					<p class="desc1">
+						
+							
+							
+								<span>2026.05.19.</span> <span>07:56</span>
+							
+						
+					</p>
+				</td>
+			</tr>
+			
+
+		
+	
+
+	</tbody>
+	</table>
+
+
+	<div class="action2">
+		<p class="action2_l"><input type="checkbox" class="input_check _chSelectAll _nclkcb(edt_reply.checkalld)"> <label>전체선택</label></p>
+		<div class="action2_r">
+			<span class="btn btn2"><button type="button" class="_btnSubmit _moveToTrash _nclk(edt_reply.deldo)">삭제</button></span>
+			<span class="btn btn2"><button type="button" class="_btnSubmit _registBlackAndDelete _nclk(edt_reply.delblockdo)">차단후 삭제</button></span>
+		</div>
+
+	</div>
+
+	<div class="paginate pp1 _nclk(edt_reply.page)">
+		<div class="paginate_re">
+				<strong>1</strong>
+			<a href="/AdminNaverCommentManageView.naver?paging.commentSearchType=0&amp;paging.economyTotalCount=51&amp;blogId=todayisgood77&amp;paging.currentPage=2" class="">2</a>
+			<a href="/AdminNaverCommentManageView.naver?paging.commentSearchType=0&amp;paging.economyTotalCount=51&amp;blogId=todayisgood77&amp;paging.currentPage=3" class="">3</a>
+</div>
+	</div>
+
+</div>
+</form>
+
+
+
+
+
+
+<div class="template" style="display:none;">
+
+	<div id="writeLayerById" class="reply_sublayer" style="width:92px;">
+		<!-- PNG Gradation -->
+			<div class="border_type2">
+				<!-- 콘텐트 -->
+				<div class="content2">
+					<ul class="ul_submnu">
+						<li><a href="#" class="_blockId">ID 차단</a></li>
+						<li><a href="#" class="_openBlog">블로그 보기</a></li>
+					</ul>
+				</div>
+				<!-- //콘텐트 -->
+			</div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="guestLayerById" class="reply_sublayer" style="width:102px;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type2">
+				<!-- 콘텐트 -->
+				<div class="content2">
+					<ul class="ul_submnu">
+						<li><a href="#" class="_searchBlogName">블로그명 검색</a></li>
+						<li><a href="#" class="_blockBlogName">블로그명 차단</a></li>
+					</ul>
+				</div>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="replyLayerById" class="reply_sublayer" style="width:288px; background: white;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type">
+				<!-- 콘텐트 -->
+				<h4 class="header"><b></b></h4>
+				<div class="content">
+					<div class="memo_disp">
+					</div>
+					<div class="btns">
+						<a href="#" class="_btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close_preview.gif" width="40" height="23" alt="닫기"></a>
+					</div>
+				</div>
+				<a href="#BtnCLose" class="closelayer _btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close2.gif" alt="닫기" width="15" height="14"></a>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="guestBookLayerById" class="reply_sublayer" style="width:288px; background: white;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type">
+				<!-- 콘텐트 -->
+				<div class="content">
+					<div class="memo_disp">
+					</div>
+					<div class="btns">
+						<a href="#" class="_btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close_preview.gif" width="40" height="23" alt="닫기"></a>
+					</div>
+				</div>
+				<a href="#BtnCLose" class="closelayer _btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close2.gif" alt="닫기" width="15" height="14"></a>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+	<div id="bothBuddyInviteLayerById" class="reply_sublayer" style="width:288px; background: white;">
+		<!-- PNG Gradation -->
+		<div class="shadow1"><div class="shadow1_side"><div class="shadow2"><div class="shadow2_side">
+			<div class="border_type">
+				<!-- 콘텐트 -->
+				<div class="content">
+					<div class="memo_disp">
+					</div>
+					<div class="btns">
+						<a href="#" class="_btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close_preview.gif" width="40" height="23" alt="닫기"></a>
+					</div>
+				</div>
+				<a href="#BtnCLose" class="closelayer _btnClose"><img src="https://blogimgs.pstatic.net/nblog/admin/btn_close2.gif" alt="닫기" width="15" height="14"></a>
+				<!-- //콘텐트 -->
+			</div>
+		</div></div></div></div>
+		<!-- //PNG Gradation -->
+	</div>
+
+</div>
+
+<!-- Lib -->
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jindo/1.2.0/jindo.min-77a2482_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jindo/agent.ie11/agent.ie11-6694cec_https.js"></script>
+<!-- Component -->
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/LayerManager-ff5f25a_https.js"></script>
+<!-- Execution Code -->
+
+
+
+
+<script>
+	// Message
+     var GMSG = {
+    	ACTION_MESSAGE : {
+	        VALIDE_ERROR: [
+	        	"등록할 내용을 입력해 주세요.",
+	        	"ID형식이 올바르지 않습니다.",
+	        	"IP형식이 올바르지 않습니다.",
+	        	"URL형식이 올바르지 않습니다.",
+	        	"키워드 형식이 올바르지 않습니다.\n한글 1~80자이거나 영어 2자~80자까지 입력할 수 있습니다.",
+	        	"",
+	        	"블로그명 형식이 올바르지 않습니다.\n한글 1~25자이거나 영어 2자~50자까지 입력할 수 있습니다."
+	        ],
+	        CONFIRM_DELETE_ALL:["",
+	        	"ID 차단함을 모두 삭제 하시겠습니까?",
+	        	"등록된 내용을 모두 삭제하시겠습니까?",
+	        	"URL 차단함을 모두 삭제 하시겠습니까?",
+	        	"키워드 차단함을 모두 삭제 하시겠습니까?"
+	        ],
+			RESTORE : "선택한 글을 모두 복구 합니다.",
+			GUESTBOOK_RESTORE : "선택한 안부글을 모두 복구 합니다.",
+			RESTORE_ADD_WHITELIST : "선택한 댓글을 복구하며, 앞으로는 차단되지 않도록 화이트 리스트에 추가합니다.",
+			DELETE_ADD_BLACKLIST : "선택한 댓글을 삭제하며, 앞으로는 차단되도록 블랙 리스트에 추가합니다.",
+			DELETE : "정말 삭제하시겠습니까? 삭제한 글은 복구할 수 없습니다.",
+			GUESTBOOK_DELETE : "정말 삭제하시겠습니까? 삭제한 안부글은 복구할 수 없습니다.",
+			MOVE_TO_TRASH : "댓글을 삭제하겠습니까? 삭제한 댓글은 복구하실 수 없습니다.",
+            BLOCK_AND_DELETE : '선택한 댓글을 작성한 사용자를 차단 후 댓글을 삭제하시겠습니까?\n\n이 사용자의 모든 콘텐츠가 보이지 않고 회원님에게 공감, 댓글, 안부글을 남길 수 없으며 이웃이 취소됩니다.',
+			EMPTY_SEARCH : '검색할  값이 비어 있습니다.',
+			CONFIRM_BLOCK_ID : '이 ID가 남긴 댓글은 자동으로 차단합니다.',
+			LIMIT_BLOCK_MYBLOG : '내 아이디는 차단할 수 없습니다.',
+			CONFIRM_GUESTBOOK_BLOCK_ID : '이 ID가 남긴 안부글은 자동으로 차단합니다.',
+			CONFIRM_RELAY_BLOCK_ID : '이 ID가 남긴 엮인글은 자동으로 차단합니다.',
+			CONFIRM_GUESTBOOK_BLOCK_IP : '이 IP에서 남기는 댓글은 자동으로 차단합니다.',
+			CONFIRM_RELAY_BLOCK_IP : '이 IP에서 남기는 엮인글은 자동으로 차단합니다.',
+			CONFIRM_RELAY_BLOCK_BLOGNAME : '이 블로그명으로 남기는 엮인글은 자동으로 차단합니다.',
+			BOTHBUDDYINVITE_RESTORE: "선택한 서로이웃 신청을 모두 복구 합니다",
+			BOTHBUDDYINVITE_DELETE: "정말 삭제하시겠습니까? 삭제한 서로이웃신청은 복구할 수 없습니다.",
+			CONFIRM_BOTHBUDDYINVITE_BLOCK_ID: '이 ID의 서로이웃신청은 자동으로 차단합니다.',
+			CONFIRM_BOTHBUDDYINVITE_BLOCK_IP : '이 IP의 서로이웃신청은 자동으로 차단합니다.'
+	    },
+	    SERVER_MESSAGE : {
+	        SERVER_ERROR: "일시적인 서버 장애가 발생하였습니다.",
+	        ERROR: "실패하였습니다.",
+	        SUCCESS: "등록되었습니다.",
+	        OVERCOUNT: [
+	        	["",
+	        		"차단 ID는  5000개까지 등록이 가능합니다.",
+	        		"",
+	        		"차단 URL은 500개까지 등록이 가능합니다.",
+	        		"차단 키워드는 600개까지 등록이 가능합니다.",
+	        		"차단 키워드는 600개까지 등록이 가능합니다.",
+	        		"차단 블로그명은 개까지 등록이 가능합니다."
+	        	]
+	        ],
+	        BLACKLIST: [
+	        	["",
+		        	"이미 차단된 ID 입니다.",
+		        	"이미 차단된 IP 입니다",
+	    	    	"이미 차단된 URL입니다",
+	        		"이미 차단된 키워드입니다",
+	        		"이미 차단된 키워드입니다",
+	        		"이미 차단된 블로그명입니다",
+	        	]
+	        ],
+            ID_BLOCK_CONFIRM : "이 사용자를 차단하면 회원님에게 공감, 댓글, 안부글 쓰기를 할 수 없으며 이웃이 끊어집니다. 이 사용자를 차단하시겠습니까?",
+	        UNKNOWNLIST: "블랙리스트인지 화이트리스트인지 지정되지 않았습니다.",
+	        UNKNOWNITEM: "분류가 지정되지 않았습니다.",
+	        EMPTY: "등록할 내용을 입력해 주세요.",
+	        SELFID: [
+	        	"내 아이디는 차단할 수 없습니다.", // BLACK
+	        	"본인의 ID는 등록하지 않아도 차단되지 않습니다.", // WHITE
+	        	"본인의 ID는 등록되지 않습니다. "
+	        ],
+	        NEIGHBORID: [
+	        	"나의 이웃은 블랙리스트에 등록할 수 없습니다. 이웃을 해제한 후에 차단해 주세요.",
+		        "이웃 ID는 등록하지 않아도 차단되지 않습니다."
+		    ],
+		    EACH_NEIGHBORID: "이웃은 이미 화이트리스트로 인식되고 있습니다.",
+		    WAIT_BOTH_NEIGHBOR: [
+		    	"상대방에게 서로이웃 신청을 하신 상태입니다.\n서로이웃 신청을 취소하신 후, 블랙리스트 추가가 가능합니다.",
+		    	"상대방에게 서로이웃 신청을 하신 상태입니다.\n서로이웃 신청을 취소하신 후, 화이트리스트 추가가 가능합니다."
+		    ],
+			SUCCESS_REGIST : "등록되었습니다.",
+			BEFORE_REGIST : "이미 등록되어 있습니다.",
+			ERROR_REGIST_NEIGHBOR : "이웃은 차단 할 수 없습니다. 이웃을 해제한 후 차단하실 수 있습니다.",
+			TRANSFER_SUCCESS: "성공적으로 반영되었습니다.",
+            INVALID_CONTENT_ID: "아이디가 정상적이지 않습니다."
+	    },
+	    RESULT_CODE : { // Result Code
+	        ERROR: 0,
+	        SUCCESS: 1,
+	        OVERCOUNT: 2,
+	        BLACKLIST: 3,
+	        WHITELIST: 4,
+	        UNKNOWNLIST: 5,
+	        UNKNOWNITEM: 6,
+	        EMPTY: 7,
+	        SELFID: 8,
+	        NEIGHBORID: 9,
+	        EACH_NEIGHBORID: 10,
+	        WAIT_BOTH_NEIGHBOR: 11,
+            INVALID_CONTENT_ID:13
+	    },
+	    FILTER : { // Server Filter Code
+	        ID: 1,
+	        IP: 2,
+	        DOMAIN: 3,
+	        KEYWORD: 4,
+	        BLOG_NAME: 6,
+	        BLACK: 0,
+	        WHITE: 1,
+	        NOT_USE: 0,
+	        LOWER: 1,
+	        HIGH: 2
+	    },
+	    METHOD : {
+	        ADD_CONTENT: "addContent",
+	        DELETE: "remove",
+	        DELETE_ALL: "removeItem",
+	        SPAMSET: "spamfilter"
+	    },
+	    URL : {
+            FILTER_UPDATE: "/AdminUserFilterUpdate.naver",
+	    	COMMENT_FILTERED_MODIFY :"/AdminCommentFilteredModify.naver",
+	    	COMMENT_MANAGE_MODIFY :"/AdminCommentManageModify.naver",
+	    	NEIGHBOR_RELATION : "/AdminNeighborRelation.naver",
+	    	GUESTBOOK_FILTERED_MODIFY :"/GuestBookFilteredModify.naver"
+        }
+    };
+
+    /**
+     * 파라미터가 동적으로 변함
+     */
+    var G_ajaxHandler = function(){
+        var fHandler, oResponse, whtData, elTextBox;
+
+        for (var i = 0, size = arguments.length; i < size; i++) {
+            if ((typeof(arguments[i])).toLowerCase() == "function") {
+                fHandler = arguments[i];
+            } else if(arguments[i] instanceof $H ){
+            	whtData = arguments[i];
+            } else if(arguments[i].nodeType == 1){ // HTMLElement
+            	elTextBox = arguments[i];
+            }else {
+                oResponse = arguments[i];
+            }
+        }
+
+        if (oResponse == null) {
+            alert(GMSG.SERVER_MESSAGE.SERVER_ERROR);
+            return false;
+        }
+
+        var nResultCode = parseInt(oResponse.text(), 10);
+        switch (nResultCode) {
+            case GMSG.RESULT_CODE.ERROR:
+                alert(GMSG.SERVER_MESSAGE.ERROR);
+                break;
+            case GMSG.RESULT_CODE.SUCCESS:
+                if (fHandler) {fHandler.call();}
+                return;
+                break;
+            case GMSG.RESULT_CODE.OVERCOUNT:
+                alert(GMSG.SERVER_MESSAGE.OVERCOUNT[whtData.$('userFilter.blockType')][whtData.$('userFilter.item')]);
+                break;
+            case GMSG.RESULT_CODE.BLACKLIST:
+                alert(GMSG.SERVER_MESSAGE.BLACKLIST[whtData.$('userFilter.blockType')][whtData.$('userFilter.item')]);
+                break;
+            case GMSG.RESULT_CODE.WHITELIST:
+                alert(GMSG.SERVER_MESSAGE.WHITELIST[whtData.$('userFilter.blockType')][whtData.$('userFilter.item')]);
+                break;
+            case GMSG.RESULT_CODE.UNKNOWNLIST:
+                alert(GMSG.SERVER_MESSAGE.UNKNOWNLIST);
+                break;
+            case GMSG.RESULT_CODE.UNKNOWNITEM:
+                alert(GMSG.SERVER_MESSAGE.UNKNOWNITEM);
+                break;
+            case GMSG.RESULT_CODE.EMPTY:
+                alert(GMSG.SERVER_MESSAGE.EMPTY);
+                break;
+            case GMSG.RESULT_CODE.SELFID:
+                alert(GMSG.SERVER_MESSAGE.SELFID[whtData.$('userFilter.blockType')]);
+                break;
+            case GMSG.RESULT_CODE.NEIGHBORID:
+                alert(GMSG.SERVER_MESSAGE.NEIGHBORID[whtData.$('userFilter.blockType')]);
+                break;
+            case GMSG.RESULT_CODE.EACH_NEIGHBORID:
+                alert(GMSG.SERVER_MESSAGE.EACH_NEIGHBORID);
+                break;
+            case GMSG.RESULT_CODE.WAIT_BOTH_NEIGHBOR:
+                alert(GMSG.SERVER_MESSAGE.WAIT_BOTH_NEIGHBOR[whtData.$('userFilter.blockType')]);
+                break;
+            case GMSG.RESULT_CODE.INVALID_CONTENT_ID:
+                alert(GMSG.SERVER_MESSAGE.INVALID_CONTENT_ID);
+                break;
+        }
+        if(elTextBox){
+        	elTextBox.select();
+        }
+    };
+
+</script>
+<script type="text/javascript">
+var gsAdminURL = 'https://admin.blog.naver.com';
+var gsBlogURL = 'https://blog.naver.com';
+
+var blogId = 'todayisgood77' || 'todayisgood77';
+var isCommentReadOnly =false;
+var sCommentReadOnlyBlockSubmit = '죄송합니다. 블로그 댓글, 답글 서비스 점검 중에는 이용이 제한됩니다.';
+</script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/util-eb5b6d2_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/readonly-e558bd3_https.js"></script>
+<script type="text/javaScript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/CommentContentsManager-22c7c55_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/lcslog-f705898_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/nclk_v0.8.1-bdc5c05_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/js/nlog_click-5941a74_https.js"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//js/admin/global/AdminNclickHandler-615c111_https.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+    jQuery.noConflict();
+</script>
+
+
+
+    <script src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/ntm/ntm-blog-web-c326aba_https.js"></script>
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/NtmBaLog-913861719_https.js" charset="UTF-8"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/Nlog2-489749992_https.js" charset="UTF-8"></script>
+
+
+<script>
+    var baParams = {};
+    // [BA] 공통
+    baParams.baUrl = "https://scv-blog.io.naver.com/jackpotlog/v1/logs";
+    baParams.baSceneId = 'blog_admin';
+    
+    baParams.baUserKey = '34d15dabde56e6927c3af1bb4922490d4646336559fe297fc97da596e9374f10';
+    baParams.trackingCode = '';
+    
+
+    // [BA] post_end, blog_home, category
+    
+    baParams.blogNo = '167976723';
+    
+
+    // [BA] post_end, comment
+    
+
+    // [BA] blog_home
+    
+    baParams.bRelationType = '0';
+    baParams.uRelationType = '0';
+    
+
+    // [BA] category
+    
+
+    // [BA] lnb
+    
+
+    // [BA] search
+    baParams.range = '';
+    baParams.searchText = '';
+
+    // [BA] admin
+    baParams.settingMenu = 'POSTINGOPTION_comment_list';
+
+    // NLOG2
+    var nlog2Params = {};
+    nlog2Params.page_code = '2000004062';
+    nlog2Params.page_code_alias = 'blog_admin';
+    nlog2Params.stms_id = '100103401';
+
+    
+    nlog2Params.trackingCode = '';
+    
+
+    
+    nlog2Params.blogNo = 167976723;
+    
+
+    
+
+    
+    nlog2Params.bRelationType = 0;
+    nlog2Params.uRelationType = 0;
+    
+
+    
+
+    
+
+    nlog2Params.range = '';
+    nlog2Params.searchText = '';
+    nlog2Params.settingMenu = 'POSTINGOPTION_comment_list';
+
+    MylogPageViewSender.init(baParams, nlog2Params);
+
+</script>
+
+
+
+</body></html>
+<!-- IFRAME 6 -->
+<html><head></head><body marginwidth="0" marginheight="0"></body></html>
+<!-- IFRAME 7 -->
+<html><head></head><body></body></html>

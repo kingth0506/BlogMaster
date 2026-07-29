@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.11"
+APP_VERSION = "2.5.12"
 
 import os
 import sys
@@ -3750,7 +3750,35 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     # ── 크롤링 ──
+    def _ensure_own_api_keys(self):
+        """로그인 유저의 개인 API 키(api_keys_by_user[user])를 top-level 키 리스트에 반영.
+        글쓰기·크롤 로직은 top-level(gpt/gemini/deepseek_key_list)만 읽는데, 유저 전환/저장 과정에서
+        top-level이 비고 개인 키가 api_keys_by_user 에만 남는 경우가 있어 '키 없음'으로 막히던 문제 수정.
+        비파괴적: top-level에 이미 값이 있으면 건드리지 않는다."""
+        try:
+            from config import get_current_user, load_config as _lc, save_config as _sc
+            uname = (get_current_user() or "").strip()
+            if not uname:
+                return
+            raw = _lc() or {}
+            mine = (raw.get("api_keys_by_user") or {}).get(uname, {}) or {}
+            if not mine:
+                return
+            changed = False
+            for f in ("gpt_key_list", "gemini_key_list", "deepseek_key_list", "pixabay_key_list"):
+                top = [k for k in (raw.get(f) or []) if k]
+                own = [k for k in (mine.get(f) or []) if k]
+                if not top and own:
+                    raw[f] = list(mine.get(f) or [])
+                    changed = True
+            if changed:
+                _sc(raw)
+                self.cfg = _lc()
+        except Exception:
+            pass
+
     def _check_api_keys(self) -> bool:
+        self._ensure_own_api_keys()
         cfg = load_config()
         has_key = any(k for k in cfg.get("gpt_key_list", []) if k) or any(k for k in cfg.get("gemini_key_list", []) if k) or any(k for k in cfg.get("deepseek_key_list", []) if k)
         if not has_key:
@@ -5277,19 +5305,35 @@ class MainWindow(QMainWindow):
 
     def _data_root(self):
         """사용자 데이터(수집·글·이미지) 저장 루트 — 설치본은 exe가 있는 실행 폴더,
-        개발은 소스 폴더. (_internal 안이 아니라 exe 옆에 저장 → 직관적 + 업데이트/재설치 안전)"""
+        개발은 소스 폴더. (_internal 안이 아니라 exe 옆에 저장 → 직관적 + 업데이트/재설치 안전)
+        단, 마이그레이션이 아직 안 돼 데이터가 _internal 에만 있으면 그쪽을 사용(유실 방지)."""
         import sys as _sys
-        if getattr(_sys, "frozen", False):
-            return os.path.dirname(os.path.abspath(_sys.executable))
-        return os.path.dirname(os.path.abspath(__file__))
+        if not getattr(_sys, "frozen", False):
+            return os.path.dirname(os.path.abspath(__file__))
+        exe_dir = os.path.dirname(os.path.abspath(_sys.executable))
+        internal = os.path.dirname(os.path.abspath(__file__))
+        try:
+            def _has_data(d):
+                if not os.path.isdir(d):
+                    return False
+                for n in os.listdir(d):
+                    if n == "logs" or n.startswith("crawled_") or n.startswith("generated_posts_"):
+                        return True
+                return False
+            if (os.path.normcase(os.path.normpath(internal)) != os.path.normcase(os.path.normpath(exe_dir))
+                    and not _has_data(exe_dir) and _has_data(internal)):
+                return internal   # 아직 _internal 에만 데이터가 있음 → 그대로 읽고 씀
+        except Exception:
+            pass
+        return exe_dir
 
     def _migrate_data_to_exe_root(self):
         """구버전이 _internal 안에 저장한 데이터를 exe 실행 폴더로 1회 이동."""
         import sys as _sys, shutil
         if not getattr(_sys, "frozen", False):
             return
-        old = os.path.dirname(os.path.abspath(__file__))   # frozen: _internal
-        new = self._data_root()                            # exe 폴더
+        old = os.path.dirname(os.path.abspath(__file__))                 # frozen: _internal
+        new = os.path.dirname(os.path.abspath(_sys.executable))          # exe 폴더 (직접 타겟)
         if os.path.normcase(os.path.normpath(old)) == os.path.normcase(os.path.normpath(new)):
             return
         try:
@@ -7325,6 +7369,7 @@ class MainWindow(QMainWindow):
     def _start_blog_posting(self):
         if self._block_if_expired():
             return
+        self._ensure_own_api_keys()   # 개인 키(api_keys_by_user)를 top-level에 반영 후 진행
         # 크롤링 결과 불러오기 (현재 없으면 logs에서 로드)
         if not self.crawled_data:
             log_dir = self._get_logs_dir()

@@ -1,0 +1,239 @@
+<html lang="ko"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<meta http-equiv="Content-Script-Type" content="text/javascript">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<title>서로이웃 신청 : 꼬링이 : 네이버 블로그님의 네이버 블로그 관리</title>
+<link rel="StyleSheet" href="https://ssl.pstatic.net/t.static.blog/mylog/versioning//css/admin/blogadmin_content-498c980_https.css" type="text/css">
+<!--// 각 서버의 호스트 URL -->
+<script async="" src="https://ntm.pstatic.net/ex/nlog-v2.js"></script><script async="" src="https://ntm.pstatic.net/ex/nlog.js"></script><script async="" src="https://ntm.pstatic.net/scripts/ntm_d26044233161.js"></script><script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/BuddyInviteManageAll-945589613_https.js" charset="UTF-8"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script language="javascript">
+jQuery.noConflict();
+var gsBlogId = "todayisgood77";
+var gsUrl = 'https://admin.blog.naver.com';
+var gsBlogUrl = 'https://blog.naver.com';
+function goPage(page){
+    page = page || 1;
+    var url = "blogId="+gsBlogId+"&meCurrentPage=" + page;
+    document.location.href = "/BuddyInviteReceivedManage.naver?" + url;
+}
+</script>
+</head>
+
+<body>
+<div id="wrap" style="background:none">
+    <form method="POST" id="inviteMe"> 
+    	<input type="hidden" name="blogId" value="todayisgood77">
+        <h1 class="content-title"><span class="blind">환경설정 &gt; </span>서로이웃 신청</h1>
+
+		
+		<div class="admin_set_buddy">
+			<dl>
+				<dt class="tit">서로이웃 신청받기</dt>
+				<dd class="set_input">
+					<input name="allowBothBuddy" class="_bothBuddyAllowed _nclk(bas_neimgr.useon)" type="radio" id="r1" checked=""><label for="r1">사용</label>
+					<input name="allowBothBuddy" class="_bothBuddyDenied _nclk(bas_neimgr.useoff)" type="radio" id="r2"><label for="r2">사용하지 않음</label>
+				</dd>
+				<dd class="dsc">
+					<ul>
+						<li>사용하지 않음 선택 시, 다른 사람이 서로이웃 신청을 보낼 수 없습니다.</li>
+						<li>기존 서로이웃은 유지됩니다.</li>
+					</ul>
+				</dd>
+			</dl>
+			<div class="action1">
+				<span class="btn6"><input class="_bothBuddyAllowConfirm _nclk(bas_neimgr.ok)" type="button" value="확인"></span>
+			</div>
+		</div>
+		
+
+		<ul class="tab1 wblist">
+		<li class="on _nclk(bas_neitadd.receive)"><a href="https://admin.blog.naver.com/BuddyInviteReceivedManage.naver?blogId=todayisgood77">받은신청</a></li>
+		<li class="_nclk(bas_neitadd.send)"><a href="https://admin.blog.naver.com/BuddyInviteSentManage.naver?blogId=todayisgood77">보낸신청</a></li>
+		<li class="_nclk(bas_neitadd.guide)"><a href="https://admin.blog.naver.com/BuddyInviteMessageManage.naver?blogId=todayisgood77">안내메시지</a></li>
+		</ul>
+
+	<div class="action2 neighborlist">
+
+		<div class="action2_l">
+			<span class="btn btn4"><button type="button" class="_acceptMultiBuddy _nclk(bas_neitadd.raccept)">수락</button></span>
+			<span class="btn btn4"><button type="button" class="_denyMultiBuddy _nclk(bas_neitadd.rreject)">거절</button></span>
+		</div>
+	</div>
+
+
+	<table cellspacing="0" summary="이웃맺기 받은신청 목록" class="table4">
+		<caption>이웃맺기 받은신청 목록</caption>
+
+		<colgroup>
+		<col width="34"><col width="174"><col><col width="110"><col width="136">
+		</colgroup>
+		<thead>
+		<tr>
+			<th scope="col" class="checkwrap"><input type="checkbox" class="input_check _checkAll _nclk(bas_neitadd.rlistall)"></th>
+			<th scope="col" class="name">신청한 사람</th>
+			<th scope="col">메시지</th>
+
+			<th scope="col">신청일</th>
+			<th scope="col">관리</th>
+		</tr>
+		</thead>
+		<tbody>
+		
+			
+				<tr class="first"> 
+				<td colspan="5" class="none">새로 들어온 이웃신청이 없습니다</td>
+				</tr>
+			
+			
+				
+		</tbody>
+	</table>	
+	
+	<div class="action2">
+		<div class="action2_l">
+			<span class="all_select"><input type="checkbox" class="input_check _checkAll _nclk(bas_neitadd.rlistall2)"> <label>전체선택</label></span>
+			<span class="btn btn4"><button type="button" class="_acceptMultiBuddy _nclk(bas_neitadd.raccept2)">수락</button></span>
+			<span class="btn btn4"><button type="button" class="_denyMultiBuddy _nclk(bas_neitadd.rreject2)">거절</button></span>
+		</div>	
+	</div>
+		 
+	<div class="paginate">
+		
+			
+				<strong>1</strong>	
+			
+			
+					
+	</div>
+	</form>
+		
+	<div class="tip1">
+		<dl>
+		<dt><img src="https://blogimgs.pstatic.net/nblog/admin50/h_tip.gif" alt="블로그 이용 Tip" width="92" height="16"></dt>
+		<dd><a href="https://blog.naver.com/blogpeople/220478193677" target="_blank">서로이웃을 거절하면 어떻게 되나요?</a></dd>
+		</dl>
+		<p class="more"><a href="https://blog.naver.com/blogpeople/tag/%EC%9D%B4%EC%9B%83" target="_blank">더 많은 안내보기</a></p>
+	</div>	
+</div>
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/BuddyInviteReceivedManage-779799404_https.js" charset="UTF-8"></script>
+
+<script type="text/javascript">
+	//document.domain = "naver.com"
+	    window.onload = function(){
+	        cm_paperInit();
+	    }
+	var buddyInviteReceivedManage = new BuddyInviteReceivedManage();
+</script>
+
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/AdminBottomCommon-477111966_https.js" charset="UTF-8"></script>
+<script type="text/javascript">
+var g_ssc = "blog.admin";
+var ccsrv="cc.naver.com";
+var nclk_evt = 3;
+new InstallBlogAppPush();
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/jquery/3.2.1/jquery-3.2.1-d2d8ca4_https.js"></script>
+<script type="text/javascript">
+    jQuery.noConflict();
+</script>
+
+
+
+    <script src="https://ssl.pstatic.net/t.static.blog/mylog/versioning//common/lib/ntm/ntm-blog-web-c326aba_https.js"></script>
+
+
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/NtmBaLog-913861719_https.js" charset="UTF-8"></script>
+<script type="text/javascript" src="https://ssl.pstatic.net/t.static.blog/mylog/versioning/Nlog2-489749992_https.js" charset="UTF-8"></script>
+
+
+<script>
+    var baParams = {};
+    // [BA] 공통
+    baParams.baUrl = "https://scv-blog.io.naver.com/jackpotlog/v1/logs";
+    baParams.baSceneId = 'blog_admin';
+    
+    baParams.baUserKey = '34d15dabde56e6927c3af1bb4922490d4646336559fe297fc97da596e9374f10';
+    baParams.trackingCode = '';
+    
+
+    // [BA] post_end, blog_home, category
+    
+    baParams.blogNo = '167976723';
+    
+
+    // [BA] post_end, comment
+    
+
+    // [BA] blog_home
+    
+    baParams.bRelationType = '0';
+    baParams.uRelationType = '0';
+    
+
+    // [BA] category
+    
+
+    // [BA] lnb
+    
+
+    // [BA] search
+    baParams.range = '';
+    baParams.searchText = '';
+
+    // [BA] admin
+    baParams.settingMenu = 'ENVIRONMENT_buddy_invite_received_manage';
+
+    // NLOG2
+    var nlog2Params = {};
+    nlog2Params.page_code = '2000004062';
+    nlog2Params.page_code_alias = 'blog_admin';
+    nlog2Params.stms_id = '100131454';
+
+    
+    nlog2Params.trackingCode = '';
+    
+
+    
+    nlog2Params.blogNo = 167976723;
+    
+
+    
+
+    
+    nlog2Params.bRelationType = 0;
+    nlog2Params.uRelationType = 0;
+    
+
+    
+
+    
+
+    nlog2Params.range = '';
+    nlog2Params.searchText = '';
+    nlog2Params.settingMenu = 'ENVIRONMENT_buddy_invite_received_manage';
+
+    MylogPageViewSender.init(baParams, nlog2Params);
+
+</script>
+
+
+
+</body></html>
