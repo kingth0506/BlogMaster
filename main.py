@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.16"
+APP_VERSION = "2.5.17"
 
 import os
 import sys
@@ -1333,6 +1333,35 @@ class MainWindow(QMainWindow):
                    "place": place_name or "", "title": title or "", "status": status,
                    "recorded_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M")}
             path = self._schedule_file()
+            data = []
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = json.load(f) or []
+                except Exception:
+                    data = []
+            data.append(rec)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=1)
+        except Exception:
+            pass
+
+    def _record_posting_history_local(self, blog_id, place_name, place_address, keyword, title, schedule_time=""):
+        """발행 성공 1건을 로컬 파일에 기록 (온라인 아님). 총폴더/기타/posting_history_{계정}.json 에 누적.
+        예전엔 Firebase(posting_history 컬렉션)에 올리던 것을 로컬 저장으로 변경."""
+        try:
+            import datetime as _dt
+            rec = {
+                "app_user": self._account_key(),
+                "blog_id": blog_id or "",
+                "place_name": place_name or "",
+                "place_address": place_address or "",
+                "keyword": keyword or "",
+                "title": title or "",
+                "schedule_time": schedule_time or "",
+                "posted_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            path = os.path.join(self._etc_dir(), f"posting_history_{self._account_key()}.json")
             data = []
             if os.path.exists(path):
                 try:
@@ -6521,18 +6550,12 @@ class MainWindow(QMainWindow):
                                     name, keyword, content.get("title", ""))
                             except Exception:
                                 pass
-                            # 포스팅 히스토리 Firestore 저장 (백그라운드)
+                            # 포스팅 히스토리 로컬 저장 (온라인 아님 — 총폴더/기타 에 기록)
                             try:
-                                import threading as _th_h
-                                from users import add_posting_history as _aph
-                                _app_user = getattr(self, "current_user", {}).get("username", "")
-                                _th_h.Thread(
-                                    target=_aph,
-                                    args=(_app_user, account.get("blog_id", ""),
-                                          name, place.get("address", "") or place.get("jibun_address", ""),
-                                          keyword, content.get("title", ""), schedule_time or ""),
-                                    daemon=True,
-                                ).start()
+                                self._record_posting_history_local(
+                                    account.get("blog_id", ""),
+                                    name, place.get("address", "") or place.get("jibun_address", ""),
+                                    keyword, content.get("title", ""), schedule_time or "")
                             except Exception:
                                 pass
                             # 포스팅 완료 시: posted=True 마킹 (F8에서 [완] 표시로 확인 가능)

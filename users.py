@@ -429,22 +429,6 @@ HISTORY_COLLECTION = "posting_history"
 def add_posting_history(app_user: str, blog_id: str, place_name: str,
                         place_address: str, keyword: str, title: str,
                         schedule_time: str = None):
-    """포스팅 성공 시 Firestore에 히스토리 기록. 실패해도 무시."""
-    db = _init_firebase()
-    if db is None:
-        return
-    try:
-        from firebase_admin import firestore as _fs
-        import datetime as _dt
-        db.collection(HISTORY_COLLECTION).add({
-            "app_user": app_user,
-            "blog_id": blog_id,
-            "place_name": place_name,
-            "place_address": place_address,
-            "keyword": keyword,
-            "title": title,
-            "schedule_time": schedule_time or "",
-            "posted_at": _fs.SERVER_TIMESTAMP,
-        })
-    except Exception:
-        pass
+    """(사용 안 함) 예전엔 Firestore에 발행 기록을 올렸으나, 이제 로컬 파일 저장으로 변경.
+    main.py의 _record_posting_history_local() 이 대체. 온라인 저장/쓰기 없음."""
+    return
