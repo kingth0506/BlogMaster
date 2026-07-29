@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.5.14"
+APP_VERSION = "2.5.15"
 
 import os
 import sys
@@ -1873,21 +1873,8 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         # 세션 하트비트 (5분마다 갱신)
-        _sid = user.get("_session_id", "")
-        _uname = user.get("username", "")
-        if _sid and _uname and user.get("role") != "admin":
-            import threading as _th_hb, time as _time_hb
-            def _heartbeat_loop(uname=_uname, sid=_sid):
-                while True:
-                    _time_hb.sleep(5 * 60)
-                    if getattr(self, "current_user", {}).get("_session_id") != sid:
-                        break
-                    try:
-                        from users import heartbeat_session
-                        heartbeat_session(uname, sid)
-                    except Exception:
-                        pass
-            _th_hb.Thread(target=_heartbeat_loop, daemon=True).start()
+        # 세션 하트비트 제거 — 다중 로그인 허용이라 세션 값을 아무 데서도 읽지 않음.
+        # 5분마다 하던 Firestore 쓰기가 순수 낭비였으므로 스레드 자체를 띄우지 않는다.
 
         # 만료 시 결제창 자동 팝업 (admin 제외, 00시 기준)
         if user.get("role") != "admin":
@@ -8107,7 +8094,8 @@ class SignupDialog(QDialog):
         if pw != pw2:
             self.msg.setText("비밀번호가 일치하지 않습니다.")
             return
-        if uid in load_users():
+        from users import load_user as _lu_one
+        if _lu_one(uid) is not None:   # 전체명단 대신 해당 아이디 1개만 확인 (할당량 절약)
             self.msg.setText("이미 존재하는 아이디입니다.")
             return
         expires = (datetime.date.today() + datetime.timedelta(days=30)).strftime("%Y-%m-%d")

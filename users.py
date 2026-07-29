@@ -407,51 +407,19 @@ def check_session_conflict(username: str) -> bool:
     return False
 
 
+# 세션 추적(set/clear/heartbeat)은 '중복 로그인 차단' 기능용이었으나, 지금은 다중 로그인을
+# 허용(check_session_conflict가 항상 False)해서 session_id/heartbeat 값을 아무 데서도 읽지 않는다.
+# → 순수 낭비 쓰기/읽기라 전부 no-op 처리. (Firestore 할당량 절약)
 def set_session(username: str, session_id: str):
-    """로그인 시 세션 등록."""
-    db = _init_firebase()
-    if db is None:
-        return
-    try:
-        from firebase_admin import firestore as _fs
-        db.collection(COLLECTION).document(username).update({
-            "session_id": session_id,
-            "session_heartbeat": _fs.SERVER_TIMESTAMP,
-        })
-    except Exception:
-        pass
+    return
 
 
 def clear_session(username: str, session_id: str):
-    """앱 종료 시 본인 세션만 삭제."""
-    db = _init_firebase()
-    if db is None:
-        return
-    try:
-        doc = db.collection(COLLECTION).document(username).get()
-        if doc.exists and (doc.to_dict() or {}).get("session_id") == session_id:
-            db.collection(COLLECTION).document(username).update({
-                "session_id": None,
-                "session_heartbeat": None,
-            })
-    except Exception:
-        pass
+    return
 
 
 def heartbeat_session(username: str, session_id: str):
-    """5분마다 호출해서 세션 유지. (읽기 없이 바로 갱신 — 할당량 절약)"""
-    db = _init_firebase()
-    if db is None:
-        return
-    try:
-        from firebase_admin import firestore as _fs
-        # 예전엔 get()으로 세션 확인 후 update(읽기1+쓰기1) 했으나, 다중 로그인 허용이라
-        # 확인이 무의미 → 읽기 없이 바로 update (쓰기1만). 할당량 절약.
-        db.collection(COLLECTION).document(username).update({
-            "session_heartbeat": _fs.SERVER_TIMESTAMP,
-        })
-    except Exception:
-        pass
+    return
 
 
 # ── 포스팅 히스토리 ──
