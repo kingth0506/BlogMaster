@@ -106,31 +106,47 @@ _VAR_EMPHASIS = [
 ]
 
 
+# ── 화자(페르소나)·도입 진입점 변주 + 클리셰 금지어 (판박이 방지 핵심) ──
+_VAR_PERSONA = [
+    "직접 이용해 본 사람",
+    "가족을 위해 알아본 사람",
+    "지인 추천으로 찾아간 사람",
+    "여러 곳을 꼼꼼히 비교한 신중한 사람",
+    "급하게 찾아야 했던 사람",
+    "예전에 실망한 뒤 신중히 고른 사람",
+    "오래 다닌 단골",
+]
+_VAR_ENTRY = [
+    "첫 문단을 '이거 고를 때 많이 묻는 질문' 하나를 던지며 시작하라.",
+    "첫 문단을 방문/이용 중 인상 깊었던 한 장면부터 시작하라.",
+    "첫 문단을 '이런 분께 권한다'는 독자 지목으로 시작하라.",
+    "첫 문단을 결론(추천 이유 한 줄)부터 시작하라.",
+    "첫 문단을 이 지역·분야의 팁 하나로 시작하라.",
+    "첫 문단을 이용 후 달라진 점부터 시작하라.",
+]
+_VAR_BAN = ["발품", "마음에 쏙", "진심 어린", "막막", "안심", "끙끙", "뼈저리",
+            "눈 녹듯", "지푸라기", "하얗게", "하얘", "밤잠을 설", "머릿속이 하"]
+
+
 def _variation_directive() -> str:
-    """매 호출마다 랜덤 조합 — 같은 업체·키워드라도 글의 결이 달라지게.
-    출력 형식(소제목/이미지 마커 등)은 절대 바꾸지 말 것을 명시."""
-    parts = [
+    """매 호출마다 랜덤 조합 — 같은 업체·키워드라도 글의 결(화자·말투·구조·도입)이 달라지게.
+    판박이 방지: '찾아 헤매다 발견' 고정 서사 제거 + 화자 변주 + 클리셰 금지.
+    출력 형식(소제목/이미지 마커 등)은 그대로 유지."""
+    lines = [
+        f"화자: '{random.choice(_VAR_PERSONA)}' 시점으로 일관되게 써라.",
         random.choice(_VAR_TONE),
         random.choice(_VAR_STRUCTURE),
         random.choice(_VAR_EMPHASIS),
+        random.choice(_VAR_ENTRY),
+        "전형적인 '문제가 생김 → 인터넷 검색 → 방문/상담' 서사로 뻔하게 시작하지 마라. 위 화자·도입 방식으로 바로 들어가라.",
+        "★첫 문장을 '최근/요즘/얼마 전/며칠 전/요새/근래/저는/저도' 같은 흔한 말로 시작하지 마라. 매 글의 첫 문장을 서로 완전히 다르게 열어라.",
+        f"다음 표현은 절대 쓰지 마라: {', '.join(_VAR_BAN)}.",
         "같은 표현·문장 구조를 반복하지 말고 어휘를 다양하게 바꿔라.",
-    ]
-    random.shuffle(parts)
-    # 고정 시점 앵커 — 모든 글이 '필요해서 찾다가 발견' 프레임을 갖도록
-    anchor = ("글 전체를 '필요해서 좋은 곳을 찾아 여기저기 알아보고 비교하다가 결국 이곳을 "
-              "발견하게 된' 시점으로 풀어라. 단순히 '가봤어요'가 아니라, 찾아 헤맨 끝에 만난 느낌을 살려라.")
-    # 도입부: '형태(모드)' + '내용 각도'를 랜덤으로 → 첫 문장이 매번 갈림 (베낄 예시는 주지 않음)
-    opening = (random.choice(_VAR_OPENING)
-               + " 도입에 '" + random.choice(_VAR_INTRO_ANGLE) + "'을(를) 녹여라.")
-    fixed = [
-        opening,
-        "★첫 문장을 '최근/요즘/얼마 전/며칠 전/요새/근래/저는/저도' 같은 흔한 말로 시작하지 마라. "
-        "매 글의 첫 문장을 서로 완전히 다르게 열어라(같은 시작어 반복 금지).",
-        "분량은 공백 포함 2000자 이상(50문장 이상)으로 충분히 길고 풍부하게 써라. 절대 짧게 끝내지 마라.",
+        "분량은 공백 제외 2000자 이상으로 충분히 길고 풍부하게 써라. 절대 짧게 끝내지 마라.",
     ]
     return ("\n\n[이번 글 작성 스타일 — 아래 지시를 반영하되, 위에서 요구한 "
-            "글자수·소제목·이미지 마커 등 출력 형식은 그대로 유지하라]\n- "
-            + "\n- ".join(fixed) + "\n- " + "\n- ".join(parts))
+            "소제목·이미지 마커·해시태그 등 출력 형식은 그대로 유지하라]\n- "
+            + "\n- ".join(lines))
 
 
 # ── 업종 관점 격리 (다른 업종 소재 침범 0) ─────────────────────────
@@ -169,6 +185,28 @@ def _harden_perspective(prompt: str, place: dict, keyword: str) -> str:
     return "".join(out)
 
 
+# ── 구조 변주: 템플릿의 고정 6단락 '### 분량/구성'을 글마다 다른 구조로 교체 (판박이 방지) ──
+_STRUCT_SKELETONS = [
+    "1. 계기·상황 (6문장+)\n2. 알아본 방법·기준 (5문장+)\n3. 방문/상담에서 확인한 것 (8문장+)\n4. 서비스·응대·전문성 (10문장+)\n5. 솔직한 느낌 (7문장+)\n6. 추천 마무리 (5문장+)",
+    "1. 결론부터: 왜 여기로 정했는지 (5문장+)\n2. 좋았던 점 (10문장+)\n3. 접근성/편의 (6문장+)\n4. 알아두면 좋은 일반 정보 (8문장+)\n5. 아쉬운 점 포함 총평 (8문장+)\n6. 어떤 사람에게 맞는지 (5문장+)",
+    "핵심 포인트 4가지를 소제목처럼 나눠 각각 8문장+ 로 풀어라 (전문성·실력 / 응대·친절 / 접근성·편의 / 가격·구성 일반정보). 마지막에 총평 5문장+.",
+    "이용을 시간 순서로 따라가며 써라: 처음 알게 됨 → 방문/상담 → 진행 → 마무리. 각 단계 구체적으로, 중간중간 느낀 점·정보를 녹여라. 6문단 이상.",
+    "1. 처음 궁금·걱정했던 것 (6문장+)\n2. 알게 된 일반 정보 (8문장+)\n3. 실제 방문/이용기 (8문장+)\n4. 응대·전문성 (8문장+)\n5. 결론·추천 (6문장+)",
+]
+
+
+def _vary_structure(blog_template: str) -> str:
+    """템플릿의 고정 '### 분량/구성' 6단락 블록을 글마다 다른 구조로 교체.
+    해당 블록(또는 '### 이미지 배치' 경계)이 없으면 원본 그대로 반환(안전)."""
+    if "### 분량/구성" not in blog_template or "### 이미지 배치" not in blog_template:
+        return blog_template
+    skel = random.choice(_STRUCT_SKELETONS)
+    newblock = ("### 분량/구성 (★ 공백 포함 2200자 이상, 55문장 이상 — 반드시 길게, 절대 짧게 끝내지 마라)\n"
+                "아래 '이번 글 구조'를 따라 각 부분을 충분히 풀어 써라. 문장마다 줄바꿈.\n"
+                "[이번 글 구조]\n" + skel + "\n\n")
+    return re.sub(r"### 분량/구성.*?(?=### 이미지 배치)", newblock, blog_template, flags=re.S)
+
+
 def generate_with_gpt(api_key: str, place: dict, keyword: str, engine: str = "gpt") -> dict:
     """블로그 글 생성 — engine='deepseek' / 'gpt' / 'gemini'. (제미나이는 OpenAI 호환 엔드포인트 사용)"""
     if engine == "deepseek":
@@ -177,14 +215,17 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str, engine: str = "gp
     elif engine == "gemini":
         client = openai.OpenAI(api_key=api_key,
                                base_url="https://generativelanguage.googleapis.com/v1beta/openai/")
-        model = "gemini-2.5-flash"
+        # 무료 한도 큰 flash-lite 사용 (flash는 분당 ~10건이라 10개쯤 쓰면 429로 막힘).
+        # 'latest' 별칭 → 특정 버전이 폐기(2.5-flash-lite는 신규 404)돼도 항상 최신 flash-lite로 자동 연결.
+        model = "gemini-flash-lite-latest"
     else:
         client = openai.OpenAI(api_key=api_key)
         model = "gpt-4o-mini"
     # 지역 확장 크롤링: 이 업체가 수집된 실제 검색 키워드(예: "강남구 파스타") 우선
     keyword = place.get("search_keyword") or keyword
     prompt_data = get_prompt_for_keyword(keyword)
-    prompt = _fill_prompt(prompt_data.get("blog", ""), place, keyword)
+    blog_tpl = _vary_structure(prompt_data.get("blog", ""))   # 6단락 고정 구조 → 글마다 변주 (판박이 방지)
+    prompt = _fill_prompt(blog_tpl, place, keyword)
     prompt = _harden_perspective(prompt, place, keyword)   # ★ 업종 관점 격리 (다른 업종 소재 침범 0)
     prompt = prompt + _variation_directive()   # 글마다 다른 스타일 지시 (반복 방지)
     # 제목을 같은 호출에서 함께 생성 (별도 호출 제거로 API 호출 절감, 품질 동일)
@@ -243,7 +284,8 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str, engine: str = "gp
     raw_text, title_suffix = _split_title(raw_text)
 
     # ★ 첫머리 상투적 시간부사 제거 — "최근/요즘/얼마 전" 등으로 시작하는 습관 강제 차단
-    _LEAD = r'^\s*(?:최근에|최근\s|요즘에|요즘|요새|근래에|근래|얼마\s*전,?|며칠\s*전,?)\s*'
+    # 시간부사만 제거 — '요즘은/요새도' 처럼 조사가 붙은 경우는 떼지 않도록 경계 확인
+    _LEAD = r'^\s*(?:최근에|최근\s|요즘에|요즘(?=[\s,])|요새(?=[\s,])|근래에|근래(?=[\s,])|얼마\s*전,?|며칠\s*전,?)\s*'
     def _strip_lead(t):
         try:
             return re.sub(_LEAD, '', (t or '').lstrip(), count=1)
@@ -281,25 +323,31 @@ def generate_with_gpt(api_key: str, place: dict, keyword: str, engine: str = "gp
         except Exception:
             break
 
-    # ★ 길이 보강 — 짧으면 한 번 '한두 단락만' 이어 써서 1500자+ 보장 (과증식 방지로 가볍게)
-    # 코드 해시태그로 교체되며 약간 짧아지므로 1550자 버퍼로 트리거
+    # ★ 길이 보강 — '공백 제외' 1900자 미만이면 이어 써서 채운다 (최대 2회).
+    # (이전엔 공백 포함 길이로 재서 트리거가 거의 안 걸렸음 → 공백 제외 기준으로 교정)
+    def _nospace_len(t):
+        return len(re.sub(r"\s", "", t or ""))
     try:
-        if len(raw_text) < 1550:
+        _boost = 0
+        while _nospace_len(raw_text) < 1900 and _boost < 2:
+            _boost += 1
+            _cur_len = _nospace_len(raw_text)
             cont = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": "너는 블로그 글쓰기 전문가다. 블로그 본문만 출력한다."},
                     {"role": "user", "content": prompt},
                     {"role": "assistant", "content": raw_text},
-                    {"role": "user", "content": f"방금 글이 약 {len(raw_text)}자로 살짝 짧다. 같은 업체·같은 시점·같은 말투로, 더 구체적인 내용 한두 단락만 자연스럽게 이어 써서 전체가 1800자 정도가 되게 해라. 이미 쓴 내용 반복 금지. 마무리 인사·해시태그·이미지 마커([이미지])·제목(===제목===)은 새로 붙이지 말고 이어지는 본문 문장만 출력해라."},
+                    {"role": "user", "content": f"방금 글이 공백 제외 약 {_cur_len}자로 짧다. 같은 업체·같은 시점·같은 말투로, 더 구체적이고 유용한 내용 두세 단락을 자연스럽게 이어 써서 전체가 공백 제외 2100자 이상이 되게 해라. 이미 쓴 내용 반복 금지. 마무리 인사·해시태그·이미지 마커([이미지])·제목(===제목===)은 새로 붙이지 말고 이어지는 본문 문장만 출력해라."},
                 ],
                 temperature=0.9,
-                max_tokens=900,
+                max_tokens=1200,
             )
             more = (cont.choices[0].message.content or "").strip()
-            if more:
-                more, _ = _split_title(more)   # 혹시 제목 붙어오면 제거
-                raw_text = raw_text.rstrip() + "\n\n" + more
+            if not more:
+                break
+            more, _ = _split_title(more)   # 혹시 제목 붙어오면 제거
+            raw_text = raw_text.rstrip() + "\n\n" + more
     except Exception:
         pass
 
@@ -319,7 +367,7 @@ def _gemini_request(client, prompt, retries=5):
     """Gemini API 요청 + 429/503 자동 재시도 + 폴백 모델.
     gemini-2.5-flash가 503이면 gemini-2.5-flash-lite로 폴백. 성공 응답에만 과금."""
     import time as _time
-    models_chain = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+    models_chain = ["gemini-flash-lite-latest", "gemini-flash-latest"]
     last_err = None
     for model in models_chain:
         for attempt in range(retries):
@@ -623,9 +671,15 @@ def _fill_prompt(template: str, place: dict, keyword: str) -> str:
 
     # 지역 단위(시/구/동) 보강: place 필드 우선, 없으면 실제 주소에서 추출
     # (크롤러가 dong/시/구를 채우지 못한 경우의 폴백 — 프롬프트에 지역 키워드가 비지 않도록)
-    dong = (place.get("dong", "") or "").strip()
-    gu = (place.get("구", "") or "").strip()
-    si = (place.get("시", "") or "").strip()
+    # ⚠️ 크롤러가 지역 필드(dong/구/시)를 한 칸씩 밀려 저장하는 경우가 있어
+    # (예: dong=영통구, 구=수원시, 시=경기), 필드는 '기대 접미사로 끝날 때만' 신뢰하고
+    # 아니면 주소에서 직접 추출한다. (주소는 정확 → AI에 올바른 구/동 전달)
+    def _valid_sfx(v, sfx):
+        v = (v or "").strip()
+        return v if v.endswith(sfx) else ""
+    dong = _valid_sfx(place.get("dong"), "동")
+    gu = _valid_sfx(place.get("구"), "구")
+    si = _valid_sfx(place.get("시"), "시")
     if not dong:
         _m = _re.search(r"([가-힣]{1,4}동)(?:\s|$|[^가-힣])", (full_addr or "") + " ")
         if _m:
@@ -750,6 +804,53 @@ def _generate_title(client, keyword, place, prompt_data, provider="gpt"):
         return ""
 
 
+# 자동 교정할 '확실한' 오타만 등록 (반복형). '넓직하게'는 흔한 표기라 제외 — 손대지 않음.
+# 새 오타가 반복해서 보이면 여기 한 줄씩 추가하면 다음 글부터 자동 교정됨.
+_TYPO_FIXES = {
+    "삭살한": "삭막한",
+    "쾌쾌한": "퀴퀴한",
+    "첫인부터": "첫인상부터",
+    "매일유일하게": "매일같이",
+}
+
+
+def _apply_typo_fixes(text: str) -> str:
+    """등록된 확실한 오타를 바른말로 치환 (발행 전 자동 교정)."""
+    if not text:
+        return text
+    for wrong, right in _TYPO_FIXES.items():
+        if wrong in text:
+            text = text.replace(wrong, right)
+    return text
+
+
+# 프롬프트 금지어를 뚫고 남는 상투 표현을 자연스러운 말로 치환 (발행 전 후처리)
+_CLICHE_FIXES = {
+    "끙끙 앓": "속으로 앓",
+    "끙끙거리": "애태우",
+    "끙끙대": "애태",
+    "뼈저리게": "절실히",
+    "뼈저리": "절실",
+    "눈 녹듯": "서서히",
+    "발품을 팔": "직접 알아보",
+    "발품": "직접 알아봄",
+    "머릿속이 하얗게": "앞이 캄캄하게",
+    "머릿속이 하얘": "앞이 캄캄해",
+    "하얘지": "캄캄해지",
+    "밤잠을 설": "잠을 설",
+}
+
+
+def _apply_cliche_fixes(text: str) -> str:
+    """프롬프트 금지에도 남은 상투 표현을 자연스럽게 치환."""
+    if not text:
+        return text
+    for wrong, right in _CLICHE_FIXES.items():
+        if wrong in text:
+            text = text.replace(wrong, right)
+    return text
+
+
 def parse_blog_content(raw_text: str, title: str = "") -> dict:
     """생성된 텍스트를 구조화"""
     if not title:
@@ -779,6 +880,12 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
     body = re.sub(r"\[제목\]\s*.+?\n?", "", body)
     body = re.sub(r"\[태그\]\s*.+?\n?", "", body)
 
+    # 발행 전 오타 자동 교정 (제목·본문 공통)
+    title = _apply_typo_fixes(title)
+    body = _apply_typo_fixes(body)
+    # 남은 상투 표현(클리셰) 후처리 — 본문만
+    body = _apply_cliche_fixes(body)
+
     return {
         "title": title,
         "body": body.strip(),
@@ -789,20 +896,40 @@ def parse_blog_content(raw_text: str, title: str = "") -> dict:
 
 
 def _build_hashtags(place: dict, keyword: str) -> list:
-    """지역+업종 기반 네이버 블로그 검색용 해시태그 (구/동/역/시 + 업체명).
+    """지역+업종 기반 네이버 블로그 검색용 해시태그.
+    지역 폴백: 구 > 시 > 군 > 광역시도. 구/시/군 접미사는 떼고(강남/춘천/홍성),
+    동은 유지(역삼동). '추천'·'비용' 니즈어 포함, 5~10개.
     GPT 출력과 무관하게 코드로 생성 — 감성/페르소나(효자효녀 등) 태그 원천 차단."""
     biz = _extract_biz_type(place, keyword)
     if not biz:
         return []
     addr = (place.get("address", "") or "") + " " + (place.get("jibun_address", "") or "")
-    dong = (place.get("dong", "") or "").strip()
+    # ⚠️ 크롤러가 지역 필드(dong/구/시)를 한 칸씩 밀려 저장하는 경우가 있어
+    # (예: dong=영통구, 구=수원시, 시=경기), 필드는 '기대 접미사로 끝날 때만' 신뢰하고
+    # 아니면 주소 문자열에서 직접 추출한다. (주소는 정확)
+    def _valid(v, sfx):
+        v = (v or "").strip()
+        return v if v.endswith(sfx) else ""
+    dong = _valid(place.get("dong"), "동")
     if not dong:
         m = re.search(r"([가-힣]{1,4}동)(?:\s|$|[^가-힣])", addr + " ")
         dong = m.group(1) if m else ""
-    gu = (place.get("구", "") or "").strip()
+    gu = _valid(place.get("구"), "구")
     if not gu:
         m = re.search(r"([가-힣]{1,4}구)", addr)
         gu = m.group(1) if m else ""
+    # 시/군 추출 (구 없는 지역 폴백) — 특별/광역/자치시·광역시명 제외
+    si = _valid(place.get("시"), "시")
+    if si and any(x in si for x in ("특별", "광역", "자치")):
+        si = ""
+    if not si:
+        for _m in re.findall(r"([가-힣]{2,4}시)", addr):
+            if not any(x in _m for x in ("특별", "광역", "자치", "서울", "부산", "대구",
+                                         "인천", "광주", "대전", "울산")):
+                si = _m
+                break
+    m = re.search(r"([가-힣]{2,4}군)", addr)
+    gun = m.group(1) if m else ""
     metro = ""
     for stem in ["서울", "부산", "대구", "인천", "광주", "대전", "울산", "세종",
                  "경기", "강원", "충청", "충북", "충남", "전라", "전북", "전남",
@@ -815,26 +942,45 @@ def _build_hashtags(place: dict, keyword: str) -> list:
     if station.endswith("역"):
         station = station[:-1]
     name = (place.get("name", "") or "").strip().replace(" ", "")
-    # 핵심 태그(검색 가치 큰 것 — 가능하면 포함) + 선택 풀
-    core, pool = [], []
-    if dong: core.append(f"{dong}{biz}")
-    if gu: core.append(f"{gu}{biz}")
-    if station: pool.append(f"{station}역{biz}")
-    if metro: pool.append(f"{metro}{biz}")
-    pool.append(f"{biz}추천")
-    if dong: pool.append(f"{dong}{biz}추천")
-    if gu: pool.append(f"{gu}{biz}추천")
-    pool.append(biz)
-    if name: pool.append(name)
+    # 핵심 지역명(구>시>군>광역) — 구/시/군 접미사 제거 (강남구→강남, 춘천시→춘천, 홍성군→홍성)
+    region = ""
+    if gu:
+        region = gu[:-1] if gu.endswith("구") else gu
+    elif si:
+        region = si[:-1] if si.endswith("시") else si
+    elif gun:
+        region = gun[:-1] if gun.endswith("군") else gun
+    elif metro:
+        region = metro
+    # 핵심 태그(검색 가치 큰 것 — 가능하면 포함)
+    core = []
+    if dong:   core.append(f"{dong}{biz}")       # 역삼동요양원
+    if region: core.append(f"{region}{biz}")     # 강남요양원 / 춘천요양원 / 세종요양원
+    if name:   core.append(name)                 # 상호명
+    # 선택 풀
+    pool = []
+    if region:
+        pool.append(f"{region}{biz}추천")        # 강남요양원추천
+        pool.append(f"{region}{biz}비용")        # 강남요양원비용
+    if dong:
+        pool.append(f"{dong}{biz}추천")
+    if station:
+        pool.append(f"{station}역{biz}")
+    if metro and metro != region:
+        pool.append(f"{metro}{biz}")             # 광역 단위(서울/강원 등)
+    pool.append(f"{biz}추천")                     # 요양원추천
+    pool.append(biz)                             # 요양원
+    if region:
+        pool.append(region)                      # 강남
     # 중복 제거(코어 기준)
     seen = set(core)
     pool = [t for t in pool if t and not (t in seen or seen.add(t))]
-    # 개수 랜덤(5~8), 순서 랜덤
-    target = random.randint(5, 8)
+    # 개수 5~10, 순서 랜덤
+    target = random.randint(6, 10)
     random.shuffle(pool)
     chosen = core + pool[:max(0, target - len(core))]
     random.shuffle(chosen)
-    return chosen[:8]
+    return chosen[:10]
 
 
 def generate_content(provider: str, api_key: str, place: dict, keyword: str, prompt_override: str = None, title_prefix: str = None, deepseek_key: str = None, gpt_key: str = None, gemini_key: str = None, engine: str = None) -> dict:
