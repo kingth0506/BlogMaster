@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.6.1"
 
 import os
 import sys
@@ -4471,7 +4471,7 @@ class MainWindow(QMainWindow):
         self.crawled_data = []
         self._current_crawl_mode = "keyword" if self._radio_url.isChecked() else "region"
 
-        log_dir = self._get_logs_dir()
+        log_dir = self._get_logs_dir(for_write=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         self.result_file = os.path.join(log_dir, f"places_{timestamp}.json")
         # 이 크롤 세션 공통 시각 — 세션의 모든 키워드가 같은 crawled_at을 써서
@@ -4526,7 +4526,7 @@ class MainWindow(QMainWindow):
                     try:
                         import re as _re
                         _safe = _re.sub(r"[^가-힣A-Za-z0-9_]", "_", str(kw or "unknown"))[:80]
-                        _dir = self._get_logs_dir()
+                        _dir = self._get_logs_dir(for_write=True)
                         os.makedirs(_dir, exist_ok=True)
                         _fp = os.path.join(_dir, f"{_safe}.json")
                         # 세션 공통 시각 사용 → 같은 크롤의 키워드들이 한 그룹으로 묶임
@@ -4583,7 +4583,7 @@ class MainWindow(QMainWindow):
                     # 기존 파일 삭제 후 처음부터 수집
                     import re as _re_kw
                     _kw_safe = _re_kw.sub(r"[^가-힣A-Za-z0-9_]", "_", str(keyword or "unknown"))[:80]
-                    _kw_fp = os.path.join(self._get_logs_dir(), f"{_kw_safe}.json")
+                    _kw_fp = os.path.join(self._get_logs_dir(for_write=True), f"{_kw_safe}.json")
                     if os.path.exists(_kw_fp):
                         try:
                             os.remove(_kw_fp)
@@ -4611,7 +4611,7 @@ class MainWindow(QMainWindow):
                 if len(expanded) > 1:
                     # 기존 파일 삭제 후 처음부터 수집
                     import re as _re2
-                    _log_dir = self._get_logs_dir()
+                    _log_dir = self._get_logs_dir(for_write=True)
                     _deleted = 0
                     for _ekw in expanded:
                         _safe = _re2.sub(r"[^가-힣A-Za-z0-9_]", "_", str(_ekw))[:80]
@@ -5435,21 +5435,39 @@ class MainWindow(QMainWindow):
                 except Exception:
                     pass
 
-    def _get_crawled_file(self):
-        # 크롤 수집물은 총폴더/크롤한목록/crawled_{계정키}.json 에 저장.
+    def _crawl_account_key(self) -> str:
+        """크롤 목록 파일 키 — '앱 로그인 + 네이버 계정(슬롯)' 단위로 분리.
+        같은 로그인이라도 활성 네이버 계정(active_account)마다 크롤 목록이 따로 저장된다."""
         app_user = self._account_key()
-        d = self._crawl_dir()
-        f = os.path.join(d, f"crawled_{app_user}.json")
-        if os.path.exists(f):
-            return f
-        # _bid 변형 파일(구버전) 폴백
+        bid = ""
         try:
-            for name in os.listdir(d):
-                if name.startswith(f"crawled_{app_user}_") and name.endswith(".json"):
-                    return os.path.join(d, name)
+            cfg = load_config() or {}
+            idx = int(cfg.get("active_account", 0) or 0)
+            accs = cfg.get("accounts", []) or []
+            if 0 <= idx < len(accs):
+                a = accs[idx] or {}
+                bid = (a.get("blog_id") or a.get("naver_id") or f"acc{idx}")
+            else:
+                bid = f"acc{idx}"
         except Exception:
-            pass
-        # 아직 총폴더로 이동 안 된 옛 위치(_internal/exe루트) 폴백 (읽기 유실 방지)
+            bid = "default"
+        slot = "".join(c for c in str(bid) if c.isalnum() or c in "-_") or "default"
+        return f"{app_user}__{slot}"
+
+    def _get_crawled_file(self, for_write: bool = False):
+        # 크롤 수집물은 총폴더/크롤한목록/crawled_{계정키}.json 에 저장.
+        # 계정키 = 앱로그인 + 네이버 계정(슬롯) → 네이버 계정별로 크롤 목록이 분리됨.
+        d = self._crawl_dir()
+        key = self._crawl_account_key()
+        f = os.path.join(d, f"crawled_{key}.json")
+        if for_write or os.path.exists(f):
+            return f
+        # ── 읽기 폴백 (슬롯 분리 전 옛 공유 파일 crawled_{app_user}.json — 데이터 유실 방지) ──
+        app_user = self._account_key()
+        shared = os.path.join(d, f"crawled_{app_user}.json")
+        if os.path.exists(shared):
+            return shared
+        # 아직 총폴더로 이동 안 된 옛 위치(_internal/exe루트) 폴백
         for old in self._legacy_data_dirs():
             of = os.path.join(old, f"crawled_{app_user}.json")
             if os.path.exists(of):
@@ -5459,7 +5477,7 @@ class MainWindow(QMainWindow):
     def _save_crawled(self, items: list, keyword: str = ""):
         mode = getattr(self, "_current_crawl_mode", "")
         try:
-            with open(self._get_crawled_file(), "w", encoding="utf-8") as f:
+            with open(self._get_crawled_file(for_write=True), "w", encoding="utf-8") as f:
                 json.dump({"keyword": keyword, "crawl_mode": mode, "items": items}, f, ensure_ascii=False, indent=2)
         except Exception as e:
             self._emit_log(f"crawled 저장 실패: {e}")
@@ -5509,7 +5527,7 @@ class MainWindow(QMainWindow):
             return 0
         keys = {self._place_key(p) for p in places_to_remove}
         self._del_log(f"_purge: {len(keys)}개 고유 key. 첫 key={list(keys)[0] if keys else None}")
-        log_dir = self._get_logs_dir()
+        log_dir = self._get_logs_dir(for_write=True)
         self._del_log(f"_purge: log_dir={log_dir}")
         if not os.path.isdir(log_dir):
             self._del_log("_purge: log_dir 없음 → 0 반환")
@@ -5583,24 +5601,24 @@ class MainWindow(QMainWindow):
                 break
         return per_acc
 
-    def _get_logs_dir(self) -> str:
-        # 크롤 로그는 총폴더/크롤한목록/logs/{계정키} 에 저장/조회
-        app_user = self._account_key()
+    def _get_logs_dir(self, for_write: bool = False) -> str:
+        # 크롤 로그는 총폴더/크롤한목록/logs/{계정키(앱로그인+네이버슬롯)} 에 저장/조회.
+        # → 네이버 계정(슬롯)마다 로그가 분리됨.
         base = os.path.join(self._crawl_dir(), "logs")
         os.makedirs(base, exist_ok=True)
-        d = os.path.join(base, app_user)
+        key = self._crawl_account_key()
+        d = os.path.join(base, key)
+        if for_write:
+            os.makedirs(d, exist_ok=True)
+            return d
         if os.path.isdir(d) and any(x.endswith(".json") for x in os.listdir(d)):
             return d
-        # _bid 변형 폴더(구버전) 폴백
-        try:
-            for name in os.listdir(base):
-                p = os.path.join(base, name)
-                if (name.startswith(app_user + "_") and os.path.isdir(p)
-                        and any(x.endswith(".json") for x in os.listdir(p))):
-                    return p
-        except Exception:
-            pass
-        # 아직 이동 안 된 옛 위치(_internal/exe루트)의 logs/{계정키} 폴백
+        # ── 읽기 폴백: 슬롯 분리 전 옛 공유 폴더 logs/{app_user} (데이터 유실 방지) ──
+        app_user = self._account_key()
+        shared = os.path.join(base, app_user)
+        if os.path.isdir(shared) and any(x.endswith(".json") for x in os.listdir(shared)):
+            return shared
+        # 아직 이동 안 된 옛 위치(_internal/exe루트)의 logs/{app_user} 폴백
         for old in self._legacy_data_dirs():
             op = os.path.join(old, "logs", app_user)
             if os.path.isdir(op) and any(x.endswith(".json") for x in os.listdir(op)):
