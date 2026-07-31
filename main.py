@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """네이버 플레이스 블로그 자동 포스팅 — PySide6 GUI"""
-APP_VERSION = "2.6.1"
+APP_VERSION = "2.6.2"
 
 import os
 import sys
@@ -5878,7 +5878,8 @@ class MainWindow(QMainWindow):
                                 title_prefix=getattr(self, "_override_title_prefix", None),
                                 deepseek_key=deepseek_key,
                                 gpt_key=gpt_key,
-                                gemini_key=gemini_key,
+                                # 제미나이 키 회전(round-robin) — 키 여러 개면 분당 한도 분산
+                                gemini_key=(gm_keys[(idx - 1) % len(gm_keys)] if gm_keys else None),
                                 engine=_eng,
                             )
                             used_engine = _eng
@@ -6020,8 +6021,12 @@ class MainWindow(QMainWindow):
                                 pass
 
             self._balance_err_shown = False  # 이번 생성 세션 잔액오류 팝업 1회 제한 초기화
-            # 제미나이(무료 한도)는 병렬 3 + 글당 딜레이로 분당 호출 제한 회피, 딥시크/GPT는 5
-            max_workers = 3 if ai_engine == "gemini" else 5
+            # 제미나이(무료 한도)는 병렬 3 + 글당 딜레이로 분당 호출 제한 회피, 딥시크/GPT는 5.
+            # 제미나이 키가 여러 개면 키별로 한도가 따로라 병렬을 키 수만큼(최대 6) 늘림.
+            if ai_engine == "gemini":
+                max_workers = min(3 * max(1, len(gm_keys)), 6)
+            else:
+                max_workers = 5
             with ThreadPoolExecutor(max_workers=max_workers) as ex:
                 futures = [ex.submit(_gen_one, i, p) for i, p in enumerate(selected, 1)]
                 for f in as_completed(futures):
@@ -7615,7 +7620,8 @@ class MainWindow(QMainWindow):
                                 api_key=api_key,
                                 place=place, keyword=keyword,
                                 deepseek_key=deepseek_key, gpt_key=gpt_key,
-                                gemini_key=gemini_key, engine=_eng
+                                # 제미나이 키 회전(round-robin) — 키 여러 개면 분당 한도 분산
+                                gemini_key=(gm_keys[(i - 1) % len(gm_keys)] if gm_keys else None), engine=_eng
                             )
                             _used = _eng
                             break

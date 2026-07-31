@@ -182,7 +182,7 @@ class SettingsDialog(QDialog):
         _eng_help.setWordWrap(True)
         layout.addWidget(_eng_help)
 
-        for label, key_prefix, btn_text, url, color, _ in api_configs:
+        def _make_key_row(label, key_prefix, btn_text, url, color, show_help=True, placeholder="(무료api 작동안함)"):
             row_w = QWidget()
             row = QHBoxLayout(row_w)
             row.setContentsMargins(0, 0, 0, 0)
@@ -190,7 +190,7 @@ class SettingsDialog(QDialog):
             lbl.setMinimumWidth(110)
             row.addWidget(lbl)
             entry = QLineEdit()
-            entry.setPlaceholderText("(무료api 작동안함)")
+            entry.setPlaceholderText(placeholder)
             entry.setStyleSheet("padding: 5px;")
             entry.setEchoMode(QLineEdit.Password)
             row.addWidget(entry, stretch=1)
@@ -202,11 +202,12 @@ class SettingsDialog(QDialog):
             btn_show.setStyleSheet("padding: 3px; font-size: 12px; background: transparent; border: 1px solid #94a3b8; border-radius: 4px;")
             btn_show.toggled.connect(lambda on, e=entry: e.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password))
             row.addWidget(btn_show)
-            btn = QPushButton(btn_text)
-            btn.setStyleSheet(f"padding: 3px 10px; font-size: 11px; color: {color}; background: transparent; border: 1px solid {color}; border-radius: 4px;")
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.clicked.connect(lambda checked, u=url: __import__('webbrowser').open(u))
-            row.addWidget(btn)
+            if show_help:
+                btn = QPushButton(btn_text)
+                btn.setStyleSheet(f"padding: 3px 10px; font-size: 11px; color: {color}; background: transparent; border: 1px solid {color}; border-radius: 4px;")
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.clicked.connect(lambda checked, u=url: __import__('webbrowser').open(u))
+                row.addWidget(btn)
             # 키 테스트 버튼 — 입력한 키가 실제로 작동하는지 즉시 확인
             btn_test = QPushButton("테스트")
             btn_test.setCursor(Qt.PointingHandCursor)
@@ -214,7 +215,25 @@ class SettingsDialog(QDialog):
             btn_test.clicked.connect(lambda checked, kp=key_prefix, e=entry: _test_key(kp, e))
             row.addWidget(btn_test)
             layout.addWidget(row_w)
-            self.api_key_fields[key_prefix] = {"entry": entry, "row": row_w}
+            return entry, row_w
+
+        for label, key_prefix, btn_text, url, color, _ in api_configs:
+            if key_prefix == "gemini_key":
+                # 제미나이는 최대 3개 — 키가 여러 개면 분당 무료 한도를 나눠 써서 대량·빠르게 생성
+                entries = []
+                first_row = None
+                for _n in range(3):
+                    _lab = "제미나이 API 키" if _n == 0 else f"제미나이 API 키 {_n + 1}"
+                    _ph = "(무료api 작동안함)" if _n == 0 else "(선택) 추가 키 — 넣으면 분당 한도↑"
+                    e, rw = _make_key_row(_lab, key_prefix, btn_text, url, color,
+                                          show_help=(_n == 0), placeholder=_ph)
+                    entries.append(e)
+                    if _n == 0:
+                        first_row = rw
+                self.api_key_fields[key_prefix] = {"entry": entries[0], "entries": entries, "row": first_row}
+            else:
+                entry, row_w = _make_key_row(label, key_prefix, btn_text, url, color)
+                self.api_key_fields[key_prefix] = {"entry": entry, "row": row_w}
 
         # 모든 키칸(딥시크·GPT·제미나이·픽사베이)은 항상 표시 — 각자 본인 키 직접 입력
         for _kp in ("deepseek_key", "gpt_key", "gemini_key", "pixabay_key"):
@@ -442,6 +461,11 @@ class SettingsDialog(QDialog):
                     entry.setText("")
                     entry.setReadOnly(False)
                     entry.setStyleSheet("padding: 5px;")
+            # 제미나이 등 다중 키 필드: 2번째 이후 칸을 own_list[i]로 채움
+            for _exi, _exe in enumerate(field_info.get("entries", [])[1:], start=1):
+                _exe.setText(own_list[_exi] if _exi < len(own_list) else "")
+                _exe.setReadOnly(False)
+                _exe.setStyleSheet("padding: 5px;")
         self._sync_key_mode_radio()
         # 부모 윈도우의 잔여기간(남은일수) 라벨도 갱신
         try:
@@ -605,6 +629,11 @@ class SettingsDialog(QDialog):
                     entry.setText("")
                     entry.setReadOnly(False)
                     entry.setStyleSheet("padding: 5px;")
+            # 제미나이 등 다중 키 필드: 2번째 이후 칸을 own_list[i]로 채움
+            for _exi, _exe in enumerate(field_info.get("entries", [])[1:], start=1):
+                _exe.setText(own_list[_exi] if _exi < len(own_list) else "")
+                _exe.setReadOnly(False)
+                _exe.setStyleSheet("padding: 5px;")
 
         self._sync_key_mode_radio()
         accounts = self.cfg.get("accounts", [])
@@ -711,11 +740,13 @@ class SettingsDialog(QDialog):
                     raw = {}
             own_bucket = dict((raw.get("api_keys_by_user") or {}).get(self.app_user, {}))
             for key_prefix, field_info in self.api_key_fields.items():
-                val = field_info["entry"].text().strip()
-                if val.startswith("●"):
+                _entries = field_info.get("entries") or [field_info["entry"]]
+                _vals = [t for t in (_e.text().strip() for _e in _entries) if t and not t.startswith("●")]
+                # 마스킹(●)만 있고 실입력 없으면 기존 값 보존 (관리자 부여 키 leak 방지)
+                if not _vals and any(_e.text().strip().startswith("●") for _e in _entries):
                     continue
-                own_bucket[f"{key_prefix}_list"] = [val] if val else []
-                self.cfg[f"{key_prefix}_list"] = [val] if val else []
+                own_bucket[f"{key_prefix}_list"] = _vals
+                self.cfg[f"{key_prefix}_list"] = _vals
             # save_config가 이번 유저 본인 버킷을 갱신하도록 플래그
             self.cfg["_persist_api_keys_for_user"] = self.app_user
             # Firebase users.api_keys 동기화 (관리자 크로스 PC)
@@ -734,11 +765,13 @@ class SettingsDialog(QDialog):
                     raw = {}
             own_bucket = dict((raw.get("api_keys_by_user") or {}).get(self.app_user, {}))
             for key_prefix, field_info in self.api_key_fields.items():
-                val = field_info["entry"].text().strip()
-                if val.startswith("●"):
+                _entries = field_info.get("entries") or [field_info["entry"]]
+                _vals = [t for t in (_e.text().strip() for _e in _entries) if t and not t.startswith("●")]
+                # 마스킹(●)만 있고 실입력 없으면 기존 값 보존 (관리자 부여 키 leak 방지)
+                if not _vals and any(_e.text().strip().startswith("●") for _e in _entries):
                     continue
-                own_bucket[f"{key_prefix}_list"] = [val] if val else []
-                self.cfg[f"{key_prefix}_list"] = [val] if val else []
+                own_bucket[f"{key_prefix}_list"] = _vals
+                self.cfg[f"{key_prefix}_list"] = _vals
             self.cfg["_persist_api_keys_for_user"] = self.app_user
             # Firebase 동기화 (크로스 PC)
             try:
