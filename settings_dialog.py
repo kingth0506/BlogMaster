@@ -98,9 +98,9 @@ class SettingsDialog(QDialog):
 
         # 본인 API 키 입력 — 글쓰기 엔진(딥시크/GPT/제미나이) + 이미지(Pixabay)
         api_configs = [
+            ("제미나이 API 키", "gemini_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#4285f4", ""),
             ("딥시크 API 키", "deepseek_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#7c3aed", ""),
             ("챗GPT API 키", "gpt_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#1e293b", ""),
-            ("제미나이 API 키", "gemini_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb738025bce3e3e47d61fd71", "#4285f4", ""),
             ("Pixabay API 키", "pixabay_key", "키 발급방법", "https://shared-rise-9e5.notion.site/API-37df3feefb7380e18179d4dedc5714db", "#22c55e", ""),
         ]
 
