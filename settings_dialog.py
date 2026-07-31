@@ -171,11 +171,12 @@ class SettingsDialog(QDialog):
         self.rb_eng_gpt = QRadioButton("챗GPT")
         self.rb_eng_gemini = QRadioButton("제미나이")
         self._eng_grp = QButtonGroup(self)
-        for _rb in (self.rb_eng_deepseek, self.rb_eng_gpt, self.rb_eng_gemini):
+        # 표시 순서: 제미나이 → 딥시크 → 챗GPT
+        for _rb in (self.rb_eng_gemini, self.rb_eng_deepseek, self.rb_eng_gpt):
             self._eng_grp.addButton(_rb)
             _eng_row.addWidget(_rb)
         _eng_row.addStretch()
-        self.rb_eng_deepseek.setChecked(True)
+        self.rb_eng_gemini.setChecked(True)   # 기본 엔진 = 제미나이
         layout.addLayout(_eng_row)
         _eng_help = QLabel("선택한 엔진의 API 키가 있어야 글이 생성됩니다. (제미나이는 무료 한도가 있어 대량 생성 시 느릴 수 있어요)")
         _eng_help.setStyleSheet("color:#64748b; font-size:11px; padding:2px 0 6px 0;")
@@ -572,13 +573,13 @@ class SettingsDialog(QDialog):
     def _sync_key_mode_radio(self):
         """저장된 글쓰기 엔진 선택(ai_engine)을 라디오에 복원."""
         try:
-            eng = (self.cfg.get("ai_engine") or "deepseek").strip().lower()
+            eng = (self.cfg.get("ai_engine") or "gemini").strip().lower()
             if eng == "gpt":
                 self.rb_eng_gpt.setChecked(True)
-            elif eng == "gemini":
-                self.rb_eng_gemini.setChecked(True)
-            else:
+            elif eng == "deepseek":
                 self.rb_eng_deepseek.setChecked(True)
+            else:
+                self.rb_eng_gemini.setChecked(True)
         except Exception:
             pass
 
@@ -779,6 +780,13 @@ class SettingsDialog(QDialog):
                 _upd(self.app_user, api_keys={k: v for k, v in own_bucket.items() if v})
             except Exception:
                 pass
+
+        # ★ API 키는 계정 검증(네이버 ID 중복/타 사용자 등록) 실패로 저장이 막히지 않도록 먼저 저장.
+        #   (이전엔 계정 검증에서 return 되면 키 수정이 저장 안 되던 문제)
+        try:
+            save_config(self.cfg)
+        except Exception:
+            pass
 
         accounts = []
         for fields in self.account_fields:
