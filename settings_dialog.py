@@ -203,12 +203,16 @@ class SettingsDialog(QDialog):
             btn_show.setStyleSheet("padding: 3px; font-size: 12px; background: transparent; border: 1px solid #94a3b8; border-radius: 4px;")
             btn_show.toggled.connect(lambda on, e=entry: e.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password))
             row.addWidget(btn_show)
+            btn = QPushButton(btn_text)
             if show_help:
-                btn = QPushButton(btn_text)
                 btn.setStyleSheet(f"padding: 3px 10px; font-size: 11px; color: {color}; background: transparent; border: 1px solid {color}; border-radius: 4px;")
                 btn.setCursor(Qt.PointingHandCursor)
                 btn.clicked.connect(lambda checked, u=url: __import__('webbrowser').open(u))
-                row.addWidget(btn)
+            else:
+                # 발급방법 버튼이 없는 줄도 같은 너비를 유지해 입력칸 폭을 통일 (투명 처리)
+                btn.setStyleSheet("padding: 3px 10px; font-size: 11px; color: transparent; background: transparent; border: 1px solid transparent;")
+                btn.setEnabled(False)
+            row.addWidget(btn)
             # 키 테스트 버튼 — 입력한 키가 실제로 작동하는지 즉시 확인
             btn_test = QPushButton("테스트")
             btn_test.setCursor(Qt.PointingHandCursor)
