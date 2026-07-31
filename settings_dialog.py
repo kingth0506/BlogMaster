@@ -188,7 +188,7 @@ class SettingsDialog(QDialog):
             row = QHBoxLayout(row_w)
             row.setContentsMargins(0, 0, 0, 0)
             lbl = QLabel(label)
-            lbl.setMinimumWidth(110)
+            lbl.setMinimumWidth(160)   # 라벨 폭 고정 → '제미나이 API 키 2/3'도 입력칸 시작점 동일
             row.addWidget(lbl)
             entry = QLineEdit()
             entry.setPlaceholderText(placeholder)
